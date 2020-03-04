@@ -422,15 +422,14 @@ contains
    if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
 
    ! check line search
-!   if(globalPrintFlag)then
+   if(globalPrintFlag)then
     write(*,*) "nstate",nstate !!SJT
     write(*,'(a,1x,i4,1x,e17.10)' ) 'iLine, xLambda                 = ', iLine, xLambda
     write(*,'(a,1x,10(e17.10,1x))') 'fOld,fNew                      = ', fOld,fNew
     write(*,'(a,1x,10(e17.10,1x))') 'fold + alpha*slopeInit*xLambda = ', fold + alpha*slopeInit*xLambda
     write(*,'(a,1x,10(e17.10,1x))') 'resVecNew                      = ', resVecNew(min(iJac1,nState):min(iJac2,nState))
     write(*,'(a,1x,10(e17.10,1x))') 'xInc                           = ', xInc(min(iJac1,nState):min(iJac2,nState))
-!    stop !!!!!!!!!!!!!!!!!!!!!TESTING SJT
-!   end if
+   end if
 
    ! check feasibility
    if(.not.feasible) cycle

@@ -1120,7 +1120,7 @@ contains
    write(*,'(a,1x,f20.10)') 'sfcMeltPond = ', sfcMeltPond
    write(*,'(a,1x,f20.10)') 'massBalance = ', massBalance
    message=trim(message)//'SWE does not balance'
-   err=20; return
+!   err=20; return
   endif  ! if failed mass balance check
  endif  ! if snow layers exist
 
