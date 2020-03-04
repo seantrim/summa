@@ -68,10 +68,10 @@ USE multiconst,only:&
                     iden_ice,     & ! intrinsic density of ice             (kg m-3)
                     iden_water      ! intrinsic density of liquid water    (kg m-3)
 
-! look-up values for the choice of time stepping order
+! look-up values for the choice of time stepping order (SJT)
 USE mDecisions_module,only:       &
-                    firstOrder,&    ! Implicit Euler
-                    secondOrder     ! Implicit Midpoint
+                    firstOrder,&    ! First-Order Implicit Euler
+                    secondOrder     ! Second-Order SDIRK(2,2)
 
 
 ! safety: set private unless specified otherwise
@@ -185,6 +185,7 @@ contains
  real(dp)                        :: dt_wght                       ! weight given to a given flux calculation
  real(dp)                        :: dtSubstep                     ! length of a substep (s)
  real(dp)                        :: dt_temp                       ! length of a substep (s) (SJT)
+ real(dp)                        :: gmma                          ! gamma parameter for SDIRK (SJT)
  ! adaptive sub-stepping for the explicit solution
  logical(lgt)                    :: failedSubstep                 ! flag to denote success of substepping for a given split
  real(dp),parameter              :: safety=0.85_dp                ! safety factor in adaptive sub-stepping
@@ -200,6 +201,7 @@ contains
  real(dp)                        :: untappedMelt(nState)          ! un-tapped melt energy (J m-3 s-1)
  real(dp)                        :: stateVecInit(nState)          ! initial state vector (mixed units)
  real(dp)                        :: stateVecTrial(nState)         ! trial state vector (mixed units)
+ real(dp)                        :: stateVecTemp(nState)          ! temporary state vector (mixed units) (SJT)
  type(var_dlength)               :: flux_temp                     ! temporary model fluxes
  ! flags
  logical(lgt)                    :: firstSplitOper                ! flag to indicate if we are processing the first flux call in a splitting operation
@@ -312,7 +314,8 @@ contains
     dt_temp=dtSubstep
    case(secondOrder)
      write(*,*) "Second Order -- before computResid"
-    dt_temp=0.5d0*dtSubstep
+    gmma=0.5d0
+    dt_temp=gmma*dtSubstep
    case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
   end select
 !*****************************************************************END SJT
@@ -321,7 +324,7 @@ contains
   ! * iterative solution...
   ! -----------------------
 
-  ! solve the system of equations for a given state subset
+  ! solve the system of equations for a given state subset (SJT - first stage of SDIRK)
   call systemSolv(&
                   ! input: model control
 !                  dtSubstep,         & ! intent(in):    time step (s)
@@ -359,17 +362,63 @@ contains
   endif
 
 !***********************************************************SJT: finish second order time step
-   select case(ixTStep)
-    case(firstOrder)
-     write(*,*) "First Order -- after lineSearchRefinement/safeRootfinder"
-     stateVecTrial=stateVecTrial
-    case(secondOrder)
-     write(*,*) "Second Order -- after lineSearchRefinement/safeRootfinder"
-     stateVecTrial=2.d0*stateVecTrial-stateVecInit
-    case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
-   end select
-!***********************************************************END SJT
+  select case(ixTStep)
+   case(firstOrder)
+    write(*,*) "First Order -- after lineSearchRefinement/safeRootfinder"
+    stateVecTrial=stateVecTrial
+   case(secondOrder)
+    write(*,*) "Second Order -- after lineSearchRefinement/safeRootfinder"
 
+    stateVecTemp=(2.d0-1.d0/gmma)*stateVecInit+(1.d0/gmma-1.d0)*stateVecTrial !initial vector for second stage of SDIRK(2,2)
+
+!!update other variables that depend on the state vector
+  call updateProg(dt_temp,nSnow,nSoil,nLayers,doAdjustTemp,computeVegFlux,untappedMelt,stateVecTemp,checkMassBalance, & ! input: model control
+                  mpar_data,indx_data,flux_temp,prog_data,diag_data,deriv_data,                                          & ! input-output: data structures
+                  waterBalanceError,nrgFluxModified,err,cmessage)                                                           ! output: flags and error control
+  if(err/=0)then
+   message=trim(message)//trim(cmessage)
+   if(err>0) return
+  endif
+
+!!perform the next SDIRK stage
+  call systemSolv(&
+                  ! input: model control
+                  dt_temp,         & ! intent(in):    time step (s) (SJT)
+                  nState,            & ! intent(in):    total number of state variables
+                  firstSubStep,      & ! intent(in):    flag to denote first sub-step
+                  firstFluxCall,     & ! intent(inout): flag to indicate if we are processing the first flux call
+                  firstSplitOper,    & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
+                  computeVegFlux,    & ! intent(in):    flag to denote if computing energy flux over vegetation
+                  scalarSolution,    & ! intent(in):    flag to denote if implementing the scalar solution
+                  ! input/output: data structures
+                  type_data,         & ! intent(in):    type of vegetation and soil
+                  attr_data,         & ! intent(in):    spatial attributes
+                  forc_data,         & ! intent(in):    model forcing data
+                  mpar_data,         & ! intent(in):    model parameters
+                  indx_data,         & ! intent(inout): index data
+                  prog_data,         & ! intent(inout): model prognostic variables for a local HRU
+                  diag_data,         & ! intent(inout): model diagnostic variables for a local HRU
+                  flux_temp,         & ! intent(inout): model fluxes for a local HRU
+                  bvar_data,         & ! intent(in):    model variables for the local basin
+                  model_decisions,   & ! intent(in):    model decisions
+                  stateVecTemp,      & ! intent(in):    initial state vector
+                  ! output: model control
+                  deriv_data,        & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                  ixSaturation,      & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                  untappedMelt,      & ! intent(out):   un-tapped melt energy (J m-3 s-1)
+                  stateVecTrial,     & ! intent(out):   updated state vector
+                  reduceCoupledStep, & ! intent(out):   flag to reduce the length of the coupled step
+                  tooMuchMelt,       & ! intent(out):   flag to denote that ice is insufficient to support melt
+                  niter,             & ! intent(out):   number of iterations taken
+                  err,cmessage)        ! intent(out):   error code and error message
+  if(err/=0)then
+   message=trim(message)//trim(cmessage)
+   if(err>0) return
+  endif
+
+   case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+  end select
+!***********************************************************END SJT
 
 
   ! if too much melt or need to reduce length of the coupled step then return
