@@ -92,11 +92,6 @@ USE mDecisions_module,only:      &
  bigBucket,                      & ! a big bucket (lumped aquifer model)
  noExplicit                        ! no explicit groundwater parameterization
 
-! look-up values for the choice of time stepping order
-USE mDecisions_module,only:       &
-                    firstOrder,&    ! Implicit Euler
-                    secondOrder     ! Implicit Midpoint
-
 ! safety: set private unless specified otherwise
 implicit none
 private
@@ -214,7 +209,6 @@ contains
  type(var_dlength)               :: flux_init                     ! model fluxes at the start of the time step
  real(dp),allocatable            :: dBaseflow_dMatric(:,:)        ! derivative in baseflow w.r.t. matric head (s-1)  ! NOTE: allocatable, since not always needed
  real(dp)                        :: stateVecNew(nState)           ! new state vector (mixed units)
- real(dp)                        :: dt_temp                       ! temporary time step value for high order time stepping (SJT)
  real(dp)                        :: fluxVec0(nState)              ! flux vector (mixed units)
  real(dp)                        :: fScale(nState)                ! characteristic scale of the function evaluations (mixed units)
  real(dp)                        :: xScale(nState)                ! characteristic scale of the state vector (mixed units)
@@ -236,7 +230,6 @@ contains
  ! model decisions
  ixGroundwater           => model_decisions(iLookDECISIONS%groundwatr)%iDecision   ,& ! intent(in):    [i4b]    groundwater parameterization
  ixSpatialGroundwater    => model_decisions(iLookDECISIONS%spatial_gw)%iDecision   ,& ! intent(in):    [i4b]    spatial representation of groundwater (local-column or single-basin)
- ixTStep                 => model_decisions(iLookDECISIONS%tStepOrder)%iDecision   ,& ! intent(in):    [i4b]    time stepping order of accuracy (SJT)
  ! check the need to merge snow layers
  mLayerTemp              => prog_data%var(iLookPROG%mLayerTemp)%dat                ,& ! intent(in):    [dp(:)]  temperature of each snow/soil layer (K)
  mLayerVolFracLiq        => prog_data%var(iLookPROG%mLayerVolFracLiq)%dat          ,& ! intent(in):    [dp(:)]  volumetric fraction of liquid water (-)
@@ -367,26 +360,12 @@ contains
  if(ixCasNrg/=integerMissing) stateVecTrial(ixCasNrg) = stateVecInit(ixCasNrg) + (airtemp - stateVecInit(ixCasNrg))*tempAccelerate
  if(ixVegNrg/=integerMissing) stateVecTrial(ixVegNrg) = stateVecInit(ixVegNrg) + (airtemp - stateVecInit(ixVegNrg))*tempAccelerate
 
-!*****************************************************************SJT: temporarily modify time step size for higher order time stepping methods
-  select case(ixTStep)
-   case(firstOrder)
-    write(*,*) "First Order -- before computResid"
-    dt_temp=dt
-   case(secondOrder)
-     write(*,*) "Second Order -- before computResid"
-    dt_temp=0.5d0*dt
-   case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
-  end select
-!*****************************************************************END SJT
-
-
  ! compute the flux and the residual vector for a given state vector
  ! NOTE 1: The derivatives computed in eval8summa are used to calculate the Jacobian matrix for the first iteration
  ! NOTE 2: The Jacobian matrix together with the residual vector is used to calculate the first iteration increment
  call eval8summa(&
                  ! input: model control
-!                 dt,                      & ! intent(in):    length of the time step (seconds)
-                 dt_temp,                 & ! intent(in):    length of the time step (seconds) (SJT - for high order time stepping)
+                 dt,                      & ! intent(in):    length of the time step (seconds)
                  nSnow,                   & ! intent(in):    number of snow layers
                  nSoil,                   & ! intent(in):    number of soil layers
                  nLayers,                 & ! intent(in):    number of layers
@@ -437,8 +416,7 @@ contains
   bulkDensity = mLayerVolFracIce(1)*iden_ice + mLayerVolFracLiq(1)*iden_water
   volEnthalpy = temp2ethpy(mLayerTemp(1),bulkDensity,snowfrz_scale)
   ! set flag and error codes for too much melt
-!  if(-volEnthalpy < flux_init%var(iLookFLUX%mLayerNrgFlux)%dat(1)*dt)then
-  if(-volEnthalpy < flux_init%var(iLookFLUX%mLayerNrgFlux)%dat(1)*dt_temp)then !!SJT - use dt_temp to accomodate high order time stepping
+  if(-volEnthalpy < flux_init%var(iLookFLUX%mLayerNrgFlux)%dat(1)*dt)then
    tooMuchMelt=.true.
    message=trim(message)//'net flux in the top snow layer can melt all the snow in the top layer'
    err=-20; return ! negative error code to denote a warning
@@ -473,8 +451,7 @@ contains
   !  3) Computes new fluxes and derivatives, new residuals, and (if necessary) refines the state vector
   call summaSolve(&
                   ! input: model control
-!                  dt,                            & ! intent(in):    length of the time step (seconds)
-                  dt_temp,                       & ! intent(in):    length of the time step (seconds) (SJT - for high order time stepping)
+                  dt,                            & ! intent(in):    length of the time step (seconds)
                   iter,                          & ! intent(in):    iteration index
                   nSnow,                         & ! intent(in):    number of snow layers
                   nSoil,                         & ! intent(in):    number of soil layers
@@ -541,25 +518,8 @@ contains
   ! exit iteration loop if converged
   write(*,*) "systemSolv converged=",converged !SJT
   write(*,*) "systemSolv dt=",dt !SJT
-!***********************************************************SJT: finish second order time step
-  if (converged) then
-   select case(ixTStep)
-    case(firstOrder)
-     write(*,*) "First Order -- after lineSearchRefinement/safeRootfinder"
-     stateVecTrial=stateVecNew
-    case(secondOrder)
-     write(*,*) "Second Order -- after lineSearchRefinement/safeRootfinder"
-write(*,*) stateVecTrial(10),stateVecNew(10),stateVecInit(10)
-     stateVecTrial=2.d0*stateVecNew-stateVecInit
-write(*,*) stateVecTrial(10),stateVecNew(10),stateVecInit(10)
-     stateVecNew=stateVecTrial
-    case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
-   end select
-   exit
-  end if
-!***********************************************************END SJT
 
-!  if(converged) exit !Original -- SJT
+  if(converged) exit
 
   ! check convergence
   if(iter==localMaxiter)then

@@ -55,7 +55,7 @@ USE var_lookup,only:iLookPROG       ! named variables for structure elements
 USE var_lookup,only:iLookDIAG       ! named variables for structure elements
 USE var_lookup,only:iLookPARAM      ! named variables for structure elements
 USE var_lookup,only:iLookINDEX      ! named variables for structure elements
-
+USE var_lookup,only:iLookDECISIONS  ! named variables for elements of the decision structure (SJT)
 
 ! look up structure for variable types
 USE var_lookup,only:iLookVarType
@@ -67,6 +67,12 @@ USE multiconst,only:&
                     LH_vap,       & ! latent heat of vaporization          (J kg-1)
                     iden_ice,     & ! intrinsic density of ice             (kg m-3)
                     iden_water      ! intrinsic density of liquid water    (kg m-3)
+
+! look-up values for the choice of time stepping order
+USE mDecisions_module,only:       &
+                    firstOrder,&    ! Implicit Euler
+                    secondOrder     ! Implicit Midpoint
+
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -178,6 +184,7 @@ contains
  real(dp)                        :: dtSum                         ! sum of time from successful steps (seconds)
  real(dp)                        :: dt_wght                       ! weight given to a given flux calculation
  real(dp)                        :: dtSubstep                     ! length of a substep (s)
+ real(dp)                        :: dt_temp                       ! length of a substep (s) (SJT)
  ! adaptive sub-stepping for the explicit solution
  logical(lgt)                    :: failedSubstep                 ! flag to denote success of substepping for a given split
  real(dp),parameter              :: safety=0.85_dp                ! safety factor in adaptive sub-stepping
@@ -231,7 +238,9 @@ contains
  mLayerVolFracLiq        => prog_data%var(iLookPROG%mLayerVolFracLiq)%dat          ,& ! intent(inout): [dp(:)]  volumetric fraction of liquid water (-)
  mLayerVolFracWat        => prog_data%var(iLookPROG%mLayerVolFracWat)%dat          ,& ! intent(inout): [dp(:)]  volumetric fraction of total water (-)
  mLayerMatricHead        => prog_data%var(iLookPROG%mLayerMatricHead)%dat          ,& ! intent(inout): [dp(:)]  matric head (m)
- mLayerMatricHeadLiq     => diag_data%var(iLookDIAG%mLayerMatricHeadLiq)%dat        & ! intent(inout): [dp(:)]  matric potential of liquid water (m)
+ mLayerMatricHeadLiq     => diag_data%var(iLookDIAG%mLayerMatricHeadLiq)%dat       ,& ! intent(inout): [dp(:)]  matric potential of liquid water (m)
+ !model decisions (SJT)
+ ixTStep                 => model_decisions(iLookDECISIONS%tStepOrder)%iDecision    & ! intent(in):    [i4b]    time stepping order of accuracy (SJT)
  )  ! end association with variables in the data structures
  ! *********************************************************************************************************************************************************
  ! *********************************************************************************************************************************************************
@@ -296,6 +305,18 @@ contains
                    err,cmessage)                       ! intent(out):   error control
   if(err/=0)then; message=trim(message)//trim(cmessage); return; endif  ! (check for errors)
 
+!*****************************************************************SJT: temporarily modify time step size for higher order time stepping methods
+  select case(ixTStep)
+   case(firstOrder)
+    write(*,*) "First Order -- before computResid"
+    dt_temp=dtSubstep
+   case(secondOrder)
+     write(*,*) "Second Order -- before computResid"
+    dt_temp=0.5d0*dtSubstep
+   case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+  end select
+!*****************************************************************END SJT
+
   ! -----
   ! * iterative solution...
   ! -----------------------
@@ -303,7 +324,8 @@ contains
   ! solve the system of equations for a given state subset
   call systemSolv(&
                   ! input: model control
-                  dtSubstep,         & ! intent(in):    time step (s)
+!                  dtSubstep,         & ! intent(in):    time step (s)
+                  dt_temp,         & ! intent(in):    time step (s) (SJT)
                   nState,            & ! intent(in):    total number of state variables
                   firstSubStep,      & ! intent(in):    flag to denote first sub-step
                   firstFluxCall,     & ! intent(inout): flag to indicate if we are processing the first flux call
@@ -335,6 +357,19 @@ contains
    message=trim(message)//trim(cmessage)
    if(err>0) return
   endif
+
+!***********************************************************SJT: finish second order time step
+   select case(ixTStep)
+    case(firstOrder)
+     write(*,*) "First Order -- after lineSearchRefinement/safeRootfinder"
+     stateVecTrial=stateVecTrial
+    case(secondOrder)
+     write(*,*) "Second Order -- after lineSearchRefinement/safeRootfinder"
+     stateVecTrial=2.d0*stateVecTrial-stateVecInit
+    case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+   end select
+!***********************************************************END SJT
+
 
 
   ! if too much melt or need to reduce length of the coupled step then return
