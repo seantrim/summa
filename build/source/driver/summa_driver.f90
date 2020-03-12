@@ -39,6 +39,10 @@ USE summa_util, only: stop_program                          ! used to stop the s
 USE summa_util, only: handle_err                            ! used to process errors
 ! global data
 USE globalData, only: numtim                                ! number of model time steps
+USE globalData, only:data_step                              ! time step of forcing data (s) (SJT)
+
+USE var_lookup,only:iLookPROG                               ! named variables for structure elements (SJT)
+
 implicit none
 
 ! *****************************************************************************
@@ -48,8 +52,10 @@ implicit none
 type(summa1_type_dec), allocatable :: summa1_struc(:)
 ! define parameters for the model simulation
 integer(i4b), parameter            :: n=1                        ! number of instantiations
+integer(i4b), parameter            :: con_test=1                 ! convergence testing? (SJT)
 ! define timing information
 integer(i4b)                       :: modelTimeStep              ! index of model time step
+real(dp)                           :: modelTime                  ! model time (s) (SJT)
 ! error control
 integer(i4b)                       :: err=0                      ! error code
 character(len=1024)                :: message=''                 ! error message
@@ -92,6 +98,20 @@ do modelTimeStep=1,numtim
  ! run the summa physics for one time step
  call summa_runPhysics(modelTimeStep, summa1_struc(n), err, message)
  call handle_err(err, message)
+
+if (con_test.eq.1) then !!SJT for convergence testing
+ modelTime=real(modelTimeStep+1,8)*data_step
+  write(*,*) "Convergence data for mLayerVolFracLiq=",modelTimeStep,data_step,modelTime,summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(100),&
+&summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(101)
+  if (summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(101).gt.0.186d0) then
+   write(*,*) "Wetting Front Time=",modelTime 
+   stop
+  end if
+ if (modelTime.ge.18000.d0) then
+  write(*,*) "Convergence data for mLayerVolFracLiq=",modelTimeStep,data_step,modelTime,summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(50)
+  stop
+ end if
+end if
 
  ! write the model output
  call summa_writeOutputFiles(modelTimeStep, summa1_struc(n), err, message)

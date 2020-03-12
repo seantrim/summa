@@ -68,7 +68,7 @@ public::resizeData
 
 ! define fixed dimensions
 integer(i4b),parameter :: nBand=2         ! number of spectral bands
-integer(i4b),parameter :: nTimeDelay=2000 ! number of elements in the time delay histogram
+integer(i4b),parameter :: nTimeDelay=4000000!2000 ! number of elements in the time delay histogram !!!!!!!SJT increased to allow for smaller time step sizes (small data_step values)
 ! -----------------------------------------------------------------------------------------------------------------------------------
 contains
 

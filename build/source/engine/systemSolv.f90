@@ -417,7 +417,7 @@ contains
   volEnthalpy = temp2ethpy(mLayerTemp(1),bulkDensity,snowfrz_scale)
   ! set flag and error codes for too much melt
   if(-volEnthalpy < flux_init%var(iLookFLUX%mLayerNrgFlux)%dat(1)*dt)then
-   tooMuchMelt=.true.
+   tooMuchMelt=.true. !!!!!!!!!!!!!!!!!!!!!!SJT temporarily disable for second order method
    message=trim(message)//'net flux in the top snow layer can melt all the snow in the top layer'
    err=-20; return ! negative error code to denote a warning
   endif

@@ -202,6 +202,7 @@ contains
  real(dp)                        :: stateVecInit(nState)          ! initial state vector (mixed units)
  real(dp)                        :: stateVecTrial(nState)         ! trial state vector (mixed units)
  real(dp)                        :: stateVecTemp(nState)          ! temporary state vector (mixed units) (SJT)
+ real(dp)                        :: stateVecOne(nState)          ! temporary state vector (mixed units) (SJT)
  type(var_dlength)               :: flux_temp                     ! temporary model fluxes
  ! flags
  logical(lgt)                    :: firstSplitOper                ! flag to indicate if we are processing the first flux call in a splitting operation
@@ -310,11 +311,11 @@ contains
 !*****************************************************************SJT: temporarily modify time step size for higher order time stepping methods
   select case(ixTStep)
    case(firstOrder)
-    write(*,*) "First Order -- before computResid"
+    write(*,*) "First Order -- varSubstep: dtSubstep=",dtSubstep
     dt_temp=dtSubstep
    case(secondOrder)
-     write(*,*) "Second Order -- before computResid"
-    gmma=0.5d0
+     write(*,*) "Second Order -- varSubstep: dtSubstep=",dtSubstep
+    gmma=(2.d0-2.d0**0.5d0)/2.d0
     dt_temp=gmma*dtSubstep
    case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
   end select
@@ -369,8 +370,11 @@ contains
    case(secondOrder)
     write(*,*) "Second Order -- after lineSearchRefinement/safeRootfinder"
 
-    stateVecTemp=(2.d0-1.d0/gmma)*stateVecInit+(1.d0/gmma-1.d0)*stateVecTrial !initial vector for second stage of SDIRK(2,2)
+!    stateVecTemp=(2.d0-1.d0/gmma)*stateVecInit+(1.d0/gmma-1.d0)*stateVecTrial !initial vector for second stage of SDIRK(2,2)
+    stateVecOne=stateVecTrial !!store stage 1 solution for alternative SDIRK
+    stateVecTemp=(3.d0-1.d0/gmma)*stateVecInit+(1.d0/gmma-2.d0)*stateVecTrial !alternative SDIRK
 
+  checkMassBalance=.false. !!balance checks currently only work for first order
 !!update other variables that depend on the state vector
   call updateProg(dt_temp,nSnow,nSoil,nLayers,doAdjustTemp,computeVegFlux,untappedMelt,stateVecTemp,checkMassBalance, & ! input: model control
                   mpar_data,indx_data,flux_temp,prog_data,diag_data,deriv_data,                                          & ! input-output: data structures
@@ -401,7 +405,7 @@ contains
                   flux_temp,         & ! intent(inout): model fluxes for a local HRU
                   bvar_data,         & ! intent(in):    model variables for the local basin
                   model_decisions,   & ! intent(in):    model decisions
-                  stateVecTemp,      & ! intent(in):    initial state vector
+                  stateVecTemp,      & ! intent(in):    initial state vector (SJT)
                   ! output: model control
                   deriv_data,        & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                   ixSaturation,      & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
@@ -415,6 +419,10 @@ contains
    message=trim(message)//trim(cmessage)
    if(err>0) return
   endif
+
+!!final RK update for alternative SDIRK
+stateVecTrial=((2*gmma+1.d0/gmma-4.d0)/(2.d0*gmma))*stateVecInit+((3.d0-1.d0/gmma)/(2.d0*gmma))*stateVecOne+(1.d0/(2.d0*gmma))*stateVecTrial
+
 
    case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
   end select
@@ -491,7 +499,15 @@ contains
   endif
 
   ! identify the need to check the mass balance
-   checkMassBalance =.true. ! (.not.scalarSolution)
+!   checkMassBalance =.true. ! (.not.scalarSolution) !!!!!!!!!!!!!!!!!!!!!!!!SJT--original
+  select case(ixTStep) !!!!!!!!!!!!!!SJT balance checks only work for first order
+   case(firstOrder)
+    checkMassBalance=.true.
+   case(secondOrder)
+    checkMassBalance=.false.
+   case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+  end select           !!!!!!!!!!!!!!SJT
+
 
   ! update prognostic variables
   call updateProg(dtSubstep,nSnow,nSoil,nLayers,doAdjustTemp,computeVegFlux,untappedMelt,stateVecTrial,checkMassBalance, & ! input: model control
@@ -504,6 +520,7 @@ contains
 
   ! if water balance error then reduce the length of the coupled step
   if(waterBalanceError)then
+write(*,*) "waterBalanceError=",waterBalanceError !!SJT
    message=trim(message)//'water balance error'
    reduceCoupledStep=.true.
    err=-20; return

@@ -84,6 +84,11 @@ USE mDecisions_module,only:         &
                       localColumn  ,&      ! separate groundwater representation in each local soil column
                       singleBasin          ! single groundwater store over the entire basin
 
+! look-up values for the choice of time stepping order (SJT)
+USE mDecisions_module,only:       &
+                    firstOrder,&    ! First-Order Implicit Euler
+                    secondOrder     ! Second-Order SDIRK(2,2)
+
 ! privacy
 implicit none
 private
@@ -346,7 +351,7 @@ contains
  ! short-cut to the algorithmic control parameters
  ! NOTE - temporary assignment of minstep to foce something reasonable
  !minstep = 10._dp  ! mpar_data%var(iLookPARAM%minstep)%dat(1)  ! minimum time step (s)
- minstep = mpar_data%var(iLookPARAM%minstep)%dat(1)  ! minimum time step (s) -- reinstating the original option (SJT)
+ minstep = mpar_data%var(iLookPARAM%minstep)%dat(1)  ! minimum time step (s) -- using the original option (SJT)
  maxstep = mpar_data%var(iLookPARAM%maxstep)%dat(1)  ! maximum time step (s)
  print*, 'minstep, maxstep = ', minstep, maxstep
 
@@ -548,6 +553,13 @@ contains
  ! loop through sub-steps
  substeps: do  ! continuous do statement with exit clause (alternative to "while")
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT
+  if (stepFailure) then !!!!!SJT confirm step failure
+   write(*,*) "Step failed"
+   stop
+  end if
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT
+
   ! print progress
   !print*, '*** new substep'
   !write(*,'(a,3(f11.4,1x))') 'dt_sub, dt_init = ', dt_sub, dt_init
@@ -744,6 +756,7 @@ contains
 
   ! process the flag for too much melt
   if(tooMuchMelt)then
+write(*,*) "Too Much Melt caused step failure" !!!!!!!!!!!!SJT
    stepFailure  = .true.
    doLayerMerge = .true.
   else
@@ -833,6 +846,7 @@ contains
 
    ! check that we did not remove the entire layer
    if(mLayerDepth(iSnow) < verySmall)then
+write(*,*) "step failure - entire snow layer removed"  !!!SJT
     stepFailure  = .true.
     doLayerMerge = .true.
     dt_sub      = max(dtSave/2._dp, minstep)
@@ -1036,8 +1050,13 @@ contains
  ! error tolerance
  absConvTol_liquid          => mpar_data%var(iLookPARAM%absConvTol_liquid)%dat(1)                            ,&  ! absolute convergence tolerance for vol frac liq water (-)
  scalarTotalSoilIce         => diag_data%var(iLookDIAG%scalarTotalSoilIce)%dat(1)                            ,&  ! total ice in the soil column (kg m-2)
- scalarTotalSoilLiq         => diag_data%var(iLookDIAG%scalarTotalSoilLiq)%dat(1)                             &  ! total liquid water in the soil column (kg m-2)
+ scalarTotalSoilLiq         => diag_data%var(iLookDIAG%scalarTotalSoilLiq)%dat(1)                            ,&  ! total liquid water in the soil column (kg m-2)
+ !model decisions
+ ixTStep                    => model_decisions(iLookDECISIONS%tStepOrder)%iDecision                           &  ! intent(in):    [i4b]    time stepping order of accuracy (SJT)
  ) ! (association of local variables with information in the data structures
+
+ select case(ixTStep) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT only do balance checks for first order time steps
+  case(firstOrder)
 
  ! -----
  ! * balance checks for the canopy...
@@ -1099,7 +1118,7 @@ contains
   endif
  endif
 
- ! check SWE
+ ! check SWE 
  if(nSnow>0)then
   effSnowfall = averageThroughfallSnow + averageCanopySnowUnloading
   effRainfall = averageThroughfallRain + averageCanopyLiqDrainage
@@ -1120,7 +1139,7 @@ contains
    write(*,'(a,1x,f20.10)') 'sfcMeltPond = ', sfcMeltPond
    write(*,'(a,1x,f20.10)') 'massBalance = ', massBalance
    message=trim(message)//'SWE does not balance'
-!   err=20; return
+   err=20; return
   endif  ! if failed mass balance check
  endif  ! if snow layers exist
 
@@ -1179,6 +1198,11 @@ contains
   message=trim(message)//'soil hydrology does not balance'
   err=20; return
  end if
+
+  case(secondOrder)
+   write(*,*) "Skipping balance checks in coupled_em due to high order time-stepping"
+  case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+ end select!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT only do balance checks for first order time steps
 
  ! end association of local variables with information in the data structures
  end associate

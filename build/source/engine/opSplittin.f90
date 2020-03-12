@@ -121,7 +121,7 @@ public::opSplittin
 ! named variables for the coupling method !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT: force operator splitting for testing
 integer(i4b),parameter  :: fullyCoupled=1!1             ! 1st try: fully coupled solution
 integer(i4b),parameter  :: stateTypeSplit=2!2           ! 2nd try: separate solutions for each state type
-integer(i4b),parameter  :: nCoupling=2!2                ! number of possible solutions
+integer(i4b),parameter  :: nCoupling=1!2                ! number of possible solutions
 
 ! named variables for the state variable split
 integer(i4b),parameter  :: nrgSplit=1                 ! order in sequence for the energy operation
@@ -758,6 +758,7 @@ contains
        ! keep track of the number of scalar solutions
        if(ixSolution==scalar) numberScalarSolutions = numberScalarSolutions + 1
 
+write(*,*) "istateSplit=",iStateSplit,nStateSplit
        ! solve variable subset for one full time step
        call varSubstep(&
                        ! input: model control
@@ -838,7 +839,9 @@ contains
        ! if too much melt (or some other need to reduce the coupled step) then return
        ! NOTE: need to go all the way back to coupled_em and merge snow layers, as all splitting operations need to occur with the same layer geometry
        if(tooMuchMelt .or. reduceCoupledStep)then
-        stepFailure=.true.
+write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuchMelt,reduceCoupledStep  !!!!!!!!!!!!!!!!!!!SJT    
+!         reduceCoupledStep=.false. !!!!!!!!!!!!!!!!!SJT temporarily disable this
+        stepFailure=.true.    !!!!SJT -- temporarily comment out
         err=0 ! recovering
         return
        endif
@@ -939,6 +942,10 @@ contains
 
   ! check
   write(*,*) "ixCoupling=",ixCoupling !!!!!!!!!!!!!!!!!!Verify coupling or splitting SJT
+  if(ixCoupling/=fullyCoupled) then
+   write(*,*) "Solution required operator splitting" !!!!!SJT
+   stop
+  end if
   !if(ixCoupling/=fullyCoupled)then
   ! print*, 'PAUSE: end of splitting loop'; read(*,*)
   !endif
