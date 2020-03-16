@@ -113,19 +113,26 @@ USE mDecisions_module,only:      &
  bigBucket,                      & ! a big bucket (lumped aquifer model)
  noExplicit                        ! no explicit groundwater parameterization
 
+! look-up values for the choice of time stepping order (SJT)
+USE mDecisions_module,only:       &
+                    firstOrder,&    ! First-Order Implicit Euler
+                    secondOrder     ! Second-Order SDIRK(2,2)
+
 ! safety: set private unless specified otherwise
 implicit none
 private
 public::opSplittin
 
 ! named variables for the coupling method !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT: force operator splitting for testing
-integer(i4b),parameter  :: fullyCoupled=1!1             ! 1st try: fully coupled solution
-integer(i4b),parameter  :: stateTypeSplit=2!2           ! 2nd try: separate solutions for each state type
+integer(i4b),parameter  :: fullyCoupled=2!1             ! 1st try: fully coupled solution
+integer(i4b),parameter  :: stateTypeSplit=1!2           ! 2nd try: separate solutions for each state type
 integer(i4b),parameter  :: nCoupling=1!2                ! number of possible solutions
+
 
 ! named variables for the state variable split
 integer(i4b),parameter  :: nrgSplit=1                 ! order in sequence for the energy operation
 integer(i4b),parameter  :: massSplit=2                ! order in sequence for the mass operation
+integer(i4b),parameter  :: nrgSplitPrime=3            ! order in sequence for the second energy operation in Strang Splitting (SJT)
 
 ! named variables for the domain type split
 integer(i4b),parameter  :: vegSplit=1                 ! order in sequence for the vegetation split
@@ -259,6 +266,7 @@ contains
  real(dp),parameter              :: dtmin_scalar=10._dp            ! minimum time step for the scalar solution (seconds)
  real(dp)                        :: dt_min                         ! minimum time step (seconds)
  real(dp)                        :: dtInit                         ! initial time step (seconds)
+ real(dp)                        :: dt_split                         ! temporary time step used for Strang Splitting (SJT)
  ! explicit error tolerance (depends on state type split, so defined here)
  real(dp),parameter              :: errorTolLiqFlux=0.01_dp        ! error tolerance in the explicit solution (liquid flux)
  real(dp),parameter              :: errorTolNrgFlux=10._dp         ! error tolerance in the explicit solution (energy flux)
@@ -271,6 +279,7 @@ contains
  integer(i4b)                    :: tryDomainSplit                 ! (0,1) - flag to try the domain split
  ! actual number of splits
  integer(i4b)                    :: nStateTypeSplit                ! number of splits for the state type
+ integer(i4b)                    :: nStateTypeSplit_temp           ! temporary value (SJT)
  integer(i4b)                    :: nDomainSplit                   ! number of splits for the domain
  integer(i4b)                    :: nStateSplit                    ! number of splits for the states within a given domain
  ! indices for the state type and the domain split
@@ -298,6 +307,7 @@ contains
  ! model decisions
  ixGroundwater           => model_decisions(iLookDECISIONS%groundwatr)%iDecision   ,& ! intent(in):    [i4b]    groundwater parameterization
  ixSpatialGroundwater    => model_decisions(iLookDECISIONS%spatial_gw)%iDecision   ,& ! intent(in):    [i4b]    spatial representation of groundwater (local-column or single-basin)
+ ixTStep                 => model_decisions(iLookDECISIONS%tStepOrder)%iDecision   ,& ! intent(in):    [i4b]    time stepping order of accuracy (SJT)
  ! domain boundary conditions
  airtemp                 => forc_data%var(iLookFORCE%airtemp)                      ,& ! intent(in):    [dp]     temperature of the upper boundary of the snow and soil domains (K)
  ! vector of energy and hydrology indices for the snow and soil domains
@@ -359,6 +369,16 @@ contains
  ! *****
  ! (0) PRELIMINARIES...
  ! ********************
+
+!*****************************************************************SJT: parameters that depend on the order of accuracy of operator splitting
+!  select case(ixTStep)
+!   case(firstOrder) !!Godunov aka Lie-Trotter Splitting (first-order accurate, original method in SUMMA)
+!    nStateTypeSplit_temp=2
+!   case(secondOrder) !!Strang Splitting (second-order accurate but requires more split solves)
+!
+!   case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+!  end select
+!*****************************************************************END SJT
 
  ! -----
  ! * initialize...
@@ -469,7 +489,21 @@ contains
   ! define the number of operator splits for the state type
   select case(ixCoupling)
    case(fullyCoupled);   nStateTypeSplit=1
-   case(stateTypeSplit); nStateTypeSplit=nStateTypes
+!   case(stateTypeSplit); nStateTypeSplit=nStateTypes
+   case(stateTypeSplit) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT
+    nStateTypeSplit=nStateTypes
+    select case(ixTStep)
+     case(firstOrder) !!Godunov aka Lie-Trotter Splitting (first-order accurate, original method in SUMMA)
+      nStateTypeSplit=nStateTypes
+     case(secondOrder) !!Strang Splitting (second-order accurate but requires more split solves)
+      if (nStateTypes.eq.2) then
+!       nStateTypeSplit=2
+       nStateTypeSplit=3 !!3 steps in basic Strang
+      else !!# of states does not equal 2 revert to Godonuv splitting for now
+       nStateTypeSplit=nStateTypes
+      end if
+     case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+    end select
    case default; err=20; message=trim(message)//'coupling case not found'; return
   end select  ! operator splitting option
 
@@ -507,7 +541,8 @@ contains
     !print*, 'start of stateThenDomain loop'
 
     ! keep track of the number of domain splits
-    if(iStateTypeSplit==nrgSplit  .and. ixStateThenDomain==subDomain) numberDomainSplitNrg  = numberDomainSplitNrg  + 1
+!    if(iStateTypeSplit==nrgSplit  .and. ixStateThenDomain==subDomain) numberDomainSplitNrg  = numberDomainSplitNrg  + 1
+    if(((iStateTypeSplit==nrgSplit).or.(iStateTypeSplit==nrgSplitPrime))  .and. ixStateThenDomain==subDomain) numberDomainSplitNrg  = numberDomainSplitNrg  + 1 !!SJT Strang
     if(iStateTypeSplit==massSplit .and. ixStateThenDomain==subDomain) numberDomainSplitMass = numberDomainSplitMass + 1
 
     ! define the number of domain splits for the state type
@@ -619,6 +654,7 @@ contains
          select case(iStateTypeSplit)
           case(nrgSplit);  desiredFlux = any(ixStateType_subset==flux2state_orig(iVar)%state1) .or. any(ixStateType_subset==flux2state_orig(iVar)%state2)
           case(massSplit); desiredFlux = any(ixStateType_subset==flux2state_liq(iVar)%state1)  .or. any(ixStateType_subset==flux2state_liq(iVar)%state2)
+          case(nrgSplitPrime);  desiredFlux = any(ixStateType_subset==flux2state_orig(iVar)%state1) .or. any(ixStateType_subset==flux2state_orig(iVar)%state2) !!SJT Strang
           case default; err=20; message=trim(message)//'unable to identify split based on state type'; return
          end select
 
@@ -644,7 +680,8 @@ contains
              ! vector solution (should only be present for energy)
              if(ixSolution==vector)then
               fluxMask%var(iVar)%dat(:1) = desiredFlux
-              if(ixStateThenDomain>1 .and. iStateTypeSplit/=nrgSplit)then
+!              if(ixStateThenDomain>1 .and. iStateTypeSplit/=nrgSplit)then
+              if(ixStateThenDomain>1 .and. iStateTypeSplit/=nrgSplit .and. iStateTypeSplit/=nrgSplitPrime)then !!SJT Strang
                message=trim(message)//'only expect a vector solution for the vegetation domain for energy'
                err=20; return
               endif
@@ -758,12 +795,40 @@ contains
        ! keep track of the number of scalar solutions
        if(ixSolution==scalar) numberScalarSolutions = numberScalarSolutions + 1
 
-write(*,*) "istateSplit=",iStateSplit,nStateSplit
+!************************************************************SJT
+write(*,*) "istateSplit=",iStateSplit,nStateSplit,nSubset
+write(*,*) "iStateTypeSplit=",iStateTypeSplit,nStateTypeSplit,nSubset
+       if (ixCoupling.ne.fullyCoupled) then !!SJT Strang Splitting
+        select case(ixTStep)
+         case(firstOrder) !!Godunov aka Lie-Trotter Splitting (first-order accurate, original method in SUMMA)
+          dt_split=dt
+         case(secondOrder) !!Strang Splitting (second-order accurate but requires more split solves)
+          if (nStateTypes.eq.2) then
+           if (iStateTypeSplit.eq.1) then
+            dt_split=0.5d0*dt  !!first state
+write(*,*) "testing",dt,dt_split,dtInit,dt_min
+           elseif (iStateTypeSplit.eq.2) then
+            dt_split=dt        !!second state
+           else
+            dt_split=0.5d0*dt  !!back to first state
+           end if
+          else !!# of states does not equal 2 revert to Godonuv splitting for now
+           dt_split=dt
+          end if
+         case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
+        end select
+       else !!fully coupled -- no split
+        dt_split=dt
+       end if
+!************************************************************End SJT
+
        ! solve variable subset for one full time step
        call varSubstep(&
                        ! input: model control
+!                       dt_split,                   & ! intent(inout) : time step (s) -- SJT -- modified in the case of Strang splitting
                        dt,                         & ! intent(inout) : time step (s)
-                       dtInit,                     & ! intent(in)    : initial time step (seconds)
+!                       dtInit,                     & ! intent(in)    : initial time step (seconds)
+                       dt_split,                   & ! intent(inout) : time step (s) -- SJT -- modified in the case of Strang splitting
                        dt_min,                     & ! intent(in)    : minimum time step (seconds)
                        nSubset,                    & ! intent(in)    : total number of variables in the state subset
                        doAdjustTemp,               & ! intent(in)    : flag to indicate if we adjust the temperature
@@ -876,11 +941,29 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
        endif
 
        ! check that state variables updated
-       where(stateMask) stateCheck = stateCheck+1
-       if(any(stateCheck>1))then
-        message=trim(message)//'state variable updated more than once!'
-        err=20; return
-       endif
+       select case (ixTStep) !!SJT
+        case(firstOrder)
+         where(stateMask) stateCheck = stateCheck+1
+         if(any(stateCheck>1))then
+          message=trim(message)//'state variable updated more than once!'
+          err=20; return
+         endif
+        case(secondOrder)
+         if(ixCoupling/=fullyCoupled)then
+          where(stateMask) stateCheck = stateCheck+1
+          if(any(stateCheck>2))then !!2 state updates possible during Strang Splitting
+           message=trim(message)//'state variable updated more than once!'
+           err=20; return
+          endif
+         else
+          where(stateMask) stateCheck = stateCheck+1
+          if(any(stateCheck>1))then
+           message=trim(message)//'state variable updated more than once!'
+           err=20; return
+          endif
+         end if
+        case default; err=20; message=trim(message)//'unknown ixTStep case'
+       end select
 
        ! success = exit solution
        if(.not.failure)then
@@ -944,7 +1027,7 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
   write(*,*) "ixCoupling=",ixCoupling !!!!!!!!!!!!!!!!!!Verify coupling or splitting SJT
   if(ixCoupling/=fullyCoupled) then
    write(*,*) "Solution required operator splitting" !!!!!SJT
-   stop
+!   stop
   end if
   !if(ixCoupling/=fullyCoupled)then
   ! print*, 'PAUSE: end of splitting loop'; read(*,*)
@@ -1056,6 +1139,7 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
     select case(iStateTypeSplit)
      case(nrgSplit);  stateMask = (ixStateType==iname_nrgCanair .or. ixStateType==iname_nrgCanopy .or. ixStateType==iname_nrgLayer)
      case(massSplit); stateMask = (ixStateType==iname_liqCanopy .or. ixStateType==iname_liqLayer  .or. ixStateType==iname_lmpLayer .or. ixStateType==iname_watAquifer)
+     case(nrgSplitPrime);  stateMask = (ixStateType==iname_nrgCanair .or. ixStateType==iname_nrgCanopy .or. ixStateType==iname_nrgLayer) !!SJT Strang
      case default; err=20; message=trim(message)//'unable to identify split based on state type'; return
     end select
 
@@ -1088,6 +1172,20 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
        case(aquiferSplit); if(ixWatAquifer(1)/=integerMissing) stateMask(ixWatAquifer) = .true.  ! aquifer storage
        case default; err=20; message=trim(message)//'unable to identify model sub-domain'; return
       end select
+
+     ! define mask for energy -- SJT Strang
+     case(nrgSplitPrime)
+      select case(iDomainSplit)
+       case(vegSplit)
+        if(ixNrgCanair(1)/=integerMissing) stateMask(ixNrgCanair) = .true.  ! energy of the canopy air space
+        if(ixNrgCanopy(1)/=integerMissing) stateMask(ixNrgCanopy) = .true.  ! energy of the vegetation canopy
+        stateMask(ixNrgLayer(1)) = .true.  ! energy of the upper-most layer in the snow+soil domain
+       case(snowSplit);   if(nSnow>1) stateMask(ixNrgLayer(2:nSnow)) = .true.    ! NOTE: (2:) because the top layer in the snow+soil domain included in vegSplit
+       case(soilSplit);   stateMask(ixNrgLayer(max(2,nSnow+1):nLayers)) = .true. ! NOTE: max(2,nSnow+1) gives second layer unless more than 2 snow layers
+       case(aquiferSplit) ! do nothing: no energy state variable for the aquifer domain
+       case default; err=20; message=trim(message)//'unable to identify model sub-domain'; return
+      end select
+
 
      ! check
      case default; err=20; message=trim(message)//'unable to identify the state type'; return

@@ -103,10 +103,10 @@ if (con_test.eq.1) then !!SJT for convergence testing
  modelTime=real(modelTimeStep+1,8)*data_step
   write(*,*) "Convergence data for mLayerVolFracLiq=",modelTimeStep,data_step,modelTime,summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(100),&
 &summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(101)
-  if (summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(101).gt.0.186d0) then
-   write(*,*) "Wetting Front Time=",modelTime 
-   stop
-  end if
+!  if (summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(101).gt.0.186d0) then
+!   write(*,*) "Wetting Front Time=",modelTime 
+!   stop
+!  end if
  if (modelTime.ge.18000.d0) then
   write(*,*) "Convergence data for mLayerVolFracLiq=",modelTimeStep,data_step,modelTime,summa1_struc(1)%progStruct%gru(1)%hru(1)%var(iLookPROG%mLayerVolFracLiq)%dat(50)
   stop
