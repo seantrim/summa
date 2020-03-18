@@ -132,7 +132,8 @@ integer(i4b),parameter  :: nCoupling=1!2                ! number of possible sol
 ! named variables for the state variable split
 integer(i4b),parameter  :: nrgSplit=1                 ! order in sequence for the energy operation
 integer(i4b),parameter  :: massSplit=2                ! order in sequence for the mass operation
-integer(i4b),parameter  :: nrgSplitPrime=3            ! order in sequence for the second energy operation in Strang Splitting (SJT)
+integer(i4b),parameter  :: massSplitPrime=3           ! order in sequence for the second mass operation in Strang Splitting (SJT)
+integer(i4b),parameter  :: nrgSplitPrime=4            ! order in sequence for the second energy operation in Strang Splitting (SJT)
 
 ! named variables for the domain type split
 integer(i4b),parameter  :: vegSplit=1                 ! order in sequence for the vegetation split
@@ -266,7 +267,9 @@ contains
  real(dp),parameter              :: dtmin_scalar=10._dp            ! minimum time step for the scalar solution (seconds)
  real(dp)                        :: dt_min                         ! minimum time step (seconds)
  real(dp)                        :: dtInit                         ! initial time step (seconds)
- real(dp)                        :: dt_split                         ! temporary time step used for Strang Splitting (SJT)
+ real(dp)                        :: dtInit_temp                    ! temporary time step used for Strang Splitting (SJT)
+ real(dp)                        :: dt_min_temp                    ! temporary time step used for Strang Splitting (SJT)
+ real(dp)                        :: dt_temp                        ! temporary time step used for Strang Splitting (SJT)
  ! explicit error tolerance (depends on state type split, so defined here)
  real(dp),parameter              :: errorTolLiqFlux=0.01_dp        ! error tolerance in the explicit solution (liquid flux)
  real(dp),parameter              :: errorTolNrgFlux=10._dp         ! error tolerance in the explicit solution (energy flux)
@@ -369,16 +372,6 @@ contains
  ! *****
  ! (0) PRELIMINARIES...
  ! ********************
-
-!*****************************************************************SJT: parameters that depend on the order of accuracy of operator splitting
-!  select case(ixTStep)
-!   case(firstOrder) !!Godunov aka Lie-Trotter Splitting (first-order accurate, original method in SUMMA)
-!    nStateTypeSplit_temp=2
-!   case(secondOrder) !!Strang Splitting (second-order accurate but requires more split solves)
-!
-!   case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
-!  end select
-!*****************************************************************END SJT
 
  ! -----
  ! * initialize...
@@ -491,14 +484,12 @@ contains
    case(fullyCoupled);   nStateTypeSplit=1
 !   case(stateTypeSplit); nStateTypeSplit=nStateTypes
    case(stateTypeSplit) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!SJT
-    nStateTypeSplit=nStateTypes
     select case(ixTStep)
      case(firstOrder) !!Godunov aka Lie-Trotter Splitting (first-order accurate, original method in SUMMA)
       nStateTypeSplit=nStateTypes
      case(secondOrder) !!Strang Splitting (second-order accurate but requires more split solves)
       if (nStateTypes.eq.2) then
-!       nStateTypeSplit=2
-       nStateTypeSplit=3 !!3 steps in basic Strang
+       nStateTypeSplit=4 !!4 half steps steps in Strang
       else !!# of states does not equal 2 revert to Godonuv splitting for now
        nStateTypeSplit=nStateTypes
       end if
@@ -524,10 +515,12 @@ contains
    ! --------------------------------------------------------------
 
    ! flag to adjust the temperature
-   doAdjustTemp = (ixCoupling/=fullyCoupled .and. iStateTypeSplit==massSplit)
+!   doAdjustTemp = (ixCoupling/=fullyCoupled .and. iStateTypeSplit==massSplit)
+   doAdjustTemp = (ixCoupling/=fullyCoupled .and. ((iStateTypeSplit==massSplit).or.(iStateTypeSplit==massSplitPrime))) !!SJT Strang
 
    ! modify the state type names associated with the state vector
-   if(ixCoupling/=fullyCoupled .and. iStateTypeSplit==massSplit)then
+!   if(ixCoupling/=fullyCoupled .and. iStateTypeSplit==massSplit)then
+   if(ixCoupling/=fullyCoupled .and. ((iStateTypeSplit==massSplit).or.(iStateTypeSplit==massSplitPrime)))then !!SJT Strang
     if(computeVegFlux)then
      where(ixStateType(ixHydCanopy)==iname_watCanopy) ixStateType(ixHydCanopy)=iname_liqCanopy
     endif
@@ -543,7 +536,9 @@ contains
     ! keep track of the number of domain splits
 !    if(iStateTypeSplit==nrgSplit  .and. ixStateThenDomain==subDomain) numberDomainSplitNrg  = numberDomainSplitNrg  + 1
     if(((iStateTypeSplit==nrgSplit).or.(iStateTypeSplit==nrgSplitPrime))  .and. ixStateThenDomain==subDomain) numberDomainSplitNrg  = numberDomainSplitNrg  + 1 !!SJT Strang
-    if(iStateTypeSplit==massSplit .and. ixStateThenDomain==subDomain) numberDomainSplitMass = numberDomainSplitMass + 1
+!    if(iStateTypeSplit==massSplit .and. ixStateThenDomain==subDomain) numberDomainSplitMass = numberDomainSplitMass + 1
+    if(((iStateTypeSplit==massSplit).or.(iStateTypeSplit==massSplitPrime)) .and. ixStateThenDomain==subDomain) numberDomainSplitMass = numberDomainSplitMass + 1 !!SJT Strang
+
 
     ! define the number of domain splits for the state type
     select case(ixStateThenDomain)
@@ -654,6 +649,7 @@ contains
          select case(iStateTypeSplit)
           case(nrgSplit);  desiredFlux = any(ixStateType_subset==flux2state_orig(iVar)%state1) .or. any(ixStateType_subset==flux2state_orig(iVar)%state2)
           case(massSplit); desiredFlux = any(ixStateType_subset==flux2state_liq(iVar)%state1)  .or. any(ixStateType_subset==flux2state_liq(iVar)%state2)
+          case(massSplitPrime); desiredFlux = any(ixStateType_subset==flux2state_liq(iVar)%state1)  .or. any(ixStateType_subset==flux2state_liq(iVar)%state2) !!SJT Strang
           case(nrgSplitPrime);  desiredFlux = any(ixStateType_subset==flux2state_orig(iVar)%state1) .or. any(ixStateType_subset==flux2state_orig(iVar)%state2) !!SJT Strang
           case default; err=20; message=trim(message)//'unable to identify split based on state type'; return
          end select
@@ -717,7 +713,8 @@ contains
                end select
 
                ! add hydrology states for scalar variables
-               if(iStateTypeSplit==massSplit .and. flux_meta(iVar)%vartype==iLookVarType%scalarv)then
+!               if(iStateTypeSplit==massSplit .and. flux_meta(iVar)%vartype==iLookVarType%scalarv)then
+               if(((iStateTypeSplit==massSplit).or.(iStateTypeSplit==massSplitPrime)) .and. flux_meta(iVar)%vartype==iLookVarType%scalarv)then !!SJT Strang
                 select case(iDomainSplit)
                  case(snowSplit); if(iLayer==nSnow)   fluxMask%var(iVar)%dat = desiredFlux
                  case(soilSplit); if(iLayer==nSnow+1) fluxMask%var(iVar)%dat = desiredFlux
@@ -796,40 +793,42 @@ contains
        if(ixSolution==scalar) numberScalarSolutions = numberScalarSolutions + 1
 
 !************************************************************SJT
-write(*,*) "istateSplit=",iStateSplit,nStateSplit,nSubset
 write(*,*) "iStateTypeSplit=",iStateTypeSplit,nStateTypeSplit,nSubset
        if (ixCoupling.ne.fullyCoupled) then !!SJT Strang Splitting
         select case(ixTStep)
          case(firstOrder) !!Godunov aka Lie-Trotter Splitting (first-order accurate, original method in SUMMA)
-          dt_split=dt
+          dtInit_temp=dt
+          dt_min_temp=dt
+          dt_temp=dt
          case(secondOrder) !!Strang Splitting (second-order accurate but requires more split solves)
           if (nStateTypes.eq.2) then
-           if (iStateTypeSplit.eq.1) then
-            dt_split=0.5d0*dt  !!first state
-write(*,*) "testing",dt,dt_split,dtInit,dt_min
-           elseif (iStateTypeSplit.eq.2) then
-            dt_split=dt        !!second state
-           else
-            dt_split=0.5d0*dt  !!back to first state
-           end if
+           dtInit_temp=0.5d0*dt
+           dt_min_temp=0.5d0*dt
+           dt_temp=0.5d0*dt
+write(*,*) "testing",dt,dtInit,dt_min,dtInit_temp,nSubset
           else !!# of states does not equal 2 revert to Godonuv splitting for now
-           dt_split=dt
+           dtInit_temp=dt
+           dt_min_temp=dt
+           dt_temp=dt
           end if
          case default; err=20; message=trim(message)//'unable to identify time stepping option'; return
         end select
        else !!fully coupled -- no split
-        dt_split=dt
+        dtInit_temp=dt
+        dt_min_temp=dt
+        dt_temp=dt
        end if
 !************************************************************End SJT
 
        ! solve variable subset for one full time step
        call varSubstep(&
                        ! input: model control
-!                       dt_split,                   & ! intent(inout) : time step (s) -- SJT -- modified in the case of Strang splitting
-                       dt,                         & ! intent(inout) : time step (s)
+!                       dt,                         & ! intent(inout) : time step (s)
+                       dt_temp,                     & ! intent(inout) : time step (s) -- SJT -- Strang
 !                       dtInit,                     & ! intent(in)    : initial time step (seconds)
-                       dt_split,                   & ! intent(inout) : time step (s) -- SJT -- modified in the case of Strang splitting
-                       dt_min,                     & ! intent(in)    : minimum time step (seconds)
+                       dtInit_temp,                   & ! intent(inout) : time step (s) -- SJT -- modified in the case of Strang splitting
+!                       dt_min,                     & ! intent(in)    : minimum time step (seconds)
+                       dt_min_temp,                     & ! intent(in)    : minimum time step (seconds) -- SJT -- Strang
                        nSubset,                    & ! intent(in)    : total number of variables in the state subset
                        doAdjustTemp,               & ! intent(in)    : flag to indicate if we adjust the temperature
                        firstSubStep,               & ! intent(in)    : flag to denote first sub-step
@@ -863,6 +862,7 @@ write(*,*) "testing",dt,dt_split,dtInit,dt_min
         message=trim(message)//trim(cmessage)
         if(err>0) return
        endif  ! (check for errors)
+
 
        !print*, trim(message)//'after varSubstep: scalarSnowDrainage = ', flux_data%var(iLookFLUX%scalarSnowDrainage)%dat
        !print*, trim(message)//'after varSubstep: iLayerLiqFluxSnow  = ', flux_data%var(iLookFLUX%iLayerLiqFluxSnow)%dat
@@ -1013,7 +1013,8 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
    ! ---------------------------------------------
 
    ! modify the state type names associated with the state vector
-   if(ixCoupling/=fullyCoupled .and. iStateTypeSplit==massSplit)then
+!   if(ixCoupling/=fullyCoupled .and. iStateTypeSplit==massSplit)then
+   if(ixCoupling/=fullyCoupled .and. ((iStateTypeSplit==massSplit).or.(iStateTypeSplit==massSplitPrime)))then !!SJT Strang
     if(computeVegFlux)then
      where(ixStateType(ixHydCanopy)==iname_liqCanopy) ixStateType(ixHydCanopy)=iname_watCanopy
     endif
@@ -1139,6 +1140,7 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
     select case(iStateTypeSplit)
      case(nrgSplit);  stateMask = (ixStateType==iname_nrgCanair .or. ixStateType==iname_nrgCanopy .or. ixStateType==iname_nrgLayer)
      case(massSplit); stateMask = (ixStateType==iname_liqCanopy .or. ixStateType==iname_liqLayer  .or. ixStateType==iname_lmpLayer .or. ixStateType==iname_watAquifer)
+     case(massSplitPrime); stateMask = (ixStateType==iname_liqCanopy .or. ixStateType==iname_liqLayer  .or. ixStateType==iname_lmpLayer .or. ixStateType==iname_watAquifer) !!SJT Strang
      case(nrgSplitPrime);  stateMask = (ixStateType==iname_nrgCanair .or. ixStateType==iname_nrgCanopy .or. ixStateType==iname_nrgLayer) !!SJT Strang
      case default; err=20; message=trim(message)//'unable to identify split based on state type'; return
     end select
@@ -1172,6 +1174,17 @@ write(*,*) "step fail -- tooMuchMelt or reduceCoupledStep in opSplittin",tooMuch
        case(aquiferSplit); if(ixWatAquifer(1)/=integerMissing) stateMask(ixWatAquifer) = .true.  ! aquifer storage
        case default; err=20; message=trim(message)//'unable to identify model sub-domain'; return
       end select
+
+     ! define mask for water -- SJT Strang
+     case(massSplitPrime)
+      select case(iDomainSplit)
+       case(vegSplit);     if(ixHydCanopy(1)/=integerMissing) stateMask(ixHydCanopy) = .true.  ! hydrology of the vegetation canopy
+       case(snowSplit);    stateMask(ixHydLayer(1:nSnow)) = .true.  ! snow hydrology
+       case(soilSplit);    stateMask(ixHydLayer(nSnow+1:nLayers)) = .true.  ! soil hydrology
+       case(aquiferSplit); if(ixWatAquifer(1)/=integerMissing) stateMask(ixWatAquifer) = .true.  ! aquifer storage
+       case default; err=20; message=trim(message)//'unable to identify model sub-domain'; return
+      end select
+
 
      ! define mask for energy -- SJT Strang
      case(nrgSplitPrime)
