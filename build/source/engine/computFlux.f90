@@ -436,20 +436,16 @@ contains
 
  if (ixVegHyd/=integerMissing) then ! if we need to compute the liquid water fluxes through vegetation
   ! calculate liquid water fluxes through vegetation
+  call sub_args('pack','vegLiqFlux') ! pack subroutine argument data
   call vegLiqFlux(&
                   ! input
-                  computeVegFlux,                         & ! intent(in):  flag to denote if computing energy flux over vegetation
-                  scalarCanopyLiqTrial,                   & ! intent(in):  trial mass of liquid water on the vegetation canopy at the current iteration (kg m-2)
-                  scalarRainfall,                         & ! intent(in):  rainfall rate (kg m-2 s-1)
+                  in_data,                                & ! intent(in):  model control, trial liquid water mass, and rainfall rate
                   ! input-output: data structures
                   mpar_data,                              & ! intent(in):  model parameters
                   diag_data,                              & ! intent(in):  local HRU diagnostic model variables
                   ! output
-                  scalarThroughfallRain,                  & ! intent(out): rain that reaches the ground without ever touching the canopy (kg m-2 s-1)
-                  scalarCanopyLiqDrainage,                & ! intent(out): drainage of liquid water from the vegetation canopy (kg m-2 s-1)
-                  scalarThroughfallRainDeriv,             & ! intent(out): derivative in throughfall w.r.t. canopy liquid water (s-1)
-                  scalarCanopyLiqDrainageDeriv,           & ! intent(out): derivative in canopy drainage w.r.t. canopy liquid water (s-1)
-                  err,cmessage)                             ! intent(out): error control
+                  out_data)                                 ! intent(out): throughfall rain, drainage, derivatives, and error control 
+  call sub_args('unpack','vegLiqFlux') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
 
   scalarCanopyNetLiqFlux = scalarRainfall + scalarCanopyEvaporation - scalarThroughfallRain - scalarCanopyLiqDrainage ! calculate the net liquid water flux for the vegetation canopy
