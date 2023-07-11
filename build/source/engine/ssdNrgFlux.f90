@@ -27,7 +27,7 @@ USE nrtype
 USE data_types,only:var_d           ! x%var(:)       (dp)
 USE data_types,only:var_dlength     ! x%var(:)%dat   (dp)
 USE data_types,only:var_ilength     ! x%var(:)%dat   (i4b)
-USE data_types,only:data_bin        ! derived type for passing subroutine arguments
+USE data_types,only:data_bin        ! x%b(:)%l [lgt], x%b(:)%r [rkind], x%e [i4b], x%m [character]
 
 ! physical constants
 USE multiconst,only:&
