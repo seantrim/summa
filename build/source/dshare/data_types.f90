@@ -278,5 +278,20 @@ MODULE data_types
   type(hru_i),allocatable            :: gru(:)    ! gru(:)%hru(:)
  endtype gru_i
 
+ ! define derived types used to simplify passing subroutine arguments
+ ! ** vectors for holding arguments of different intrinsic types
+ type, public :: data_vec
+  logical(lgt), allocatable :: l(:)    ! logical arguments
+  real(rkind),  allocatable :: r(:)    ! real arguments
+  integer(i4b), allocatable :: i(:)    ! integer arguments
+  character(:), allocatable :: c       ! character arguments
+ end type data_vec
+ ! ** derived type used to hold data passed as subroutine arguments
+ type, public :: data_bin
+  type(data_vec),  allocatable :: b(:) ! allocatable number of bins given by the component name 'b'
+  integer(i4b)                 :: e    ! error code
+  character(:),    allocatable :: m    ! error message
+ end type data_bin
+
 END MODULE data_types
 
