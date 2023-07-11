@@ -468,26 +468,18 @@ contains
  ! check the need to compute liquid water fluxes through snow
  if (nSnowOnlyHyd>0) then
   ! compute liquid fluxes through snow
+  call sub_args('pack','snowLiqFlx') ! pack subroutine argument data  
   call snowLiqFlx(&
-                  ! input: model control
-                  nSnow,                                     & ! intent(in):    number of snow layers
-                  firstFluxCall,                             & ! intent(in):    the first flux call (compute variables that are constant over the iterations)
-                  (scalarSolution .and. .not.firstFluxCall), & ! intent(in):    flag to indicate the scalar solution
-                  ! input: forcing for the snow domain
-                  scalarThroughfallRain,                     & ! intent(in):    rain that reaches the snow surface without ever touching vegetation (kg m-2 s-1)
-                  scalarCanopyLiqDrainage,                   & ! intent(in):    liquid drainage from the vegetation canopy (kg m-2 s-1)
-                  ! input: model state vector
-                  mLayerVolFracLiqTrial(1:nSnow),            & ! intent(in):    trial value of volumetric fraction of liquid water at the current iteration (-)
+                  ! input: model control, forcing for snow domain, and model state vector
+                  in_data,                                   & ! intent(in):    model control, forcing for snow domain, and model state vector
                   ! input-output: data structures
                   indx_data,                                 & ! intent(in):    model indices
                   mpar_data,                                 & ! intent(in):    model parameters
                   prog_data,                                 & ! intent(in):    model prognostic variables for a local HRU
                   diag_data,                                 & ! intent(inout): model diagnostic variables for a local HRU
-                  ! output: fluxes and derivatives
-                  iLayerLiqFluxSnow(0:nSnow),                & ! intent(inout): vertical liquid water flux at layer interfaces (m s-1)
-                  iLayerLiqFluxSnowDeriv(0:nSnow),           & ! intent(inout): derivative in vertical liquid water flux at layer interfaces (m s-1)
-                  ! output: error control
-                  err,cmessage)                                ! intent(out):   error control
+                  ! output: fluxes, derivatives, and error control
+                  out_data)                                    ! intent(out): fluxes, derivatives, and error control
+  call sub_args('unpack','snowLiqFlx') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   scalarRainPlusMelt = iLayerLiqFluxSnow(nSnow)    ! define forcing for the soil domain: drainage from the base of the snowpack
   do iLayer=1,nSnow   ! calculate net liquid water fluxes for each soil layer (s-1)
@@ -697,8 +689,8 @@ contains
 
    subroutine sub_args(op,sub)
     implicit none
-    character(*) :: op  ! requested operation: 'pack' or 'unpack'
-    character(*) :: sub ! name of subroutine in computFlux (e.g., 'vegNrgFlux')
+    character(*),intent(in) :: op  ! requested operation: 'pack' or 'unpack'
+    character(*),intent(in) :: sub ! name of subroutine in computFlux (e.g., 'vegNrgFlux')
     associate(&
     ! model decisions
     ixGroundwater                => model_decisions(iLookDECISIONS%groundwatr)%iDecision            ,& ! intent(in): [i4b]    groundwater parameterization
@@ -870,6 +862,20 @@ contains
       err                           = out_data%e
       cmessage                      = out_data%m
       deallocate(in_data%b(1)%l,in_data%b(1)%r,out_data%b(1)%r); deallocate(in_data%b,out_data%b)
+     end if
+    elseif (sub.eq.'snowLiqFlx') then
+     if (op.eq.'pack') then
+      allocate(in_data%b(1:2)); allocate(in_data%b(1)%i(1:1),in_data%b(1)%l(1:2),in_data%b(1)%r(1:2),in_data%b(2)%r(1:nsnow))
+      in_data%b(1)%i=nsnow
+      in_data%b(1)%l=[firstFluxCall,(scalarSolution .and. .not.firstFluxCall)]
+      in_data%b(1)%r=[scalarThroughfallRain,scalarCanopyLiqDrainage]
+      in_data%b(2)%r=mLayerVolFracLiqTrial(1:nSnow)
+     elseif (op.eq.'unpack') then
+      iLayerLiqFluxSnow(0:nSnow)      = out_data%b(1)%r
+      iLayerLiqFluxSnowDeriv(0:nSnow) = out_data%b(2)%r
+      err                             = out_data%e
+      message                         = out_data%m
+      deallocate(in_data%b(1)%i,in_data%b(1)%l,in_data%b(1)%r,in_data%b(2)%r,out_data%b(1)%r,out_data%b(2)%r); deallocate(in_data%b,out_data%b)
      end if
     else ! error control
      
