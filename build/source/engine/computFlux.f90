@@ -407,29 +407,19 @@ contains
  ! check the need to compute energy fluxes throughout the snow+soil domain
  if (nSnowSoilNrg>0) then
   ! calculate energy fluxes at layer interfaces through the snow and soil domain
+  call sub_args('pack','ssdNrgFlux') ! pack subroutine argument data
   call ssdNrgFlux(&
-                  ! input: model control
-                  (scalarSolution .and. .not.firstFluxCall), & ! intent(in):    flag to indicate the scalar solution
-                  ! input: fluxes and derivatives at the upper boundary
-                  scalarGroundNetNrgFlux,                    & ! intent(in):    total flux at the ground surface (W m-2)
-                  dGroundNetFlux_dGroundTemp,                & ! intent(in):    derivative in total ground surface flux w.r.t. ground temperature (W m-2 K-1)
-                  ! input: liquid water fluxes throughout the snow and soil domains
-                  iLayerLiqFluxSnow,                         & ! intent(in):    liquid flux at the interface of each snow layer (m s-1)
-                  iLayerLiqFluxSoil,                         & ! intent(in):    liquid flux at the interface of each soil layer (m s-1)
-                  ! input: trial value of model state variabes
-                  mLayerTempTrial,                           & ! intent(in):    trial temperature at the current iteration (K)
+                  ! input: model control, fluxes, derivatives and trial model state variables
+                  in_data,                                   & ! intent(in)
                   ! input-output: data structures
                   mpar_data,                                 & ! intent(in):    model parameters
                   indx_data,                                 & ! intent(in):    model indices
                   prog_data,                                 & ! intent(in):    model prognostic variables for a local HRU
                   diag_data,                                 & ! intent(in):    model diagnostic variables for a local HRU
                   flux_data,                                 & ! intent(inout): model fluxes for a local HRU
-                  ! output: fluxes and derivatives at all layer interfaces
-                  iLayerNrgFlux,                             & ! intent(out):   energy flux at the layer interfaces (W m-2)
-                  dNrgFlux_dTempAbove,                       & ! intent(out):   derivatives in the flux w.r.t. temperature in the layer above (W m-2 K-1)
-                  dNrgFlux_dTempBelow,                       & ! intent(out):   derivatives in the flux w.r.t. temperature in the layer below (W m-2 K-1)
-                  ! output: error control
-                  err,cmessage)                                ! intent(out):   error control
+                  ! output: fluxes and derivatives at layer interfaces, and error control
+                  out_data)                                    ! intent(out):   fluxes/derivatives at layer interfaces, and error control
+  call sub_args('unpack','ssdNrgFlux') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   do iLayer=1,nLayers ! calculate net energy fluxes for each snow and soil layer (J m-3 s-1)
    mLayerNrgFlux(iLayer) = -(iLayerNrgFlux(iLayer) - iLayerNrgFlux(iLayer-1))/mLayerDepth(iLayer)
