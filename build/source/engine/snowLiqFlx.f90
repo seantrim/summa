@@ -38,7 +38,7 @@ USE var_lookup,only:iLookDIAG              ! named variables for structure eleme
 USE data_types,only:var_d                  ! x%var(:)       (dp)
 USE data_types,only:var_dlength            ! x%var(:)%dat   (dp)
 USE data_types,only:var_ilength            ! x%var(:)%dat   (i4b)
-USE data_types,only:data_bin               ! x%b(:)%l [lgt], x%b(:)%r [rkind], x%e [i4b], x%m [character]
+USE data_types,only:data_bin               ! x%b(:)%l(:) [lgt], x%b(:)%i(:) [i4b], x%b(:)%r(:) [rkind], x%e [i4b], x%m [character]
 
 ! privacy
 implicit none
