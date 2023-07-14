@@ -557,28 +557,21 @@ contains
     err=20; return
    end if
    ! compute the baseflow flux
+   call sub_args('pack','groundwatr') ! pack subroutine argument data
    call groundwatr(&
-                   ! input: model control
-                   nSnow,                                   & ! intent(in):    number of snow layers
-                   nSoil,                                   & ! intent(in):    number of soil layers
-                   nLayers,                                 & ! intent(in):    total number of layers
-                   firstFluxCall,                           & ! intent(in):    logical flag to compute index of the lowest saturated layer
-                   ! input: state and diagnostic variables
-                   mLayerdTheta_dPsi,                       & ! intent(in):    derivative in the soil water characteristic w.r.t. matric head in each layer (m-1)
-                   mLayerMatricHeadLiqTrial,                & ! intent(in):    liquid water matric potential (m)
-                   mLayerVolFracLiqTrial(nSnow+1:nLayers),  & ! intent(in):    volumetric fraction of liquid water (-)
-                   mLayerVolFracIceTrial(nSnow+1:nLayers),  & ! intent(in):    volumetric fraction of ice (-)
+                   ! input: model control, and state/diagnostic variables
+                   in_data,                                 & ! intent(in):    model control, layer counts, derivatives, and state/diagnostic variables 
                    ! input: data structures
                    attr_data,                               & ! intent(in):    model attributes
                    mpar_data,                               & ! intent(in):    model parameters
                    prog_data,                               & ! intent(in):    model prognostic variables for a local HRU
                    diag_data,                               & ! intent(in):    model diagnostic variables for a local HRU
+                   ! input-output: data_structures
                    flux_data,                               & ! intent(inout): model fluxes for a local HRU
-                   ! output
-                   ixSaturation,                            & ! intent(inout)  index of lowest saturated layer (NOTE: only computed on the first iteration)
-                   mLayerBaseflow,                          & ! intent(out):   baseflow from each soil layer (m s-1)
-                   dBaseflow_dMatric,                       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
-                   err,cmessage)                              ! intent(out):   error control
+                   io_data,                                 & ! intent(inout): index of lowest saturated layer (NOTE: only computed on the first iteration)
+                   ! output: baseflow, derivatives, and error control
+                   out_data)                                  ! intent(out): baseflow, derivatives, and error control
+   call sub_args('unpack','groundwatr') ! unpack subroutine argument data
    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   end if  ! end if the topmodel baseflow routine is not used 
   scalarSoilBaseflow = sum(mLayerBaseflow) ! compute total baseflow from the soil zone (needed for mass balance checks)
@@ -802,7 +795,6 @@ contains
       dGroundEvaporation_dCanLiq=out_data%b(1)%r(20); dGroundEvaporation_dTCanair=out_data%b(1)%r(21); dGroundEvaporation_dTCanopy=out_data%b(1)%r(22); dGroundEvaporation_dTGround=out_data%b(1)%r(23);
       dCanopyNetFlux_dCanLiq=out_data%b(1)%r(24); dGroundNetFlux_dCanLiq=out_data%b(1)%r(25)
       err=out_data%e; cmessage=out_data%m ! error control 
-      deallocate(in_data%b(1)%l,in_data%b(1)%r,out_data%b(1)%r) ! deallocate argument storage
       deallocate(in_data%b,out_data%b)
      end if
     elseif (sub.eq.'ssdNrgFlux') then
@@ -816,8 +808,6 @@ contains
      elseif (op.eq.'unpack') then
       iLayerNrgFlux=out_data%b(1)%r; dNrgFlux_dTempAbove=out_data%b(2)%r; dNrgFlux_dTempBelow=out_data%b(3)%r
       err=out_data%e; cmessage=out_data%m ! error control
-      deallocate(in_data%b(1)%l,in_data%b(1)%r,in_data%b(2)%r,in_data%b(3)%r,in_data%b(4)%r)
-      deallocate(out_data%b(1)%r,out_data%b(2)%r,out_data%b(3)%r)
       deallocate(in_data%b,out_data%b)
      end if
     elseif (sub.eq.'vegLiqFlux') then
@@ -832,7 +822,7 @@ contains
       scalarCanopyLiqDrainageDeriv  = out_data%b(1)%r(4)
       err                           = out_data%e
       cmessage                      = out_data%m
-      deallocate(in_data%b(1)%l,in_data%b(1)%r,out_data%b(1)%r); deallocate(in_data%b,out_data%b)
+      deallocate(in_data%b,out_data%b)
      end if
     elseif (sub.eq.'snowLiqFlx') then
      if (op.eq.'pack') then
@@ -846,7 +836,7 @@ contains
       iLayerLiqFluxSnowDeriv(0:nSnow) = out_data%b(2)%r
       err                             = out_data%e
       cmessage                        = out_data%m
-      deallocate(in_data%b(1)%i,in_data%b(1)%l,in_data%b(1)%r,in_data%b(2)%r,out_data%b(1)%r,out_data%b(2)%r); deallocate(in_data%b,out_data%b)
+      deallocate(in_data%b,out_data%b)
      end if
     elseif (sub.eq.'soilLiqFlx') then
      if (op.eq.'pack') then
@@ -895,16 +885,33 @@ contains
       dq_dNrgStateBelow          = io_data%b(11)%r ! derivatives in the flux w.r.t. temperature in the layer below (m s-1 K-1)
       err                        = out_data%e                            ! error code
       cmessage                   = out_data%m    ! error message
-      deallocate(in_data%b(1)%l,in_data%b(1)%i)
-      do ib=1,7
-       deallocate(in_data%b(ib)%r)
-      end do
-      deallocate(in_data%b)
-      do ib=1,11
-       deallocate(io_data%b(ib)%r)
-      end do
-      deallocate(io_data%b)
+      deallocate(in_data%b,io_data%b) ! note: no bins allocated for out_data
      end if
+    elseif (sub.eq.'groundwatr') then
+     if (op.eq.'pack') then
+      allocate(in_data%b(1:4))
+      in_data%b(1)%i=[nSnow,nSoil,nLayers]
+      in_data%b(1)%l=[firstFluxCall]
+      in_data%b(1)%r=mLayerdTheta_dPsi
+      in_data%b(2)%r=mLayerMatricHeadLiqTrial
+      in_data%b(3)%r=mLayerVolFracLiqTrial(nSnow+1:nLayers)
+      in_data%b(4)%r=mLayerVolFracIceTrial(nSnow+1:nLayers)
+      allocate(io_data%b(1))
+      io_data%b(1)%i=[ixSaturation]
+     elseif (op.eq.'unpack') then
+      ixSaturation=io_data%b(1)%i(1)
+      mLayerBaseflow=out_data%b(1)%r
+      dBaseflow_dMatric=out_data%b(1)%rm
+      err=out_data%e
+      cmessage=out_data%m
+      deallocate(in_data%b,io_data%b,out_data%b)
+     end if
+    elseif (sub.eq.'bigAquifer') then
+     if (op.eq.'pack') then
+
+     elseif (op.eq.'unpack') then
+
+     end if    
     else ! error control
      
     end if
