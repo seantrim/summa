@@ -281,9 +281,10 @@ MODULE data_types
  ! define derived types used to simplify passing subroutine arguments
  ! ** vectors for holding arguments of different intrinsic types
  type, public :: data_vec
-  logical(lgt), allocatable :: l(:)    ! logical arguments
-  real(rkind),  allocatable :: r(:)    ! real arguments
-  integer(i4b), allocatable :: i(:)    ! integer arguments
+  logical(lgt), allocatable :: l(:)    ! vector of logical arguments
+  real(rkind),  allocatable :: r(:)    ! vector of real arguments
+  real(rkind),  allocatable :: rm(:,:) ! matrix of real arguments
+  integer(i4b), allocatable :: i(:)    ! vector of integer arguments
   character(:), allocatable :: c       ! character arguments
  end type data_vec
  ! ** derived type used to hold data passed as subroutine arguments

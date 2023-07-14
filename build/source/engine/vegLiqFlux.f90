@@ -26,7 +26,7 @@ USE nrtype
 ! data types
 USE data_types,only:var_d                ! x%var(:)       (dp)
 USE data_types,only:var_dlength          ! x%var(:)%dat   (dp)
-USE data_types,only:data_bin             ! x%b(:)%l(:) [lgt], x%b(:)%i(:) [i4b], x%b(:)%r(:) [rkind], x%e [i4b], x%m [character]
+USE data_types,only:data_bin             ! x%b(:)%l(:) [lgt], x%b(:)%i(:) [i4b], x%b(:)%r(:) [rkind], x%b(:)%rm(:,:) [rkind], x%e [i4b], x%m [character]
 
 ! named variables
 USE var_lookup,only:iLookPARAM,iLookDIAG ! named variables for structure elements
