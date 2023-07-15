@@ -42,50 +42,39 @@ contains
  ! ************************************************************************************************************************
  subroutine bigAquifer(&
                        ! input: state variables and fluxes
-                       scalarAquiferStorageTrial,    & ! intent(in):  trial value of aquifer storage (m)
-                       scalarCanopyTranspiration,    & ! intent(in):  canopy transpiration (kg m-2 s-1)
-                       scalarSoilDrainage,           & ! intent(in):  soil drainage (m s-1)
+                       in_data,                      & ! intent(in):  state variables and fluxes
                        ! input: diagnostic variables and parameters
                        mpar_data,                    & ! intent(in):  model parameter structure
                        diag_data,                    & ! intent(in):  diagnostic variable structure
-                       ! output: fluxes
-                       scalarAquiferTranspire,       & ! intent(out): transpiration loss from the aquifer (m s-1)
-                       scalarAquiferRecharge,        & ! intent(out): recharge to the aquifer (m s-1)
-                       scalarAquiferBaseflow,        & ! intent(out): total baseflow from the aquifer (m s-1)
-                       dBaseflow_dAquifer,           & ! intent(out): change in baseflow flux w.r.t. aquifer storage (s-1)
-                       ! output: error control
-                       err,message)                    ! intent(out): error control
+                       ! output: fluxes and error control
+                       out_data)                       ! intent(out): fluxes and error control
  ! named variables
  USE var_lookup,only:iLookDIAG                         ! named variables for structure elements
  USE var_lookup,only:iLookPARAM                        ! named variables for structure elements
  ! data types
  USE data_types,only:var_dlength                       ! x%var(:)%dat   (dp)
+ USE data_types,only:data_bin                          ! x%b(:)%l(:) [lgt], x%b(:)%i(:) [i4b], x%b(:)%r(:) [rkind], x%b(:)%rm(:,:) [rkind], x%e [i4b], x%m [character]
  ! -------------------------------------------------------------------------------------------------------------------------------------------------
  implicit none
  ! input: state variables, fluxes, and parameters
- real(rkind),intent(in)              :: scalarAquiferStorageTrial    ! trial value of aquifer storage (m)
- real(rkind),intent(in)              :: scalarCanopyTranspiration    ! canopy transpiration (kg m-2 s-1)
- real(rkind),intent(in)              :: scalarSoilDrainage           ! soil drainage (m s-1)
+ type(data_bin),intent(in)           :: in_data                      ! state variables, fluxes, and parameters
  ! input: diagnostic variables and parameters
  type(var_dlength),intent(in)        :: mpar_data                    ! model parameters
  type(var_dlength),intent(in)        :: diag_data                    ! diagnostic variables for a local HRU
- ! output: fluxes
- real(rkind),intent(out)             :: scalarAquiferTranspire       ! transpiration loss from the aquifer (m s-1)
- real(rkind),intent(out)             :: scalarAquiferRecharge        ! recharge to the aquifer (m s-1)
- real(rkind),intent(out)             :: scalarAquiferBaseflow        ! total baseflow from the aquifer (m s-1)
- real(rkind),intent(out)             :: dBaseflow_dAquifer           ! change in baseflow flux w.r.t. aquifer storage (s-1)
- ! output: error control
- integer(i4b),intent(out)            :: err                          ! error code
- character(*),intent(out)            :: message                      ! error message
+ ! output: fluxes and error control
+ type(data_bin),intent(out)          :: out_data                     ! fluxes and error control
  ! -----------------------------------------------------------------------------------------------------------------------------------------------------
  ! local variables
  real(rkind)                         :: aquiferTranspireFrac         ! fraction of total transpiration that comes from the aquifer (-)
  real(rkind)                         :: xTemp                        ! temporary variable (-)
  ! -------------------------------------------------------------------------------------------------------------------------------------------------
- err=0; message='bigAquifer/' ! initialize error control
 
  ! make association between local variables and the information in the data structures
  associate(&
+ ! input: state variables, fluxes, and parameters
+ scalarAquiferStorageTrial   => in_data%b(1)%r(1),                                 & ! intent(in): [dp] trial value of aquifer storage (m)
+ scalarCanopyTranspiration   => in_data%b(1)%r(2),                                 & ! intent(in): [dp] canopy transpiration (kg m-2 s-1)
+ scalarSoilDrainage          => in_data%b(1)%r(3),                                 & ! intent(in): [dp] soil drainage (m s-1)
  ! model diagnostic variables: contribution of the aquifer to transpiration
  scalarTranspireLim     => diag_data%var(iLookDIAG%scalarTranspireLim)%dat(1),     & ! intent(in): [dp] weighted average of the transpiration limiting factor (-)
  scalarAquiferRootFrac  => diag_data%var(iLookDIAG%scalarAquiferRootFrac)%dat(1),  & ! intent(in): [dp] fraction of roots below the lowest soil layer (-)
@@ -93,8 +82,17 @@ contains
  ! model parameters: baseflow flux
  aquiferBaseflowRate    => mpar_data%var(iLookPARAM%aquiferBaseflowRate)%dat(1),   & ! intent(in): [dp] tbaseflow rate when aquiferStorage = aquiferScaleFactor (m s-1)
  aquiferScaleFactor     => mpar_data%var(iLookPARAM%aquiferScaleFactor)%dat(1),    & ! intent(in): [dp] scaling factor for aquifer storage in the big bucket (m)
- aquiferBaseflowExp     => mpar_data%var(iLookPARAM%aquiferBaseflowExp)%dat(1)     & ! intent(in): [dp] baseflow exponent (-)
+ aquiferBaseflowExp     => mpar_data%var(iLookPARAM%aquiferBaseflowExp)%dat(1),    & ! intent(in): [dp] baseflow exponent (-)
+ ! output: fluxes
+ scalarAquiferTranspire => out_data%b(1)%r(1),                                     & ! intent(out): [dp] transpiration loss from the aquifer (m s-1)
+ scalarAquiferRecharge  => out_data%b(1)%r(2),                                     & ! intent(out): [dp] recharge to the aquifer (m s-1)
+ scalarAquiferBaseflow  => out_data%b(1)%r(3),                                     & ! intent(out): [dp] total baseflow from the aquifer (m s-1)
+ dBaseflow_dAquifer     => out_data%b(1)%r(4),                                     & ! intent(out): [dp] change in baseflow flux w.r.t. aquifer storage (s-1)
+ ! output: error control
+ err                    => out_data%e,                                             & ! intent(out): [i4b] error code
+ message                => out_data%m                                              & ! intent(out): [character] error message
  )  ! end associating local variables with the information in the data structures
+ err=0; message='bigAquifer/' ! initialize error control
 
  ! compute aquifer transpiration (m s-1)
  aquiferTranspireFrac   = scalarAquiferRootFrac*scalarTranspireLimAqfr/scalarTranspireLim   ! fraction of total transpiration that comes from the aquifer (-)

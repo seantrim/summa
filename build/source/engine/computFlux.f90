@@ -334,7 +334,7 @@ contains
  mLayerdPsi_dTheta            => deriv_data%var(iLookDERIV%mLayerdPsi_dTheta           )%dat     ,&  ! intent(out): [dp(:)] derivative in the soil water characteristic w.r.t. theta
  dCompress_dPsi               => deriv_data%var(iLookDERIV%dCompress_dPsi              )%dat     ,&  ! intent(out): [dp(:)] derivative in compressibility w.r.t matric head
  ! derivative in baseflow flux w.r.t. aquifer storage
- dBaseflow_dAquifer           => deriv_data%var(iLookDERIV%dBaseflow_dAquifer          )%dat(1)  ,&  ! intent(out): [dp(:)] erivative in baseflow flux w.r.t. aquifer storage (s-1)
+ dBaseflow_dAquifer           => deriv_data%var(iLookDERIV%dBaseflow_dAquifer          )%dat(1)  ,&  ! intent(out): [dp(:)] derivative in baseflow flux w.r.t. aquifer storage (s-1)
  ! derivative in liquid water fluxes for the soil domain w.r.t energy state variables
  dq_dNrgStateAbove            => deriv_data%var(iLookDERIV%dq_dNrgStateAbove           )%dat     ,&  ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer above
  dq_dNrgStateBelow            => deriv_data%var(iLookDERIV%dq_dNrgStateBelow           )%dat      &  ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer below
@@ -588,21 +588,16 @@ contains
  if (ixAqWat/=integerMissing) then ! check if computing aquifer fluxes
   if (local_ixGroundwater==bigBucket) then ! identify modeling decision
    ! compute fluxes for the big bucket
+   call sub_args('pack','bigAquifer') ! pack subroutine argument data
    call bigAquifer(&
                    ! input: state variables and fluxes
-                   scalarAquiferStorageTrial,    & ! intent(in):  trial value of aquifer storage (m)
-                   scalarCanopyTranspiration,    & ! intent(in):  canopy transpiration (kg m-2 s-1)
-                   scalarSoilDrainage,           & ! intent(in):  soil drainage (m s-1)
+                   in_data,                      & ! intent(in):  state variables and fluxes  
                    ! input: diagnostic variables and parameters
                    mpar_data,                    & ! intent(in):  model parameter structure
                    diag_data,                    & ! intent(in):  diagnostic variable structure
-                   ! output: fluxes
-                   scalarAquiferTranspire,       & ! intent(out): transpiration loss from the aquifer (m s-1)
-                   scalarAquiferRecharge,        & ! intent(out): recharge to the aquifer (m s-1)
-                   scalarAquiferBaseflow,        & ! intent(out): total baseflow from the aquifer (m s-1)
-                   dBaseflow_dAquifer,           & ! intent(out): change in baseflow flux w.r.t. aquifer storage (s-1)
-                   ! output: error control
-                   err,cmessage)                   ! intent(out): error control
+                   ! output: fluxes and error control
+                   out_data)                       ! intent(out): fluxes and error control
+   call sub_args('unpack','bigAquifer') ! pack subroutine argument data 
    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
    ! compute total runoff (overwrite previously calculated value before considering aquifer).  
    !   (Note:  SoilDrainage goes into aquifer, not runoff)
@@ -908,9 +903,16 @@ contains
      end if
     elseif (sub.eq.'bigAquifer') then
      if (op.eq.'pack') then
-
+      allocate(in_data%b(1:1))
+      in_data%b(1)%r=[scalarAquiferStorageTrial,scalarCanopyTranspiration,scalarSoilDrainage]
      elseif (op.eq.'unpack') then
-
+      scalarAquiferTranspire=out_data%b(1)%r(1)
+      scalarAquiferRecharge=out_data%b(1)%r(2)
+      scalarAquiferBaseflow=out_data%b(1)%r(3)
+      dBaseflow_dAquifer=out_data%b(1)%r(4)
+      err=out_data%e
+      cmessage=out_data%m
+      deallocate(in_data%b,out_data%b)
      end if    
     else ! error control
      
