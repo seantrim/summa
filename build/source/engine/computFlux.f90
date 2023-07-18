@@ -326,21 +326,7 @@ contains
   dCanLiq_dTcanopy = dTheta_dTkCanopy*iden_water*canopyDepth  ! derivative in canopy liquid storage w.r.t. canopy temperature (kg m-2 K-1)
   ! calculate the energy fluxes over vegetation
   call sub_args('pack','vegNrgFlux') ! pack subroutine argument data
-  call vegNrgFlux(&
-                  ! input: data structures
-                  in_data,                             & ! intent(in):    model control, model state variables, and model derivatives
-                  model_decisions,                        & ! intent(in):    model decisions
-                  type_data,                              & ! intent(in):    type of vegetation and soil
-                  forc_data,                              & ! intent(in):    model forcing data
-                  indx_data,                              & ! intent(in):    state vector geometry
-                  mpar_data,                              & ! intent(in):    model parameters
-                  bvar_data,                              & ! intent(in):    model variables for the local basin
-                  prog_data,                              & ! intent(in):    model prognostic variables for a local HRU
-                  ! input/output: data structures
-                  diag_data,                              & ! intent(inout): model diagnostic variables for a local HRU
-                  flux_data,                              & ! intent(inout): model fluxes for a local HRU
-                  ! output: data structues
-                  out_data)                              ! intent(out):   liquid water fluxes, derivatives, and error control
+  call vegNrgFlux(in_data,model_decisions,type_data,forc_data,indx_data,mpar_data,bvar_data,prog_data,diag_data,flux_data,out_data)
   call sub_args('unpack','vegNrgFlux') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
   if (globalPrintFlag) then ! check fluxes
@@ -365,17 +351,7 @@ contains
  if (nSnowSoilNrg>0) then
   ! calculate energy fluxes at layer interfaces through the snow and soil domain
   call sub_args('pack','ssdNrgFlux') ! pack subroutine argument data
-  call ssdNrgFlux(&
-                  ! input: model control, fluxes, derivatives and trial model state variables
-                  in_data,                                   & ! intent(in)
-                  ! input-output: data structures
-                  mpar_data,                                 & ! intent(in):    model parameters
-                  indx_data,                                 & ! intent(in):    model indices
-                  prog_data,                                 & ! intent(in):    model prognostic variables for a local HRU
-                  diag_data,                                 & ! intent(in):    model diagnostic variables for a local HRU
-                  flux_data,                                 & ! intent(inout): model fluxes for a local HRU
-                  ! output: fluxes and derivatives at layer interfaces, and error control
-                  out_data)                                    ! intent(out):   fluxes/derivatives at layer interfaces, and error control
+  call ssdNrgFlux(in_data,mpar_data,indx_data,prog_data,diag_data,flux_data,out_data)
   call sub_args('unpack','ssdNrgFlux') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   do iLayer=1,nLayers ! calculate net energy fluxes for each snow and soil layer (J m-3 s-1)
@@ -394,14 +370,7 @@ contains
  if (ixVegHyd/=integerMissing) then ! if we need to compute the liquid water fluxes through vegetation
   ! calculate liquid water fluxes through vegetation
   call sub_args('pack','vegLiqFlux') ! pack subroutine argument data
-  call vegLiqFlux(&
-                  ! input
-                  in_data,                                & ! intent(in):  model control, trial liquid water mass, and rainfall rate
-                  ! input-output: data structures
-                  mpar_data,                              & ! intent(in):  model parameters
-                  diag_data,                              & ! intent(in):  local HRU diagnostic model variables
-                  ! output
-                  out_data)                                 ! intent(out): throughfall rain, drainage, derivatives, and error control 
+  call vegLiqFlux(in_data,mpar_data,diag_data,out_data)
   call sub_args('unpack','vegLiqFlux') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
 
@@ -426,16 +395,7 @@ contains
  if (nSnowOnlyHyd>0) then
   ! compute liquid fluxes through snow
   call sub_args('pack','snowLiqFlx') ! pack subroutine argument data  
-  call snowLiqFlx(&
-                  ! input: model control, forcing for snow domain, and model state vector
-                  in_data,                                   & ! intent(in):    model control, forcing for snow domain, and model state vector
-                  ! input-output: data structures
-                  indx_data,                                 & ! intent(in):    model indices
-                  mpar_data,                                 & ! intent(in):    model parameters
-                  prog_data,                                 & ! intent(in):    model prognostic variables for a local HRU
-                  diag_data,                                 & ! intent(inout): model diagnostic variables for a local HRU
-                  ! output: fluxes, derivatives, and error control
-                  out_data)                                    ! intent(out): fluxes, derivatives, and error control
+  call snowLiqFlx(in_data,indx_data,mpar_data,prog_data,diag_data,out_data)
   call sub_args('unpack','snowLiqFlx') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   scalarRainPlusMelt = iLayerLiqFluxSnow(nSnow)    ! define forcing for the soil domain: drainage from the base of the snowpack
@@ -460,19 +420,7 @@ contains
  if (nSoilOnlyHyd>0) then
   ! calculate the liquid flux through soil
   call sub_args('pack','soilLiqFlx') ! pack subroutine argument data
-  call soilLiqFlx(&
-                  ! input: model control, trial state variables, pre-computed deriavatives, and fluxes
-                  in_data,                                   & ! intent(in):    model control, trial state variables, pre-computed deriavatives, and fluxes
-                  ! input-output: data structures
-                  mpar_data,                                 & ! intent(in):    model parameters
-                  indx_data,                                 & ! intent(in):    model indices
-                  prog_data,                                 & ! intent(inout): model prognostic variables for a local HRU
-                  diag_data,                                 & ! intent(inout): model diagnostic variables for a local HRU
-                  flux_data,                                 & ! intent(inout): model fluxes for a local HRU
-                  ! input-output: diagnostic variables for surface runoff and model layers, fluxes, and derivatives
-                  io_data,                                   & ! intent(inout): diagnostic variables for surface runoff and model layers, fluxes, and derivatives
-                  ! output: error control
-                  out_data)                                     ! intent(out): error control
+  call soilLiqFlx(in_data,mpar_data,indx_data,prog_data,diag_data,flux_data,io_data,out_data)
   call sub_args('unpack','soilLiqFlx') ! unpack subroutine argument data
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   do iLayer=1,nSoil ! calculate net liquid water fluxes for each soil layer (s-1)
@@ -515,19 +463,7 @@ contains
    end if
    ! compute the baseflow flux
    call sub_args('pack','groundwatr') ! pack subroutine argument data
-   call groundwatr(&
-                   ! input: model control, and state/diagnostic variables
-                   in_data,                                 & ! intent(in):    model control, layer counts, derivatives, and state/diagnostic variables 
-                   ! input: data structures
-                   attr_data,                               & ! intent(in):    model attributes
-                   mpar_data,                               & ! intent(in):    model parameters
-                   prog_data,                               & ! intent(in):    model prognostic variables for a local HRU
-                   diag_data,                               & ! intent(in):    model diagnostic variables for a local HRU
-                   ! input-output: data_structures
-                   flux_data,                               & ! intent(inout): model fluxes for a local HRU
-                   io_data,                                 & ! intent(inout): index of lowest saturated layer (NOTE: only computed on the first iteration)
-                   ! output: baseflow, derivatives, and error control
-                   out_data)                                  ! intent(out): baseflow, derivatives, and error control
+   call groundwatr(in_data,attr_data,mpar_data,prog_data,diag_data,flux_data,io_data,out_data)
    call sub_args('unpack','groundwatr') ! unpack subroutine argument data
    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   end if  ! end if the topmodel baseflow routine is not used 
@@ -546,14 +482,7 @@ contains
   if (local_ixGroundwater==bigBucket) then ! identify modeling decision
    ! compute fluxes for the big bucket
    call sub_args('pack','bigAquifer') ! pack subroutine argument data
-   call bigAquifer(&
-                   ! input: state variables and fluxes
-                   in_data,                      & ! intent(in):  state variables and fluxes  
-                   ! input: diagnostic variables and parameters
-                   mpar_data,                    & ! intent(in):  model parameter structure
-                   diag_data,                    & ! intent(in):  diagnostic variable structure
-                   ! output: fluxes and error control
-                   out_data)                       ! intent(out): fluxes and error control
+   call bigAquifer(in_data,mpar_data,diag_data,out_data)
    call sub_args('unpack','bigAquifer') ! pack subroutine argument data 
    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
    ! compute total runoff (overwrite previously calculated value before considering aquifer).  
@@ -606,7 +535,6 @@ contains
     implicit none
     character(*),intent(in) :: op  ! requested operation: 'pack' or 'unpack'
     character(*),intent(in) :: sub ! name of subroutine in computFlux (e.g., 'vegNrgFlux')
-    integer(i4b)            :: ib  ! loop counter for memory allocation
     associate(&
     ! model decisions
     ixGroundwater                => model_decisions(iLookDECISIONS%groundwatr)%iDecision            ,& ! intent(in): [i4b]    groundwater parameterization
