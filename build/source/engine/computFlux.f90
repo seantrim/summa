@@ -323,24 +323,10 @@ contains
  doVegNrgFlux = (ixCasNrg/=integerMissing .or. ixVegNrg/=integerMissing .or. ixTopNrg/=integerMissing) ! identify the need to calculate the energy flux over vegetation
 
  if (doVegNrgFlux) then ! check if there is a need to calculate the energy fluxes over vegetation
-  dCanLiq_dTcanopy = dTheta_dTkCanopy*iden_water*canopyDepth  ! derivative in canopy liquid storage w.r.t. canopy temperature (kg m-2 K-1)
   ! calculate the energy fluxes over vegetation
-  call sub_args('pack','vegNrgFlux') ! pack subroutine argument data
+  call subTools('pre','vegNrgFlux')  ! pre-processing for vegNrgFlux call (includes packing of in_data)
   call vegNrgFlux(in_data,model_decisions,type_data,forc_data,indx_data,mpar_data,bvar_data,prog_data,diag_data,flux_data,out_data)
-  call sub_args('unpack','vegNrgFlux') ! unpack subroutine argument data
-  if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
-  if (globalPrintFlag) then ! check fluxes
-   print*, '**'
-   write(*,'(a,1x,10(f30.20))') 'canopyDepth           = ',  canopyDepth
-   write(*,'(a,1x,10(f30.20))') 'mLayerDepth(1:2)      = ',  mLayerDepth(1:2)
-   write(*,'(a,1x,10(f30.20))') 'scalarCanairTempTrial = ',  scalarCanairTempTrial   ! trial value of the canopy air space temperature (K)
-   write(*,'(a,1x,10(f30.20))') 'scalarCanopyTempTrial = ',  scalarCanopyTempTrial   ! trial value of canopy temperature (K)
-   write(*,'(a,1x,10(f30.20))') 'mLayerTempTrial(1:2)  = ',  mLayerTempTrial(1:2)    ! trial value of ground temperature (K)
-   write(*,'(a,1x,10(f30.20))') 'scalarCanairNetNrgFlux = ', scalarCanairNetNrgFlux
-   write(*,'(a,1x,10(f30.20))') 'scalarCanopyNetNrgFlux = ', scalarCanopyNetNrgFlux
-   write(*,'(a,1x,10(f30.20))') 'scalarGroundNetNrgFlux = ', scalarGroundNetNrgFlux
-   write(*,'(a,1x,10(f30.20))') 'dGroundNetFlux_dGroundTemp = ', dGroundNetFlux_dGroundTemp
-  end if ! end if checking fluxes
+  call subTools('post','vegNrgFlux') ! post-processing for vegNrgFlux call (includes unpacking of out_data)
  end if ! end if calculating the energy fluxes over vegetation
 
  ! *****
@@ -350,18 +336,10 @@ contains
  ! check the need to compute energy fluxes throughout the snow+soil domain
  if (nSnowSoilNrg>0) then
   ! calculate energy fluxes at layer interfaces through the snow and soil domain
-  call sub_args('pack','ssdNrgFlux') ! pack subroutine argument data
+  call subTools('pre','ssdNrgFlux')  ! pre-processing for ssdNrgFlux call (includes packing of in_data)
   call ssdNrgFlux(in_data,mpar_data,indx_data,prog_data,diag_data,flux_data,out_data)
-  call sub_args('unpack','ssdNrgFlux') ! unpack subroutine argument data
-  if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-  do iLayer=1,nLayers ! calculate net energy fluxes for each snow and soil layer (J m-3 s-1)
-   mLayerNrgFlux(iLayer) = -(iLayerNrgFlux(iLayer) - iLayerNrgFlux(iLayer-1))/mLayerDepth(iLayer)
-   if (globalPrintFlag) then
-    if (iLayer < 10) write(*,'(a,1x,i4,1x,10(f25.15,1x))') 'iLayer, iLayerNrgFlux(iLayer-1:iLayer), mLayerNrgFlux(iLayer)   = ', iLayer, iLayerNrgFlux(iLayer-1:iLayer), mLayerNrgFlux(iLayer)
-   end if
-  end do
+  call subTools('post','ssdNrgFlux') ! post-processing for ssdNrgFlux call (includes unpacking of out_data)
  end if  ! end if computing energy fluxes throughout the snow+soil domain
-
 
  ! *****
  ! * CALCULATE THE LIQUID FLUX THROUGH VEGETATION...
@@ -369,22 +347,9 @@ contains
 
  if (ixVegHyd/=integerMissing) then ! if we need to compute the liquid water fluxes through vegetation
   ! calculate liquid water fluxes through vegetation
-  call sub_args('pack','vegLiqFlux') ! pack subroutine argument data
+  call subTools('pre','vegLiqFlux')  ! pre-processing for vegLiqFlux call (includes packing of in_data)
   call vegLiqFlux(in_data,mpar_data,diag_data,out_data)
-  call sub_args('unpack','vegLiqFlux') ! unpack subroutine argument data
-  if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-
-  scalarCanopyNetLiqFlux = scalarRainfall + scalarCanopyEvaporation - scalarThroughfallRain - scalarCanopyLiqDrainage ! calculate the net liquid water flux for the vegetation canopy
-  scalarCanopyLiqDeriv   = scalarThroughfallRainDeriv + scalarCanopyLiqDrainageDeriv ! calculate the total derivative in the downward liquid flux
-  if (globalPrintFlag) then ! test
-   print*, '**'
-   print*, 'scalarRainfall          = ', scalarRainfall
-   print*, 'scalarThroughfallRain   = ', scalarThroughfallRain
-   print*, 'scalarCanopyEvaporation = ', scalarCanopyEvaporation
-   print*, 'scalarCanopyLiqDrainage = ', scalarCanopyLiqDrainage
-   print*, 'scalarCanopyNetLiqFlux  = ', scalarCanopyNetLiqFlux
-   print*, 'scalarCanopyLiqTrial    = ', scalarCanopyLiqTrial
-  end if
+  call subTools('post','vegLiqFlux') ! post-processing for vegLiqFlux call (includes unpacking of out_data)
  end if  ! end if computing the liquid water fluxes through vegetation
 
  ! *****
@@ -394,15 +359,9 @@ contains
  ! check the need to compute liquid water fluxes through snow
  if (nSnowOnlyHyd>0) then
   ! compute liquid fluxes through snow
-  call sub_args('pack','snowLiqFlx') ! pack subroutine argument data  
+  call subTools('pre','snowLiqFlx')  ! pre-processing for snowLiqFlx call (includes packing of in_data)  
   call snowLiqFlx(in_data,indx_data,mpar_data,prog_data,diag_data,out_data)
-  call sub_args('unpack','snowLiqFlx') ! unpack subroutine argument data
-  if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-  scalarRainPlusMelt = iLayerLiqFluxSnow(nSnow)    ! define forcing for the soil domain: drainage from the base of the snowpack
-  do iLayer=1,nSnow   ! calculate net liquid water fluxes for each soil layer (s-1)
-   mLayerLiqFluxSnow(iLayer) = -(iLayerLiqFluxSnow(iLayer) - iLayerLiqFluxSnow(iLayer-1))/mLayerDepth(iLayer)
-  end do
-  scalarSnowDrainage = iLayerLiqFluxSnow(nSnow) ! compute drainage from the soil zone (needed for mass balance checks)
+  call subTools('post','snowLiqFlx') ! post-processing for snowLiqFlx call (includes unpacking of out_data)
  else
   ! define forcing for the soil domain for the case of no snow layers
   ! NOTE: in case where nSnowOnlyHyd==0 AND snow layers exist, then scalarRainPlusMelt is taken from the previous flux evaluation
@@ -419,29 +378,9 @@ contains
  ! check the need to calculate the liquid flux through soil
  if (nSoilOnlyHyd>0) then
   ! calculate the liquid flux through soil
-  call sub_args('pack','soilLiqFlx') ! pack subroutine argument data
+  call subTools('pre','soilLiqFlx')  ! pre-processing for soilLiqFlx call (includes packing of in_data and io_data)
   call soilLiqFlx(in_data,mpar_data,indx_data,prog_data,diag_data,flux_data,io_data,out_data)
-  call sub_args('unpack','soilLiqFlx') ! unpack subroutine argument data
-  if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-  do iLayer=1,nSoil ! calculate net liquid water fluxes for each soil layer (s-1)
-   mLayerLiqFluxSoil(iLayer) = -(iLayerLiqFluxSoil(iLayer) - iLayerLiqFluxSoil(iLayer-1))/mLayerDepth(iLayer+nSnow)
-  end do
-  ! calculate the soil control on infiltration
-  if (nSnow==0) then ! case of infiltration into soil
-   if (scalarMaxInfilRate > scalarRainPlusMelt) then  ! infiltration is not rate-limited
-    scalarSoilControl = (1._rkind - scalarFrozenArea)*scalarInfilArea
-   else
-    scalarSoilControl = 0._rkind  ! scalarRainPlusMelt exceeds maximum infiltration rate
-   end if
-  else ! case of infiltration into snow
-   scalarSoilControl = 1._rkind
-  end if
-  scalarSoilDrainage = iLayerLiqFluxSoil(nSoil) ! compute drainage from the soil zone (needed for mass balance checks)
-  ! expand derivatives to the total water matric potential
-  ! NOTE: arrays are offset because computing derivatives in interface fluxes, at the top and bottom of the layer respectively
-  if (globalPrintFlag) print*, 'dPsiLiq_dPsi0(1:nSoil) = ', dPsiLiq_dPsi0(1:nSoil)
-  dq_dHydStateAbove(1:nSoil)   = dq_dHydStateAbove(1:nSoil)  *dPsiLiq_dPsi0(1:nSoil)
-  dq_dHydStateBelow(0:nSoil-1) = dq_dHydStateBelow(0:nSoil-1)*dPsiLiq_dPsi0(1:nSoil)
+  call subTools('post','soilLiqFlx') ! post-processing for soilLiqFlx call (includes unpacking of io_data and out_data)
  end if  ! end if calculating the liquid flux through soil
 
  ! *****
@@ -456,16 +395,10 @@ contains
    ! (variables needed for the numerical solution)
    mLayerBaseflow(:)      = 0._rkind  ! baseflow from each soil layer (m s-1)
   else ! topmodel-ish shallow groundwater (local_ixGroundwater==qbaseTopmodel)
-   ! check the derivative matrix is sized appropriately
-   if (size(dBaseflow_dMatric,1)/=nSoil .or. size(dBaseflow_dMatric,2)/=nSoil) then
-    message=trim(message)//'expect dBaseflow_dMatric to be nSoil x nSoil'
-    err=20; return
-   end if
    ! compute the baseflow flux
-   call sub_args('pack','groundwatr') ! pack subroutine argument data
+   call subTools('pre','groundwatr')  ! pre-processing for groundwatr call (includes packing of in_data and io_data)
    call groundwatr(in_data,attr_data,mpar_data,prog_data,diag_data,flux_data,io_data,out_data)
-   call sub_args('unpack','groundwatr') ! unpack subroutine argument data
-   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+   call subTools('post','groundwatr') ! post-processing for groundwatr call (includes unpacking of io_data and out_data)
   end if  ! end if the topmodel baseflow routine is not used 
   scalarSoilBaseflow = sum(mLayerBaseflow) ! compute total baseflow from the soil zone (needed for mass balance checks)
   ! compute total runoff
@@ -481,13 +414,9 @@ contains
  if (ixAqWat/=integerMissing) then ! check if computing aquifer fluxes
   if (local_ixGroundwater==bigBucket) then ! identify modeling decision
    ! compute fluxes for the big bucket
-   call sub_args('pack','bigAquifer') ! pack subroutine argument data
+   call subTools('pre','bigAquifer')  ! pre-processing for bigAquifer call (includes packing of in_data)
    call bigAquifer(in_data,mpar_data,diag_data,out_data)
-   call sub_args('unpack','bigAquifer') ! pack subroutine argument data 
-   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-   ! compute total runoff (overwrite previously calculated value before considering aquifer).  
-   !   (Note:  SoilDrainage goes into aquifer, not runoff)
-   scalarTotalRunoff  = scalarSurfaceRunoff + scalarAquiferBaseflow
+   call subTools('post','bigAquifer') ! post-processing for bigAquifer call (includes unpacking of out_data) 
   else ! if no aquifer, then fluxes are zero
    scalarAquiferTranspire = 0._rkind  ! transpiration loss from the aquifer (m s-1)
    scalarAquiferRecharge  = 0._rkind  ! recharge to the aquifer (m s-1)
@@ -531,9 +460,9 @@ contains
  
   contains
 
-   subroutine sub_args(op,sub)
+   subroutine subTools(op,sub)
     implicit none
-    character(*),intent(in) :: op  ! requested operation: 'pack' or 'unpack'
+    character(*),intent(in) :: op  ! requested operation: 'pre' for pre-processing or 'post' for post-processing
     character(*),intent(in) :: sub ! name of subroutine in computFlux (e.g., 'vegNrgFlux')
     associate(&
     ! model decisions
@@ -661,13 +590,16 @@ contains
     )  ! end association to data in structures
 
     if (sub.eq.'vegNrgFlux') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pre-processing
+      dCanLiq_dTcanopy = dTheta_dTkCanopy*iden_water*canopyDepth  ! derivative in canopy liquid storage w.r.t. canopy temperature (kg m-2 K-1)
+      ! pack in_data
       allocate(in_data%bin(1:1))
       ! initialize intent(in) argument data
       in_data%bin(1)%lgt   = [firstSubStep,firstFluxCall,computeVegFlux] ! logicals
       in_data%bin(1)%rkind = [upperBoundTemp,scalarCanairTempTrial,scalarCanopyTempTrial,mLayerTempTrial(1),scalarCanopyIceTrial,scalarCanopyLiqTrial,dCanLiq_dTcanopy] ! reals
-     elseif (op.eq.'unpack') then
-      ! unpack output data structure
+     elseif (op.eq.'post') then
+      ! unpack out_data
       scalarCanopyTranspiration=out_data%bin(1)%rkind(1); scalarCanopyEvaporation=out_data%bin(1)%rkind(2); scalarGroundEvaporation=out_data%bin(1)%rkind(3); scalarCanairNetNrgFlux=out_data%bin(1)%rkind(4); scalarCanopyNetNrgFlux=out_data%bin(1)%rkind(5); scalarGroundNetNrgFlux=out_data%bin(1)%rkind(6)
       dCanairNetFlux_dCanairTemp=out_data%bin(1)%rkind(7); dCanairNetFlux_dCanopyTemp=out_data%bin(1)%rkind(8); dCanairNetFlux_dGroundTemp=out_data%bin(1)%rkind(9); dCanopyNetFlux_dCanairTemp=out_data%bin(1)%rkind(10); dCanopyNetFlux_dCanopyTemp=out_data%bin(1)%rkind(11); dCanopyNetFlux_dGroundTemp=out_data%bin(1)%rkind(12); dGroundNetFlux_dCanairTemp=out_data%bin(1)%rkind(13); dGroundNetFlux_dCanopyTemp=out_data%bin(1)%rkind(14); dGroundNetFlux_dGroundTemp=out_data%bin(1)%rkind(15)
       dCanopyEvaporation_dCanLiq=out_data%bin(1)%rkind(16); dCanopyEvaporation_dTCanair=out_data%bin(1)%rkind(17); dCanopyEvaporation_dTCanopy=out_data%bin(1)%rkind(18); dCanopyEvaporation_dTGround=out_data%bin(1)%rkind(19);
@@ -675,26 +607,52 @@ contains
       dCanopyNetFlux_dCanLiq=out_data%bin(1)%rkind(24); dGroundNetFlux_dCanLiq=out_data%bin(1)%rkind(25)
       err=out_data%err; cmessage=out_data%msg ! error control 
       deallocate(in_data%bin,out_data%bin)
+      ! additional post-processing: error control and debug statements
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+      if (globalPrintFlag) then ! check fluxes
+       print*, '**'
+       write(*,'(a,1x,10(f30.20))') 'canopyDepth           = ',  canopyDepth
+       write(*,'(a,1x,10(f30.20))') 'mLayerDepth(1:2)      = ',  mLayerDepth(1:2)
+       write(*,'(a,1x,10(f30.20))') 'scalarCanairTempTrial = ',  scalarCanairTempTrial   ! trial value of the canopy air space temperature (K)
+       write(*,'(a,1x,10(f30.20))') 'scalarCanopyTempTrial = ',  scalarCanopyTempTrial   ! trial value of canopy temperature (K)
+       write(*,'(a,1x,10(f30.20))') 'mLayerTempTrial(1:2)  = ',  mLayerTempTrial(1:2)    ! trial value of ground temperature (K)
+       write(*,'(a,1x,10(f30.20))') 'scalarCanairNetNrgFlux = ', scalarCanairNetNrgFlux
+       write(*,'(a,1x,10(f30.20))') 'scalarCanopyNetNrgFlux = ', scalarCanopyNetNrgFlux
+       write(*,'(a,1x,10(f30.20))') 'scalarGroundNetNrgFlux = ', scalarGroundNetNrgFlux
+       write(*,'(a,1x,10(f30.20))') 'dGroundNetFlux_dGroundTemp = ', dGroundNetFlux_dGroundTemp
+      end if ! end if checking fluxes
      end if
     elseif (sub.eq.'ssdNrgFlux') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pack in_data
       allocate(in_data%bin(1:4)) ! ! allocate intent(in) data
       in_data%bin(1)%lgt=[scalarSolution .and. .not.firstFluxCall] ! logical array
       in_data%bin(1)%rkind=[scalarGroundNetNrgFlux,dGroundNetFlux_dGroundTemp] ! real array
       in_data%bin(2)%rkind=iLayerLiqFluxSnow ! real array
       in_data%bin(3)%rkind=iLayerLiqFluxSoil ! real array
       in_data%bin(4)%rkind=mLayerTempTrial   ! real array
-     elseif (op.eq.'unpack') then
+     elseif (op.eq.'post') then
+      ! unpack out_data
       iLayerNrgFlux=out_data%bin(1)%rkind; dNrgFlux_dTempAbove=out_data%bin(2)%rkind; dNrgFlux_dTempBelow=out_data%bin(3)%rkind
       err=out_data%err; cmessage=out_data%msg ! error control
       deallocate(in_data%bin,out_data%bin)
+      ! additional post-processing
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+      do iLayer=1,nLayers ! calculate net energy fluxes for each snow and soil layer (J m-3 s-1)
+       mLayerNrgFlux(iLayer) = -(iLayerNrgFlux(iLayer) - iLayerNrgFlux(iLayer-1))/mLayerDepth(iLayer)
+       if (globalPrintFlag) then
+        if (iLayer < 10) write(*,'(a,1x,i4,1x,10(f25.15,1x))') 'iLayer, iLayerNrgFlux(iLayer-1:iLayer), mLayerNrgFlux(iLayer)   = ', iLayer, iLayerNrgFlux(iLayer-1:iLayer), mLayerNrgFlux(iLayer)
+       end if
+      end do
      end if
     elseif (sub.eq.'vegLiqFlux') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pack in_data
       allocate(in_data%bin(1:1))
       in_data%bin(1)%lgt=computeVegFlux
       in_data%bin(1)%rkind=[scalarCanopyLiqTrial,scalarRainfall]
-     elseif (op.eq.'unpack') then
+     elseif (op.eq.'post') then
+      ! unpack out_data
       scalarThroughfallRain         = out_data%bin(1)%rkind(1)
       scalarCanopyLiqDrainage       = out_data%bin(1)%rkind(2)
       scalarThroughfallRainDeriv    = out_data%bin(1)%rkind(3)
@@ -702,23 +660,46 @@ contains
       err                           = out_data%err
       cmessage                      = out_data%msg
       deallocate(in_data%bin,out_data%bin)
+      ! additional post-processing
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+      scalarCanopyNetLiqFlux = scalarRainfall + scalarCanopyEvaporation - scalarThroughfallRain - scalarCanopyLiqDrainage ! calculate the net liquid water flux for the vegetation canopy
+      scalarCanopyLiqDeriv   = scalarThroughfallRainDeriv + scalarCanopyLiqDrainageDeriv ! calculate the total derivative in the downward liquid flux
+      if (globalPrintFlag) then ! test
+       print*, '**'
+       print*, 'scalarRainfall          = ', scalarRainfall
+       print*, 'scalarThroughfallRain   = ', scalarThroughfallRain
+       print*, 'scalarCanopyEvaporation = ', scalarCanopyEvaporation
+       print*, 'scalarCanopyLiqDrainage = ', scalarCanopyLiqDrainage
+       print*, 'scalarCanopyNetLiqFlux  = ', scalarCanopyNetLiqFlux
+       print*, 'scalarCanopyLiqTrial    = ', scalarCanopyLiqTrial
+      end if
      end if
     elseif (sub.eq.'snowLiqFlx') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pack in_data
       allocate(in_data%bin(1:2))
       in_data%bin(1)%i4b=[nsnow]
       in_data%bin(1)%lgt=[firstFluxCall,(scalarSolution .and. .not.firstFluxCall)]
       in_data%bin(1)%rkind=[scalarThroughfallRain,scalarCanopyLiqDrainage]
       in_data%bin(2)%rkind=mLayerVolFracLiqTrial(1:nSnow)
-     elseif (op.eq.'unpack') then
+     elseif (op.eq.'post') then
+      ! unpack out_data
       iLayerLiqFluxSnow(0:nSnow)      = out_data%bin(1)%rkind
       iLayerLiqFluxSnowDeriv(0:nSnow) = out_data%bin(2)%rkind
       err                             = out_data%err
       cmessage                        = out_data%msg
       deallocate(in_data%bin,out_data%bin)
+      ! additional post-processing
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+      scalarRainPlusMelt = iLayerLiqFluxSnow(nSnow)    ! define forcing for the soil domain: drainage from the base of the snowpack
+      do iLayer=1,nSnow   ! calculate net liquid water fluxes for each soil layer (s-1)
+       mLayerLiqFluxSnow(iLayer) = -(iLayerLiqFluxSnow(iLayer) - iLayerLiqFluxSnow(iLayer-1))/mLayerDepth(iLayer)
+      end do
+      scalarSnowDrainage = iLayerLiqFluxSnow(nSnow) ! compute drainage from the soil zone (needed for mass balance checks)
      end if
     elseif (sub.eq.'soilLiqFlx') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pack in_data and io_data
       allocate(in_data%bin(1:7)) ! intent(in)
       in_data%bin(1)%i4b=[nSoil]
       in_data%bin(1)%lgt=[firstSplitOper,(scalarSolution .and. .not.firstFluxCall)]
@@ -729,7 +710,7 @@ contains
       in_data%bin(5)%rkind=mLayerVolFracIceTrial(nSnow+1:nLayers)
       in_data%bin(6)%rkind=mLayerdTheta_dTk(nSnow+1:nLayers)
       in_data%bin(7)%rkind=dPsiLiq_dTemp(1:nSoil)
-      allocate(io_data%bin(1:11)) ! intent(out)
+      allocate(io_data%bin(1:11)) ! intent(inout)
       io_data%bin(1)%rkind=[scalarMaxInfilRate,scalarInfilArea,scalarFrozenArea,scalarSurfaceRunoff,scalarInfiltration] ! note final argument
       io_data%bin(2)%rkind=mLayerdTheta_dPsi
       io_data%bin(3)%rkind=mLayerdPsi_dTheta
@@ -741,28 +722,57 @@ contains
       io_data%bin(9)%rkind=dq_dHydStateBelow
       io_data%bin(10)%rkind=dq_dNrgStateAbove
       io_data%bin(11)%rkind=dq_dNrgStateBelow
-     elseif (op.eq.'unpack') then
+     elseif (op.eq.'post') then
+      ! unpack io_data and out_data
       scalarMaxInfilRate         = io_data%bin(1)%rkind(1)   ! maximum infiltration rate (m s-1)
       scalarInfilArea            = io_data%bin(1)%rkind(2)   ! fraction of unfrozen area where water can infiltrate (-)
       scalarFrozenArea           = io_data%bin(1)%rkind(3)   ! fraction of area that is considered impermeable due to soil ice (-)
       scalarSurfaceRunoff        = io_data%bin(1)%rkind(4)   ! surface runoff (m s-1)
       scalarInfiltration         = io_data%bin(1)%rkind(5)   ! surface infiltration rate (m s-1)
-      mLayerdTheta_dPsi          = io_data%bin(2)%rkind ! derivative in the soil water characteristic w.r.t. psi (m-1)
-      mLayerdPsi_dTheta          = io_data%bin(3)%rkind ! derivative in the soil water characteristic w.r.t. theta (m)
-      dHydCond_dMatric           = io_data%bin(4)%rkind ! derivative in hydraulic conductivity w.r.t matric head (s-1)
-      iLayerLiqFluxSoil          = io_data%bin(5)%rkind ! liquid flux at soil layer interfaces (m s-1)
-      mLayerTranspire            = io_data%bin(6)%rkind ! transpiration loss from each soil layer (m s-1)
-      mLayerHydCond              = io_data%bin(7)%rkind ! hydraulic conductivity in each soil layer (m s-1)
-      dq_dHydStateAbove          = io_data%bin(8)%rkind ! derivative in the flux in layer interfaces w.r.t. state variables in the layer above
-      dq_dHydStateBelow          = io_data%bin(9)%rkind ! derivative in the flux in layer interfaces w.r.t. state variables in the layer below
-      dq_dNrgStateAbove          = io_data%bin(10)%rkind ! derivatives in the flux w.r.t. temperature in the layer above (m s-1 K-1)
-      dq_dNrgStateBelow          = io_data%bin(11)%rkind ! derivatives in the flux w.r.t. temperature in the layer below (m s-1 K-1)
-      err                        = out_data%err                            ! error code
-      cmessage                   = out_data%msg    ! error message
+      mLayerdTheta_dPsi          = io_data%bin(2)%rkind      ! derivative in the soil water characteristic w.r.t. psi (m-1)
+      mLayerdPsi_dTheta          = io_data%bin(3)%rkind      ! derivative in the soil water characteristic w.r.t. theta (m)
+      dHydCond_dMatric           = io_data%bin(4)%rkind      ! derivative in hydraulic conductivity w.r.t matric head (s-1)
+      iLayerLiqFluxSoil          = io_data%bin(5)%rkind      ! liquid flux at soil layer interfaces (m s-1)
+      mLayerTranspire            = io_data%bin(6)%rkind      ! transpiration loss from each soil layer (m s-1)
+      mLayerHydCond              = io_data%bin(7)%rkind      ! hydraulic conductivity in each soil layer (m s-1)
+      dq_dHydStateAbove          = io_data%bin(8)%rkind      ! derivative in the flux in layer interfaces w.r.t. state variables in the layer above
+      dq_dHydStateBelow          = io_data%bin(9)%rkind      ! derivative in the flux in layer interfaces w.r.t. state variables in the layer below
+      dq_dNrgStateAbove          = io_data%bin(10)%rkind     ! derivatives in the flux w.r.t. temperature in the layer above (m s-1 K-1)
+      dq_dNrgStateBelow          = io_data%bin(11)%rkind     ! derivatives in the flux w.r.t. temperature in the layer below (m s-1 K-1)
+      err                        = out_data%err              ! error code
+      cmessage                   = out_data%msg              ! error message
       deallocate(in_data%bin,io_data%bin) ! note: no bins allocated for out_data
+      ! additional post-processing
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+      do iLayer=1,nSoil ! calculate net liquid water fluxes for each soil layer (s-1)
+       mLayerLiqFluxSoil(iLayer) = -(iLayerLiqFluxSoil(iLayer) - iLayerLiqFluxSoil(iLayer-1))/mLayerDepth(iLayer+nSnow)
+      end do
+      ! calculate the soil control on infiltration
+      if (nSnow==0) then ! case of infiltration into soil
+       if (scalarMaxInfilRate > scalarRainPlusMelt) then  ! infiltration is not rate-limited
+        scalarSoilControl = (1._rkind - scalarFrozenArea)*scalarInfilArea
+       else
+        scalarSoilControl = 0._rkind  ! scalarRainPlusMelt exceeds maximum infiltration rate
+       end if
+      else ! case of infiltration into snow
+       scalarSoilControl = 1._rkind
+      end if
+      scalarSoilDrainage = iLayerLiqFluxSoil(nSoil) ! compute drainage from the soil zone (needed for mass balance checks)
+      ! expand derivatives to the total water matric potential
+      ! NOTE: arrays are offset because computing derivatives in interface fluxes, at the top and bottom of the layer respectively
+      if (globalPrintFlag) print*, 'dPsiLiq_dPsi0(1:nSoil) = ', dPsiLiq_dPsi0(1:nSoil)
+      dq_dHydStateAbove(1:nSoil)   = dq_dHydStateAbove(1:nSoil)  *dPsiLiq_dPsi0(1:nSoil)
+      dq_dHydStateBelow(0:nSoil-1) = dq_dHydStateBelow(0:nSoil-1)*dPsiLiq_dPsi0(1:nSoil)
      end if
     elseif (sub.eq.'groundwatr') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pre-processing
+      ! check the derivative matrix is sized appropriately
+      if (size(dBaseflow_dMatric,1)/=nSoil .or. size(dBaseflow_dMatric,2)/=nSoil) then
+       message=trim(message)//'expect dBaseflow_dMatric to be nSoil x nSoil'
+       err=20; return
+      end if
+      ! pack in_data and io_data
       allocate(in_data%bin(1:4))
       in_data%bin(1)%i4b=[nSnow,nSoil,nLayers]
       in_data%bin(1)%lgt=[firstFluxCall]
@@ -772,19 +782,24 @@ contains
       in_data%bin(4)%rkind=mLayerVolFracIceTrial(nSnow+1:nLayers)
       allocate(io_data%bin(1))
       io_data%bin(1)%i4b=[ixSaturation]
-     elseif (op.eq.'unpack') then
+     elseif (op.eq.'post') then
+      ! unpack io_data and out_data
       ixSaturation=io_data%bin(1)%i4b(1)
       mLayerBaseflow=out_data%bin(1)%rkind
       dBaseflow_dMatric=out_data%bin(1)%rmatrix
       err=out_data%err
       cmessage=out_data%msg
       deallocate(in_data%bin,io_data%bin,out_data%bin)
+      ! additional post-processing
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
      end if
     elseif (sub.eq.'bigAquifer') then
-     if (op.eq.'pack') then
+     if (op.eq.'pre') then
+      ! pack in_data
       allocate(in_data%bin(1:1))
       in_data%bin(1)%rkind=[scalarAquiferStorageTrial,scalarCanopyTranspiration,scalarSoilDrainage]
-     elseif (op.eq.'unpack') then
+     elseif (op.eq.'post') then
+      ! unpack out_data
       scalarAquiferTranspire=out_data%bin(1)%rkind(1)
       scalarAquiferRecharge=out_data%bin(1)%rkind(2)
       scalarAquiferBaseflow=out_data%bin(1)%rkind(3)
@@ -792,12 +807,17 @@ contains
       err=out_data%err
       cmessage=out_data%msg
       deallocate(in_data%bin,out_data%bin)
+      ! additional post-processing
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+      ! compute total runoff (overwrite previously calculated value before considering aquifer).  
+      !   (Note:  SoilDrainage goes into aquifer, not runoff)
+      scalarTotalRunoff  = scalarSurfaceRunoff + scalarAquiferBaseflow
      end if    
     else ! error control
      
     end if
     end associate
-   end subroutine sub_args
+   end subroutine subTools
 
  end subroutine computFlux
 
