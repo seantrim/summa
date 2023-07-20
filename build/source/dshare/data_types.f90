@@ -279,19 +279,19 @@ MODULE data_types
  endtype gru_i
 
  ! define derived types used to simplify passing subroutine arguments
- ! ** vectors for holding arguments of different intrinsic types
- type, public :: data_vec
-  logical(lgt), allocatable :: l(:)    ! vector of logical arguments
-  real(rkind),  allocatable :: r(:)    ! vector of real arguments
-  real(rkind),  allocatable :: rm(:,:) ! matrix of real arguments
-  integer(i4b), allocatable :: i(:)    ! vector of integer arguments
-  character(:), allocatable :: c       ! character arguments
- end type data_vec
+ ! ** arrays for holding arguments of different intrinsic types
+ type, public :: data_array
+  logical(lgt), allocatable     :: lgt(:)       ! vector of logical arguments
+  real(rkind),  allocatable     :: rkind(:)     ! vector of rkind arguments
+  real(rkind),  allocatable     :: rmatrix(:,:) ! matrix of rkind arguments
+  integer(i4b), allocatable     :: i4b(:)       ! vector of i4b integer arguments
+  character(:), allocatable     :: string       ! character string arguments
+ end type data_array
  ! ** derived type used to hold data passed as subroutine arguments
- type, public :: data_bin
-  type(data_vec),  allocatable :: b(:) ! allocatable number of bins given by the component name 'b'
-  integer(i4b)                 :: e    ! error code
-  character(:),    allocatable :: m    ! error message
+ type, public :: data_bin                       ! x%bin(:)%{lgt(:),i4b(:),rkind(:),rmatrix(:,:),string}, x%err [i4b], x%msg [character]
+  type(data_array), allocatable :: bin(:)       ! allocatable number of data bins
+  integer(i4b)                  :: err          ! error code
+  character(:), allocatable     :: msg          ! error message
  end type data_bin
 
 END MODULE data_types

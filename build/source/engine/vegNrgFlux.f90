@@ -30,7 +30,7 @@ USE data_types,only:&
                     var_ilength,      & ! data vector with variable length dimension (i4b)
                     var_dlength,      & ! data vector with variable length dimension (dp)
                     model_options,    & ! defines the model decisions
-                    data_bin            ! derived type for passing subroutine arguments
+                    data_bin            ! x%bin(:)%{lgt(:),i4b(:),rkind(:),rmatrix(:,:),string}, x%err [i4b], x%msg [character]
 
 ! indices that define elements of the data structures
 USE var_lookup,only:iLookTYPE           ! named variables for structure elements
@@ -245,24 +245,24 @@ contains
  real(rkind)                        :: dLatHeatGroundEvap_dTCanair              ! derivative in latent heat of ground evaporation w.r.t. canopy air temperature (W m-2 K-1)
  real(rkind)                        :: dLatHeatGroundEvap_dTCanopy              ! derivative in latent heat of ground evaporation w.r.t. canopy temperature (W m-2 K-1)
  real(rkind)                        :: dLatHeatGroundEvap_dTGround              ! derivative in latent heat of ground evaporation w.r.t. ground temperature (W m-2 K-1)
- allocate(out_data%b(1:1)); allocate(out_data%b(1)%r(1:25))                     ! allocate data structure for storing intent(out) arguments
+ allocate(out_data%bin(1:1)); allocate(out_data%bin(1)%rkind(1:25))                     ! allocate data structure for storing intent(out) arguments
  ! ---------------------------------------------------------------------------------------
  ! point to variables in the data structure
  ! ---------------------------------------------------------------------------------------
  associate(&
  ! input: model control
- firstSubStep                    => in_data%b(1)%l(1),                   & ! intent(in): [lgt] flag to indicate if we are processing the first sub-step
- firstFluxCall                   => in_data%b(1)%l(2),                   & ! intent(in): [lgt] flag to indicate if we are processing the first flux call
- computeVegFlux                  => in_data%b(1)%l(3),                   & ! intent(in): [lgt] flag to indicate if computing fluxes over vegetation
+ firstSubStep                    => in_data%bin(1)%lgt(1),                   & ! intent(in): [lgt] flag to indicate if we are processing the first sub-step
+ firstFluxCall                   => in_data%bin(1)%lgt(2),                   & ! intent(in): [lgt] flag to indicate if we are processing the first flux call
+ computeVegFlux                  => in_data%bin(1)%lgt(3),                   & ! intent(in): [lgt] flag to indicate if computing fluxes over vegetation
  ! input: model state variables
- upperBoundTemp                  => in_data%b(1)%r(1),                   & ! intent(in): [dp] temperature of the upper boundary (K) --> NOTE: use air temperature
- canairTempTrial                 => in_data%b(1)%r(2),                   & ! intent(in): [dp] trial value of canopy air space temperature (K)
- canopyTempTrial                 => in_data%b(1)%r(3),                   & ! intent(in): [dp] trial value of canopy temperature (K)
- groundTempTrial                 => in_data%b(1)%r(4),                   & ! intent(in): [dp] trial value of ground temperature (K)
- canopyIceTrial                  => in_data%b(1)%r(5),                   & ! intent(in): [dp] trial value of mass of ice on the vegetation canopy (kg m-2)
- canopyLiqTrial                  => in_data%b(1)%r(6),                   & ! intent(in): [dp] trial value of mass of liquid water on the vegetation canopy (kg m-2)
+ upperBoundTemp                  => in_data%bin(1)%rkind(1),                 & ! intent(in): [dp] temperature of the upper boundary (K) --> NOTE: use air temperature
+ canairTempTrial                 => in_data%bin(1)%rkind(2),                 & ! intent(in): [dp] trial value of canopy air space temperature (K)
+ canopyTempTrial                 => in_data%bin(1)%rkind(3),                 & ! intent(in): [dp] trial value of canopy temperature (K)
+ groundTempTrial                 => in_data%bin(1)%rkind(4),                 & ! intent(in): [dp] trial value of ground temperature (K)
+ canopyIceTrial                  => in_data%bin(1)%rkind(5),                 & ! intent(in): [dp] trial value of mass of ice on the vegetation canopy (kg m-2)
+ canopyLiqTrial                  => in_data%bin(1)%rkind(6),                 & ! intent(in): [dp] trial value of mass of liquid water on the vegetation canopy (kg m-2)
  ! input: model derivatives
- dCanLiq_dTcanopy                => in_data%b(1)%r(7),                   & ! intent(in): [dp] derivative in canopy liquid w.r.t. canopy temperature (kg m-2 K-1)
+ dCanLiq_dTcanopy                => in_data%bin(1)%rkind(7),                 & ! intent(in): [dp] derivative in canopy liquid w.r.t. canopy temperature (kg m-2 K-1)
  ! input: model decisions
  ix_bcUpprTdyn                   => model_decisions(iLookDECISIONS%bcUpprTdyn)%iDecision,           & ! intent(in): [i4b] choice of upper boundary condition for thermodynamics
  ix_fDerivMeth                   => model_decisions(iLookDECISIONS%fDerivMeth)%iDecision,           & ! intent(in): [i4b] choice of method to compute derivatives
@@ -419,39 +419,39 @@ contains
  scalarTotalET                   => flux_data%var(iLookFLUX%scalarTotalET)%dat(1),                  & ! intent(out): [dp] total ET (kg m-2 s-1)
  scalarNetRadiation              => flux_data%var(iLookFLUX%scalarNetRadiation)%dat(1),             & ! intent(out): [dp] net radiation (W m-2)
  ! output: error control
- err                             => out_data%e,                                                  & ! intent(out): [i4b] error code
- message                         => out_data%m,                                                  & ! intent(out): [character] error message
+ err                             => out_data%err,                                                   & ! intent(out): [i4b] error code
+ message                         => out_data%msg,                                                   & ! intent(out): [character] error message
  ! output: liquid water fluxes associated with evaporation/transpiration (needed for coupling)
- returnCanopyTranspiration       => out_data%b(1)%r(1),          & ! intent(out): [dp] canopy transpiration (kg m-2 s-1)
- returnCanopyEvaporation         => out_data%b(1)%r(2),          & ! intent(out): [dp] canopy evaporation/condensation (kg m-2 s-1)
- returnGroundEvaporation         => out_data%b(1)%r(3),          & ! intent(out): [dp] ground evaporation/condensation -- below canopy or non-vegetated (kg m-2 s-1)
+ returnCanopyTranspiration       => out_data%bin(1)%rkind(1),  & ! intent(out): [dp] canopy transpiration (kg m-2 s-1)
+ returnCanopyEvaporation         => out_data%bin(1)%rkind(2),  & ! intent(out): [dp] canopy evaporation/condensation (kg m-2 s-1)
+ returnGroundEvaporation         => out_data%bin(1)%rkind(3),  & ! intent(out): [dp] ground evaporation/condensation -- below canopy or non-vegetated (kg m-2 s-1)
  ! output: fluxes
- canairNetFlux                   => out_data%b(1)%r(4),          & ! intent(out): [dp] net energy flux for the canopy air space (W m-2)
- canopyNetFlux                   => out_data%b(1)%r(5),          & ! intent(out): [dp] net energy flux for the vegetation canopy (W m-2)
- groundNetFlux                   => out_data%b(1)%r(6),          & ! intent(out): [dp] net energy flux for the ground surface (W m-2)
+ canairNetFlux                   => out_data%bin(1)%rkind(4),  & ! intent(out): [dp] net energy flux for the canopy air space (W m-2)
+ canopyNetFlux                   => out_data%bin(1)%rkind(5),  & ! intent(out): [dp] net energy flux for the vegetation canopy (W m-2)
+ groundNetFlux                   => out_data%bin(1)%rkind(6),  & ! intent(out): [dp] net energy flux for the ground surface (W m-2)
  ! output: energy flux derivatives 
- dCanairNetFlux_dCanairTemp      => out_data%b(1)%r(7),          & ! intent(out): [dp] derivative in net canopy air space flux w.r.t. canopy air temperature (W m-2 K-1)
- dCanairNetFlux_dCanopyTemp      => out_data%b(1)%r(8),          & ! intent(out): [dp] derivative in net canopy air space flux w.r.t. canopy temperature (W m-2 K-1)
- dCanairNetFlux_dGroundTemp      => out_data%b(1)%r(9),          & ! intent(out): [dp] derivative in net canopy air space flux w.r.t. ground temperature (W m-2 K-1)
- dCanopyNetFlux_dCanairTemp      => out_data%b(1)%r(10),         & ! intent(out): [dp] derivative in net canopy flux w.r.t. canopy air temperature (W m-2 K-1)
- dCanopyNetFlux_dCanopyTemp      => out_data%b(1)%r(11),         & ! intent(out): [dp] derivative in net canopy flux w.r.t. canopy temperature (W m-2 K-1)
- dCanopyNetFlux_dGroundTemp      => out_data%b(1)%r(12),         & ! intent(out): [dp] derivative in net canopy flux w.r.t. ground temperature (W m-2 K-1)
- dGroundNetFlux_dCanairTemp      => out_data%b(1)%r(13),         & ! intent(out): [dp] derivative in net ground flux w.r.t. canopy air temperature (W m-2 K-1)
- dGroundNetFlux_dCanopyTemp      => out_data%b(1)%r(14),         & ! intent(out): [dp] derivative in net ground flux w.r.t. canopy temperature (W m-2 K-1)
- dGroundNetFlux_dGroundTemp      => out_data%b(1)%r(15),         & ! intent(out): [dp] derivative in net ground flux w.r.t. ground temperature (W m-2 K-1)
+ dCanairNetFlux_dCanairTemp      => out_data%bin(1)%rkind(7),  & ! intent(out): [dp] derivative in net canopy air space flux w.r.t. canopy air temperature (W m-2 K-1)
+ dCanairNetFlux_dCanopyTemp      => out_data%bin(1)%rkind(8),  & ! intent(out): [dp] derivative in net canopy air space flux w.r.t. canopy temperature (W m-2 K-1)
+ dCanairNetFlux_dGroundTemp      => out_data%bin(1)%rkind(9),  & ! intent(out): [dp] derivative in net canopy air space flux w.r.t. ground temperature (W m-2 K-1)
+ dCanopyNetFlux_dCanairTemp      => out_data%bin(1)%rkind(10), & ! intent(out): [dp] derivative in net canopy flux w.r.t. canopy air temperature (W m-2 K-1)
+ dCanopyNetFlux_dCanopyTemp      => out_data%bin(1)%rkind(11), & ! intent(out): [dp] derivative in net canopy flux w.r.t. canopy temperature (W m-2 K-1)
+ dCanopyNetFlux_dGroundTemp      => out_data%bin(1)%rkind(12), & ! intent(out): [dp] derivative in net canopy flux w.r.t. ground temperature (W m-2 K-1)
+ dGroundNetFlux_dCanairTemp      => out_data%bin(1)%rkind(13), & ! intent(out): [dp] derivative in net ground flux w.r.t. canopy air temperature (W m-2 K-1)
+ dGroundNetFlux_dCanopyTemp      => out_data%bin(1)%rkind(14), & ! intent(out): [dp] derivative in net ground flux w.r.t. canopy temperature (W m-2 K-1)
+ dGroundNetFlux_dGroundTemp      => out_data%bin(1)%rkind(15), & ! intent(out): [dp] derivative in net ground flux w.r.t. ground temperature (W m-2 K-1)
  ! output: liquid flux derivatives (canopy evap)
- dCanopyEvaporation_dCanLiq      => out_data%b(1)%r(16),         & ! intent(out): [dp] derivative in canopy evaporation w.r.t. canopy liquid water content (s-1)
- dCanopyEvaporation_dTCanair     => out_data%b(1)%r(17),         & ! intent(out): [dp] derivative in canopy evaporation w.r.t. canopy air temperature (kg m-2 s-1 K-1)
- dCanopyEvaporation_dTCanopy     => out_data%b(1)%r(18),         & ! intent(out): [dp] derivative in canopy evaporation w.r.t. canopy temperature (kg m-2 s-1 K-1)
- dCanopyEvaporation_dTGround     => out_data%b(1)%r(19),         & ! intent(out): [dp] derivative in canopy evaporation w.r.t. ground temperature (kg m-2 s-1 K-1)
+ dCanopyEvaporation_dCanLiq      => out_data%bin(1)%rkind(16), & ! intent(out): [dp] derivative in canopy evaporation w.r.t. canopy liquid water content (s-1)
+ dCanopyEvaporation_dTCanair     => out_data%bin(1)%rkind(17), & ! intent(out): [dp] derivative in canopy evaporation w.r.t. canopy air temperature (kg m-2 s-1 K-1)
+ dCanopyEvaporation_dTCanopy     => out_data%bin(1)%rkind(18), & ! intent(out): [dp] derivative in canopy evaporation w.r.t. canopy temperature (kg m-2 s-1 K-1)
+ dCanopyEvaporation_dTGround     => out_data%bin(1)%rkind(19), & ! intent(out): [dp] derivative in canopy evaporation w.r.t. ground temperature (kg m-2 s-1 K-1)
  ! output: liquid flux derivatives (ground evap)
- dGroundEvaporation_dCanLiq      => out_data%b(1)%r(20),         & ! intent(out): [dp] derivative in ground evaporation w.r.t. canopy liquid water content (s-1)
- dGroundEvaporation_dTCanair     => out_data%b(1)%r(21),         & ! intent(out): [dp] derivative in ground evaporation w.r.t. canopy air temperature (kg m-2 s-1 K-1)
- dGroundEvaporation_dTCanopy     => out_data%b(1)%r(22),         & ! intent(out): [dp] derivative in ground evaporation w.r.t. canopy temperature (kg m-2 s-1 K-1)
- dGroundEvaporation_dTGround     => out_data%b(1)%r(23),         & ! intent(out): [dp] derivative in ground evaporation w.r.t. ground temperature (kg m-2 s-1 K-1)
+ dGroundEvaporation_dCanLiq      => out_data%bin(1)%rkind(20), & ! intent(out): [dp] derivative in ground evaporation w.r.t. canopy liquid water content (s-1)
+ dGroundEvaporation_dTCanair     => out_data%bin(1)%rkind(21), & ! intent(out): [dp] derivative in ground evaporation w.r.t. canopy air temperature (kg m-2 s-1 K-1)
+ dGroundEvaporation_dTCanopy     => out_data%bin(1)%rkind(22), & ! intent(out): [dp] derivative in ground evaporation w.r.t. canopy temperature (kg m-2 s-1 K-1)
+ dGroundEvaporation_dTGround     => out_data%bin(1)%rkind(23), & ! intent(out): [dp] derivative in ground evaporation w.r.t. ground temperature (kg m-2 s-1 K-1)
  ! output: cross derivative terms
- dCanopyNetFlux_dCanLiq          => out_data%b(1)%r(24),         & ! intent(out): [dp] derivative in net canopy fluxes w.r.t. canopy liquid water content (J kg-1 s-1)
- dGroundNetFlux_dCanLiq          => out_data%b(1)%r(25)          & ! intent(out): [dp] derivative in net ground fluxes w.r.t. canopy liquid water content (J kg-1 s-1)
+ dCanopyNetFlux_dCanLiq          => out_data%bin(1)%rkind(24), & ! intent(out): [dp] derivative in net canopy fluxes w.r.t. canopy liquid water content (J kg-1 s-1)
+ dGroundNetFlux_dCanLiq          => out_data%bin(1)%rkind(25)  & ! intent(out): [dp] derivative in net ground fluxes w.r.t. canopy liquid water content (J kg-1 s-1)
  ) ! end associate statement
  ! ---------------------------------------------------------------------------------------
  err=0; message="vegNrgFlux/" ! initialize error control

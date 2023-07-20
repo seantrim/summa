@@ -205,7 +205,7 @@ contains
  logical(lgt)                    :: doVegNrgFlux                ! flag to compute the energy flux over vegetation
  real(rkind),dimension(nSoil)    :: dHydCond_dMatric            ! derivative in hydraulic conductivity w.r.t matric head (s-1)
  character(LEN=256)              :: cmessage                    ! error message of downwind routine
- type(data_bin)                  :: in_data,io_data,out_data            ! data structures for passing subroutine arguments
+ type(data_bin)                  :: in_data,io_data,out_data    ! data structures for passing subroutine arguments
  ! --------------------------------------------------------------
  ! initialize error control
  err=0; message='computFlux/'
@@ -662,142 +662,136 @@ contains
 
     if (sub.eq.'vegNrgFlux') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:1))
-      allocate(in_data%b(1)%l(1:3),in_data%b(1)%r(1:7)) ! allocate intent(in) data
+      allocate(in_data%bin(1:1))
       ! initialize intent(in) argument data
-      in_data%b(1)%l = [firstSubStep,firstFluxCall,computeVegFlux] ! logicals
-      in_data%b(1)%r = [upperBoundTemp,scalarCanairTempTrial,scalarCanopyTempTrial,mLayerTempTrial(1),scalarCanopyIceTrial,scalarCanopyLiqTrial,dCanLiq_dTcanopy] ! reals
+      in_data%bin(1)%lgt   = [firstSubStep,firstFluxCall,computeVegFlux] ! logicals
+      in_data%bin(1)%rkind = [upperBoundTemp,scalarCanairTempTrial,scalarCanopyTempTrial,mLayerTempTrial(1),scalarCanopyIceTrial,scalarCanopyLiqTrial,dCanLiq_dTcanopy] ! reals
      elseif (op.eq.'unpack') then
       ! unpack output data structure
-      scalarCanopyTranspiration=out_data%b(1)%r(1); scalarCanopyEvaporation=out_data%b(1)%r(2); scalarGroundEvaporation=out_data%b(1)%r(3); scalarCanairNetNrgFlux=out_data%b(1)%r(4); scalarCanopyNetNrgFlux=out_data%b(1)%r(5); scalarGroundNetNrgFlux=out_data%b(1)%r(6)
-      dCanairNetFlux_dCanairTemp=out_data%b(1)%r(7); dCanairNetFlux_dCanopyTemp=out_data%b(1)%r(8); dCanairNetFlux_dGroundTemp=out_data%b(1)%r(9); dCanopyNetFlux_dCanairTemp=out_data%b(1)%r(10); dCanopyNetFlux_dCanopyTemp=out_data%b(1)%r(11); dCanopyNetFlux_dGroundTemp=out_data%b(1)%r(12); dGroundNetFlux_dCanairTemp=out_data%b(1)%r(13); dGroundNetFlux_dCanopyTemp=out_data%b(1)%r(14); dGroundNetFlux_dGroundTemp=out_data%b(1)%r(15)
-      dCanopyEvaporation_dCanLiq=out_data%b(1)%r(16); dCanopyEvaporation_dTCanair=out_data%b(1)%r(17); dCanopyEvaporation_dTCanopy=out_data%b(1)%r(18); dCanopyEvaporation_dTGround=out_data%b(1)%r(19);
-      dGroundEvaporation_dCanLiq=out_data%b(1)%r(20); dGroundEvaporation_dTCanair=out_data%b(1)%r(21); dGroundEvaporation_dTCanopy=out_data%b(1)%r(22); dGroundEvaporation_dTGround=out_data%b(1)%r(23);
-      dCanopyNetFlux_dCanLiq=out_data%b(1)%r(24); dGroundNetFlux_dCanLiq=out_data%b(1)%r(25)
-      err=out_data%e; cmessage=out_data%m ! error control 
-      deallocate(in_data%b,out_data%b)
+      scalarCanopyTranspiration=out_data%bin(1)%rkind(1); scalarCanopyEvaporation=out_data%bin(1)%rkind(2); scalarGroundEvaporation=out_data%bin(1)%rkind(3); scalarCanairNetNrgFlux=out_data%bin(1)%rkind(4); scalarCanopyNetNrgFlux=out_data%bin(1)%rkind(5); scalarGroundNetNrgFlux=out_data%bin(1)%rkind(6)
+      dCanairNetFlux_dCanairTemp=out_data%bin(1)%rkind(7); dCanairNetFlux_dCanopyTemp=out_data%bin(1)%rkind(8); dCanairNetFlux_dGroundTemp=out_data%bin(1)%rkind(9); dCanopyNetFlux_dCanairTemp=out_data%bin(1)%rkind(10); dCanopyNetFlux_dCanopyTemp=out_data%bin(1)%rkind(11); dCanopyNetFlux_dGroundTemp=out_data%bin(1)%rkind(12); dGroundNetFlux_dCanairTemp=out_data%bin(1)%rkind(13); dGroundNetFlux_dCanopyTemp=out_data%bin(1)%rkind(14); dGroundNetFlux_dGroundTemp=out_data%bin(1)%rkind(15)
+      dCanopyEvaporation_dCanLiq=out_data%bin(1)%rkind(16); dCanopyEvaporation_dTCanair=out_data%bin(1)%rkind(17); dCanopyEvaporation_dTCanopy=out_data%bin(1)%rkind(18); dCanopyEvaporation_dTGround=out_data%bin(1)%rkind(19);
+      dGroundEvaporation_dCanLiq=out_data%bin(1)%rkind(20); dGroundEvaporation_dTCanair=out_data%bin(1)%rkind(21); dGroundEvaporation_dTCanopy=out_data%bin(1)%rkind(22); dGroundEvaporation_dTGround=out_data%bin(1)%rkind(23);
+      dCanopyNetFlux_dCanLiq=out_data%bin(1)%rkind(24); dGroundNetFlux_dCanLiq=out_data%bin(1)%rkind(25)
+      err=out_data%err; cmessage=out_data%msg ! error control 
+      deallocate(in_data%bin,out_data%bin)
      end if
     elseif (sub.eq.'ssdNrgFlux') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:4)) ! ! allocate intent(in) data
-      in_data%b(1)%l=[scalarSolution .and. .not.firstFluxCall] ! logical array
-      in_data%b(1)%r=[scalarGroundNetNrgFlux,dGroundNetFlux_dGroundTemp] ! real array
-      in_data%b(2)%r=iLayerLiqFluxSnow ! real array
-      in_data%b(3)%r=iLayerLiqFluxSoil ! real array
-      in_data%b(4)%r=mLayerTempTrial   ! real array
+      allocate(in_data%bin(1:4)) ! ! allocate intent(in) data
+      in_data%bin(1)%lgt=[scalarSolution .and. .not.firstFluxCall] ! logical array
+      in_data%bin(1)%rkind=[scalarGroundNetNrgFlux,dGroundNetFlux_dGroundTemp] ! real array
+      in_data%bin(2)%rkind=iLayerLiqFluxSnow ! real array
+      in_data%bin(3)%rkind=iLayerLiqFluxSoil ! real array
+      in_data%bin(4)%rkind=mLayerTempTrial   ! real array
      elseif (op.eq.'unpack') then
-      iLayerNrgFlux=out_data%b(1)%r; dNrgFlux_dTempAbove=out_data%b(2)%r; dNrgFlux_dTempBelow=out_data%b(3)%r
-      err=out_data%e; cmessage=out_data%m ! error control
-      deallocate(in_data%b,out_data%b)
+      iLayerNrgFlux=out_data%bin(1)%rkind; dNrgFlux_dTempAbove=out_data%bin(2)%rkind; dNrgFlux_dTempBelow=out_data%bin(3)%rkind
+      err=out_data%err; cmessage=out_data%msg ! error control
+      deallocate(in_data%bin,out_data%bin)
      end if
     elseif (sub.eq.'vegLiqFlux') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:1))
-      in_data%b(1)%l=computeVegFlux
-      in_data%b(1)%r=[scalarCanopyLiqTrial,scalarRainfall]
+      allocate(in_data%bin(1:1))
+      in_data%bin(1)%lgt=computeVegFlux
+      in_data%bin(1)%rkind=[scalarCanopyLiqTrial,scalarRainfall]
      elseif (op.eq.'unpack') then
-      scalarThroughfallRain         = out_data%b(1)%r(1)
-      scalarCanopyLiqDrainage       = out_data%b(1)%r(2)
-      scalarThroughfallRainDeriv    = out_data%b(1)%r(3)
-      scalarCanopyLiqDrainageDeriv  = out_data%b(1)%r(4)
-      err                           = out_data%e
-      cmessage                      = out_data%m
-      deallocate(in_data%b,out_data%b)
+      scalarThroughfallRain         = out_data%bin(1)%rkind(1)
+      scalarCanopyLiqDrainage       = out_data%bin(1)%rkind(2)
+      scalarThroughfallRainDeriv    = out_data%bin(1)%rkind(3)
+      scalarCanopyLiqDrainageDeriv  = out_data%bin(1)%rkind(4)
+      err                           = out_data%err
+      cmessage                      = out_data%msg
+      deallocate(in_data%bin,out_data%bin)
      end if
     elseif (sub.eq.'snowLiqFlx') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:2)); allocate(in_data%b(1)%i(1:1),in_data%b(1)%l(1:2),in_data%b(1)%r(1:2),in_data%b(2)%r(1:nsnow))
-      in_data%b(1)%i=nsnow
-      in_data%b(1)%l=[firstFluxCall,(scalarSolution .and. .not.firstFluxCall)]
-      in_data%b(1)%r=[scalarThroughfallRain,scalarCanopyLiqDrainage]
-      in_data%b(2)%r=mLayerVolFracLiqTrial(1:nSnow)
+      allocate(in_data%bin(1:2))
+      in_data%bin(1)%i4b=[nsnow]
+      in_data%bin(1)%lgt=[firstFluxCall,(scalarSolution .and. .not.firstFluxCall)]
+      in_data%bin(1)%rkind=[scalarThroughfallRain,scalarCanopyLiqDrainage]
+      in_data%bin(2)%rkind=mLayerVolFracLiqTrial(1:nSnow)
      elseif (op.eq.'unpack') then
-      iLayerLiqFluxSnow(0:nSnow)      = out_data%b(1)%r
-      iLayerLiqFluxSnowDeriv(0:nSnow) = out_data%b(2)%r
-      err                             = out_data%e
-      cmessage                        = out_data%m
-      deallocate(in_data%b,out_data%b)
+      iLayerLiqFluxSnow(0:nSnow)      = out_data%bin(1)%rkind
+      iLayerLiqFluxSnowDeriv(0:nSnow) = out_data%bin(2)%rkind
+      err                             = out_data%err
+      cmessage                        = out_data%msg
+      deallocate(in_data%bin,out_data%bin)
      end if
     elseif (sub.eq.'soilLiqFlx') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:7)) ! intent(in)
-      in_data%b(1)%i=[nSoil]
-      in_data%b(1)%l=[firstSplitOper,(scalarSolution .and. .not.firstFluxCall)]
-      in_data%b(1)%r=[scalarCanopyTranspiration,scalarGroundEvaporation,scalarRainPlusMelt] ! note order of arguments
-      in_data%b(2)%r=mLayerTempTrial(nSnow+1:nLayers)
-      in_data%b(3)%r=mLayerMatricHeadLiqTrial(1:nSoil)
-      in_data%b(4)%r=mLayerVolFracLiqTrial(nSnow+1:nLayers)
-      in_data%b(5)%r=mLayerVolFracIceTrial(nSnow+1:nLayers)
-      in_data%b(6)%r=mLayerdTheta_dTk(nSnow+1:nLayers)
-      in_data%b(7)%r=dPsiLiq_dTemp(1:nSoil)
-      allocate(io_data%b(1:11)) ! intent(out)
-      io_data%b(1)%r=[scalarMaxInfilRate,scalarInfilArea,scalarFrozenArea,scalarSurfaceRunoff,scalarInfiltration] ! note final argument
-      io_data%b(2)%r=mLayerdTheta_dPsi
-      io_data%b(3)%r=mLayerdPsi_dTheta
-      io_data%b(4)%r=dHydCond_dMatric
-      io_data%b(5)%r=iLayerLiqFluxSoil
-      io_data%b(6)%r=mLayerTranspire
-      io_data%b(7)%r=mLayerHydCond
-      io_data%b(8)%r=dq_dHydStateAbove
-      io_data%b(9)%r=dq_dHydStateBelow
-      io_data%b(10)%r=dq_dNrgStateAbove
-      io_data%b(11)%r=dq_dNrgStateBelow
+      allocate(in_data%bin(1:7)) ! intent(in)
+      in_data%bin(1)%i4b=[nSoil]
+      in_data%bin(1)%lgt=[firstSplitOper,(scalarSolution .and. .not.firstFluxCall)]
+      in_data%bin(1)%rkind=[scalarCanopyTranspiration,scalarGroundEvaporation,scalarRainPlusMelt] ! note order of arguments
+      in_data%bin(2)%rkind=mLayerTempTrial(nSnow+1:nLayers)
+      in_data%bin(3)%rkind=mLayerMatricHeadLiqTrial(1:nSoil)
+      in_data%bin(4)%rkind=mLayerVolFracLiqTrial(nSnow+1:nLayers)
+      in_data%bin(5)%rkind=mLayerVolFracIceTrial(nSnow+1:nLayers)
+      in_data%bin(6)%rkind=mLayerdTheta_dTk(nSnow+1:nLayers)
+      in_data%bin(7)%rkind=dPsiLiq_dTemp(1:nSoil)
+      allocate(io_data%bin(1:11)) ! intent(out)
+      io_data%bin(1)%rkind=[scalarMaxInfilRate,scalarInfilArea,scalarFrozenArea,scalarSurfaceRunoff,scalarInfiltration] ! note final argument
+      io_data%bin(2)%rkind=mLayerdTheta_dPsi
+      io_data%bin(3)%rkind=mLayerdPsi_dTheta
+      io_data%bin(4)%rkind=dHydCond_dMatric
+      io_data%bin(5)%rkind=iLayerLiqFluxSoil
+      io_data%bin(6)%rkind=mLayerTranspire
+      io_data%bin(7)%rkind=mLayerHydCond
+      io_data%bin(8)%rkind=dq_dHydStateAbove
+      io_data%bin(9)%rkind=dq_dHydStateBelow
+      io_data%bin(10)%rkind=dq_dNrgStateAbove
+      io_data%bin(11)%rkind=dq_dNrgStateBelow
      elseif (op.eq.'unpack') then
-      ! output: diagnostic variables for surface runoff
-      scalarMaxInfilRate         = io_data%b(1)%r(1)   ! maximum infiltration rate (m s-1)
-      scalarInfilArea            = io_data%b(1)%r(2)   ! fraction of unfrozen area where water can infiltrate (-)
-      scalarFrozenArea           = io_data%b(1)%r(3)   ! fraction of area that is considered impermeable due to soil ice (-)
-      scalarSurfaceRunoff        = io_data%b(1)%r(4)   ! surface runoff (m s-1)
-      ! output: diagnostic variables for each layer
-      mLayerdTheta_dPsi          = io_data%b(2)%r ! derivative in the soil water characteristic w.r.t. psi (m-1)
-      mLayerdPsi_dTheta          = io_data%b(3)%r ! derivative in the soil water characteristic w.r.t. theta (m)
-      dHydCond_dMatric           = io_data%b(4)%r ! derivative in hydraulic conductivity w.r.t matric head (s-1)
-      ! output: liquid fluxes
-      scalarInfiltration         = io_data%b(1)%r(5)     ! surface infiltration rate (m s-1)
-      iLayerLiqFluxSoil          = io_data%b(5)%r ! liquid flux at soil layer interfaces (m s-1)
-      mLayerTranspire            = io_data%b(6)%r ! transpiration loss from each soil layer (m s-1)
-      mLayerHydCond              = io_data%b(7)%r ! hydraulic conductivity in each soil layer (m s-1)
-      ! output: derivatives in fluxes w.r.t. state variables in the layer above and layer below (m s-1)
-      dq_dHydStateAbove          = io_data%b(8)%r ! derivative in the flux in layer interfaces w.r.t. state variables in the layer above
-      dq_dHydStateBelow          = io_data%b(9)%r ! derivative in the flux in layer interfaces w.r.t. state variables in the layer below
-      ! output: derivatives in fluxes w.r.t. energy state variables -- now just temperature -- in the layer above and layer below (m s-1 K-1)
-      dq_dNrgStateAbove          = io_data%b(10)%r ! derivatives in the flux w.r.t. temperature in the layer above (m s-1 K-1)
-      dq_dNrgStateBelow          = io_data%b(11)%r ! derivatives in the flux w.r.t. temperature in the layer below (m s-1 K-1)
-      err                        = out_data%e                            ! error code
-      cmessage                   = out_data%m    ! error message
-      deallocate(in_data%b,io_data%b) ! note: no bins allocated for out_data
+      scalarMaxInfilRate         = io_data%bin(1)%rkind(1)   ! maximum infiltration rate (m s-1)
+      scalarInfilArea            = io_data%bin(1)%rkind(2)   ! fraction of unfrozen area where water can infiltrate (-)
+      scalarFrozenArea           = io_data%bin(1)%rkind(3)   ! fraction of area that is considered impermeable due to soil ice (-)
+      scalarSurfaceRunoff        = io_data%bin(1)%rkind(4)   ! surface runoff (m s-1)
+      scalarInfiltration         = io_data%bin(1)%rkind(5)   ! surface infiltration rate (m s-1)
+      mLayerdTheta_dPsi          = io_data%bin(2)%rkind ! derivative in the soil water characteristic w.r.t. psi (m-1)
+      mLayerdPsi_dTheta          = io_data%bin(3)%rkind ! derivative in the soil water characteristic w.r.t. theta (m)
+      dHydCond_dMatric           = io_data%bin(4)%rkind ! derivative in hydraulic conductivity w.r.t matric head (s-1)
+      iLayerLiqFluxSoil          = io_data%bin(5)%rkind ! liquid flux at soil layer interfaces (m s-1)
+      mLayerTranspire            = io_data%bin(6)%rkind ! transpiration loss from each soil layer (m s-1)
+      mLayerHydCond              = io_data%bin(7)%rkind ! hydraulic conductivity in each soil layer (m s-1)
+      dq_dHydStateAbove          = io_data%bin(8)%rkind ! derivative in the flux in layer interfaces w.r.t. state variables in the layer above
+      dq_dHydStateBelow          = io_data%bin(9)%rkind ! derivative in the flux in layer interfaces w.r.t. state variables in the layer below
+      dq_dNrgStateAbove          = io_data%bin(10)%rkind ! derivatives in the flux w.r.t. temperature in the layer above (m s-1 K-1)
+      dq_dNrgStateBelow          = io_data%bin(11)%rkind ! derivatives in the flux w.r.t. temperature in the layer below (m s-1 K-1)
+      err                        = out_data%err                            ! error code
+      cmessage                   = out_data%msg    ! error message
+      deallocate(in_data%bin,io_data%bin) ! note: no bins allocated for out_data
      end if
     elseif (sub.eq.'groundwatr') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:4))
-      in_data%b(1)%i=[nSnow,nSoil,nLayers]
-      in_data%b(1)%l=[firstFluxCall]
-      in_data%b(1)%r=mLayerdTheta_dPsi
-      in_data%b(2)%r=mLayerMatricHeadLiqTrial
-      in_data%b(3)%r=mLayerVolFracLiqTrial(nSnow+1:nLayers)
-      in_data%b(4)%r=mLayerVolFracIceTrial(nSnow+1:nLayers)
-      allocate(io_data%b(1))
-      io_data%b(1)%i=[ixSaturation]
+      allocate(in_data%bin(1:4))
+      in_data%bin(1)%i4b=[nSnow,nSoil,nLayers]
+      in_data%bin(1)%lgt=[firstFluxCall]
+      in_data%bin(1)%rkind=mLayerdTheta_dPsi
+      in_data%bin(2)%rkind=mLayerMatricHeadLiqTrial
+      in_data%bin(3)%rkind=mLayerVolFracLiqTrial(nSnow+1:nLayers)
+      in_data%bin(4)%rkind=mLayerVolFracIceTrial(nSnow+1:nLayers)
+      allocate(io_data%bin(1))
+      io_data%bin(1)%i4b=[ixSaturation]
      elseif (op.eq.'unpack') then
-      ixSaturation=io_data%b(1)%i(1)
-      mLayerBaseflow=out_data%b(1)%r
-      dBaseflow_dMatric=out_data%b(1)%rm
-      err=out_data%e
-      cmessage=out_data%m
-      deallocate(in_data%b,io_data%b,out_data%b)
+      ixSaturation=io_data%bin(1)%i4b(1)
+      mLayerBaseflow=out_data%bin(1)%rkind
+      dBaseflow_dMatric=out_data%bin(1)%rmatrix
+      err=out_data%err
+      cmessage=out_data%msg
+      deallocate(in_data%bin,io_data%bin,out_data%bin)
      end if
     elseif (sub.eq.'bigAquifer') then
      if (op.eq.'pack') then
-      allocate(in_data%b(1:1))
-      in_data%b(1)%r=[scalarAquiferStorageTrial,scalarCanopyTranspiration,scalarSoilDrainage]
+      allocate(in_data%bin(1:1))
+      in_data%bin(1)%rkind=[scalarAquiferStorageTrial,scalarCanopyTranspiration,scalarSoilDrainage]
      elseif (op.eq.'unpack') then
-      scalarAquiferTranspire=out_data%b(1)%r(1)
-      scalarAquiferRecharge=out_data%b(1)%r(2)
-      scalarAquiferBaseflow=out_data%b(1)%r(3)
-      dBaseflow_dAquifer=out_data%b(1)%r(4)
-      err=out_data%e
-      cmessage=out_data%m
-      deallocate(in_data%b,out_data%b)
+      scalarAquiferTranspire=out_data%bin(1)%rkind(1)
+      scalarAquiferRecharge=out_data%bin(1)%rkind(2)
+      scalarAquiferBaseflow=out_data%bin(1)%rkind(3)
+      dBaseflow_dAquifer=out_data%bin(1)%rkind(4)
+      err=out_data%err
+      cmessage=out_data%msg
+      deallocate(in_data%bin,out_data%bin)
      end if    
     else ! error control
      

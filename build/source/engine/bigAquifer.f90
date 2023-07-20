@@ -53,7 +53,7 @@ contains
  USE var_lookup,only:iLookPARAM                        ! named variables for structure elements
  ! data types
  USE data_types,only:var_dlength                       ! x%var(:)%dat   (dp)
- USE data_types,only:data_bin                          ! x%b(:)%l(:) [lgt], x%b(:)%i(:) [i4b], x%b(:)%r(:) [rkind], x%b(:)%rm(:,:) [rkind], x%e [i4b], x%m [character]
+ USE data_types,only:data_bin                          ! x%bin(:)%{lgt(:),i4b(:),rkind(:),rmatrix(:,:),string}, x%err [i4b], x%msg [character]
  ! -------------------------------------------------------------------------------------------------------------------------------------------------
  implicit none
  ! input: state variables, fluxes, and parameters
@@ -72,9 +72,9 @@ contains
  ! make association between local variables and the information in the data structures
  associate(&
  ! input: state variables, fluxes, and parameters
- scalarAquiferStorageTrial   => in_data%b(1)%r(1),                                 & ! intent(in): [dp] trial value of aquifer storage (m)
- scalarCanopyTranspiration   => in_data%b(1)%r(2),                                 & ! intent(in): [dp] canopy transpiration (kg m-2 s-1)
- scalarSoilDrainage          => in_data%b(1)%r(3),                                 & ! intent(in): [dp] soil drainage (m s-1)
+ scalarAquiferStorageTrial   => in_data%bin(1)%rkind(1),                           & ! intent(in): [dp] trial value of aquifer storage (m)
+ scalarCanopyTranspiration   => in_data%bin(1)%rkind(2),                           & ! intent(in): [dp] canopy transpiration (kg m-2 s-1)
+ scalarSoilDrainage          => in_data%bin(1)%rkind(3),                           & ! intent(in): [dp] soil drainage (m s-1)
  ! model diagnostic variables: contribution of the aquifer to transpiration
  scalarTranspireLim     => diag_data%var(iLookDIAG%scalarTranspireLim)%dat(1),     & ! intent(in): [dp] weighted average of the transpiration limiting factor (-)
  scalarAquiferRootFrac  => diag_data%var(iLookDIAG%scalarAquiferRootFrac)%dat(1),  & ! intent(in): [dp] fraction of roots below the lowest soil layer (-)
@@ -84,13 +84,13 @@ contains
  aquiferScaleFactor     => mpar_data%var(iLookPARAM%aquiferScaleFactor)%dat(1),    & ! intent(in): [dp] scaling factor for aquifer storage in the big bucket (m)
  aquiferBaseflowExp     => mpar_data%var(iLookPARAM%aquiferBaseflowExp)%dat(1),    & ! intent(in): [dp] baseflow exponent (-)
  ! output: fluxes
- scalarAquiferTranspire => out_data%b(1)%r(1),                                     & ! intent(out): [dp] transpiration loss from the aquifer (m s-1)
- scalarAquiferRecharge  => out_data%b(1)%r(2),                                     & ! intent(out): [dp] recharge to the aquifer (m s-1)
- scalarAquiferBaseflow  => out_data%b(1)%r(3),                                     & ! intent(out): [dp] total baseflow from the aquifer (m s-1)
- dBaseflow_dAquifer     => out_data%b(1)%r(4),                                     & ! intent(out): [dp] change in baseflow flux w.r.t. aquifer storage (s-1)
+ scalarAquiferTranspire => out_data%bin(1)%rkind(1),                               & ! intent(out): [dp] transpiration loss from the aquifer (m s-1)
+ scalarAquiferRecharge  => out_data%bin(1)%rkind(2),                               & ! intent(out): [dp] recharge to the aquifer (m s-1)
+ scalarAquiferBaseflow  => out_data%bin(1)%rkind(3),                               & ! intent(out): [dp] total baseflow from the aquifer (m s-1)
+ dBaseflow_dAquifer     => out_data%bin(1)%rkind(4),                               & ! intent(out): [dp] change in baseflow flux w.r.t. aquifer storage (s-1)
  ! output: error control
- err                    => out_data%e,                                             & ! intent(out): [i4b] error code
- message                => out_data%m                                              & ! intent(out): [character] error message
+ err                    => out_data%err,                                           & ! intent(out): [i4b] error code
+ message                => out_data%msg                                            & ! intent(out): [character] error message
  )  ! end associating local variables with the information in the data structures
  err=0; message='bigAquifer/' ! initialize error control
 

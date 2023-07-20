@@ -26,7 +26,7 @@ USE nrtype
 ! data types
 USE data_types,only:var_d                ! x%var(:)       (dp)
 USE data_types,only:var_dlength          ! x%var(:)%dat   (dp)
-USE data_types,only:data_bin             ! x%b(:)%l(:) [lgt], x%b(:)%i(:) [i4b], x%b(:)%r(:) [rkind], x%b(:)%rm(:,:) [rkind], x%e [i4b], x%m [character]
+USE data_types,only:data_bin             ! x%bin(:)%{lgt(:),i4b(:),rkind(:),rmatrix(:,:),string}, x%err [i4b], x%msg [character]
 
 ! named variables
 USE var_lookup,only:iLookPARAM,iLookDIAG ! named variables for structure elements
@@ -67,22 +67,22 @@ contains
  ! output
  type(data_bin),intent(out)         :: out_data                     ! throughfall rain, drainage, derivatives, and error control
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
- allocate(out_data%b(1:1)); allocate(out_data%b(1)%r(1:4))          ! allocate output data structure
+ allocate(out_data%bin(1:1)); allocate(out_data%bin(1)%rkind(1:4))          ! allocate output data structure
  ! make association of local variables with information in the data structures
  associate(&
-  computeVegFlux             => in_data%b(1)%l(1), &  ! intent(in): flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
-  scalarCanopyLiqTrial       => in_data%b(1)%r(1), &  ! intent(in): trial mass of liquid water on the vegetation canopy at the current iteration (kg m-2)
-  scalarRainfall             => in_data%b(1)%r(2), &  ! intent(in): rainfall (kg m-2 s-1)
+  computeVegFlux       => in_data%bin(1)%lgt(1),   & ! intent(in): flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
+  scalarCanopyLiqTrial => in_data%bin(1)%rkind(1), & ! intent(in): trial mass of liquid water on the vegetation canopy at the current iteration (kg m-2)
+  scalarRainfall       => in_data%bin(1)%rkind(2), & ! intent(in): rainfall (kg m-2 s-1)
   ixCanopyInterception       => model_decisions(iLookDECISIONS%cIntercept)%iDecision, & ! intent(in): index defining choice of parameterization for canopy interception
   scalarCanopyLiqMax         => diag_data%var(iLookDIAG%scalarCanopyLiqMax)%dat(1),   & ! intent(in): maximum storage before canopy drainage begins (kg m-2 s-1)
   scalarThroughfallScaleRain => mpar_data%var(iLookPARAM%throughfallScaleRain)%dat(1),& ! intent(in): fraction of rain that hits the ground without touching the canopy (-)
   scalarCanopyDrainageCoeff  => mpar_data%var(iLookPARAM%canopyDrainageCoeff)%dat(1), & ! intent(in): canopy drainage coefficient (s-1)
-  scalarThroughfallRain         => out_data%b(1)%r(1),               & ! intent(out): rain that reaches the ground without ever touching the canopy (kg m-2 s-1) 
-  scalarCanopyLiqDrainage       => out_data%b(1)%r(2),               & ! intent(out): rain that reaches the ground without ever touching the canopy (kg m-2 s-1)
-  scalarThroughfallRainDeriv    => out_data%b(1)%r(3),               & ! intent(out): derivative in throughfall w.r.t. canopy liquid water (s-1)
-  scalarCanopyLiqDrainageDeriv  => out_data%b(1)%r(4),               & ! intent(out): derivative in canopy drainage w.r.t. canopy liquid water (s-1)
-  err                           => out_data%e,                       & ! intent(out): error code
-  message                       => out_data%m                        & ! intent(out): error message
+  scalarThroughfallRain         => out_data%bin(1)%rkind(1),         & ! intent(out): rain that reaches the ground without ever touching the canopy (kg m-2 s-1) 
+  scalarCanopyLiqDrainage       => out_data%bin(1)%rkind(2),         & ! intent(out): rain that reaches the ground without ever touching the canopy (kg m-2 s-1)
+  scalarThroughfallRainDeriv    => out_data%bin(1)%rkind(3),         & ! intent(out): derivative in throughfall w.r.t. canopy liquid water (s-1)
+  scalarCanopyLiqDrainageDeriv  => out_data%bin(1)%rkind(4),         & ! intent(out): derivative in canopy drainage w.r.t. canopy liquid water (s-1)
+  err                           => out_data%err,                     & ! intent(out): error code
+  message                       => out_data%msg                      & ! intent(out): error message
  ) ! end associating local variables with information in the data structures
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
  ! initialize error control
