@@ -561,6 +561,13 @@ contains
     dq_dNrgStateBelow            => deriv_data%var(iLookDERIV%dq_dNrgStateBelow           )%dat      &  ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer below
     )  ! end association to data in structures
 
+    ! validate operation argument
+    if ((op.ne.'pre').and.(op.ne.'post')) then
+     err=20
+     cmessage="Error in subTools: invalid op argument requested."
+     message=trim(message)//trim(cmessage); return
+    end if
+
     if (sub.eq.'vegNrgFlux') then
      if (op.eq.'pre') then
       ! pre-processing
@@ -572,10 +579,17 @@ contains
       in_data%bin(1)%rkind = [upperBoundTemp,scalarCanairTempTrial,scalarCanopyTempTrial,mLayerTempTrial(1),scalarCanopyIceTrial,scalarCanopyLiqTrial,dCanLiq_dTcanopy] ! reals
      elseif (op.eq.'post') then
       ! unpack out_data
-      scalarCanopyTranspiration=out_data%bin(1)%rkind(1); scalarCanopyEvaporation=out_data%bin(1)%rkind(2); scalarGroundEvaporation=out_data%bin(1)%rkind(3); scalarCanairNetNrgFlux=out_data%bin(1)%rkind(4); scalarCanopyNetNrgFlux=out_data%bin(1)%rkind(5); scalarGroundNetNrgFlux=out_data%bin(1)%rkind(6)
-      dCanairNetFlux_dCanairTemp=out_data%bin(1)%rkind(7); dCanairNetFlux_dCanopyTemp=out_data%bin(1)%rkind(8); dCanairNetFlux_dGroundTemp=out_data%bin(1)%rkind(9); dCanopyNetFlux_dCanairTemp=out_data%bin(1)%rkind(10); dCanopyNetFlux_dCanopyTemp=out_data%bin(1)%rkind(11); dCanopyNetFlux_dGroundTemp=out_data%bin(1)%rkind(12); dGroundNetFlux_dCanairTemp=out_data%bin(1)%rkind(13); dGroundNetFlux_dCanopyTemp=out_data%bin(1)%rkind(14); dGroundNetFlux_dGroundTemp=out_data%bin(1)%rkind(15)
-      dCanopyEvaporation_dCanLiq=out_data%bin(1)%rkind(16); dCanopyEvaporation_dTCanair=out_data%bin(1)%rkind(17); dCanopyEvaporation_dTCanopy=out_data%bin(1)%rkind(18); dCanopyEvaporation_dTGround=out_data%bin(1)%rkind(19);
-      dGroundEvaporation_dCanLiq=out_data%bin(1)%rkind(20); dGroundEvaporation_dTCanair=out_data%bin(1)%rkind(21); dGroundEvaporation_dTCanopy=out_data%bin(1)%rkind(22); dGroundEvaporation_dTGround=out_data%bin(1)%rkind(23);
+      ! evaporation, transpiration, and fluxes
+      scalarCanopyTranspiration=out_data%bin(1)%rkind(1); scalarCanopyEvaporation=out_data%bin(1)%rkind(2); scalarGroundEvaporation=out_data%bin(1)%rkind(3);
+      scalarCanairNetNrgFlux=out_data%bin(1)%rkind(4); scalarCanopyNetNrgFlux=out_data%bin(1)%rkind(5); scalarGroundNetNrgFlux=out_data%bin(1)%rkind(6)
+      ! derivatives
+      dCanairNetFlux_dCanairTemp=out_data%bin(1)%rkind(7); dCanairNetFlux_dCanopyTemp=out_data%bin(1)%rkind(8); dCanairNetFlux_dGroundTemp=out_data%bin(1)%rkind(9);
+      dCanopyNetFlux_dCanairTemp=out_data%bin(1)%rkind(10); dCanopyNetFlux_dCanopyTemp=out_data%bin(1)%rkind(11); dCanopyNetFlux_dGroundTemp=out_data%bin(1)%rkind(12);
+      dGroundNetFlux_dCanairTemp=out_data%bin(1)%rkind(13); dGroundNetFlux_dCanopyTemp=out_data%bin(1)%rkind(14); dGroundNetFlux_dGroundTemp=out_data%bin(1)%rkind(15)
+      dCanopyEvaporation_dCanLiq=out_data%bin(1)%rkind(16); dCanopyEvaporation_dTCanair=out_data%bin(1)%rkind(17); 
+      dCanopyEvaporation_dTCanopy=out_data%bin(1)%rkind(18); dCanopyEvaporation_dTGround=out_data%bin(1)%rkind(19);
+      dGroundEvaporation_dCanLiq=out_data%bin(1)%rkind(20); dGroundEvaporation_dTCanair=out_data%bin(1)%rkind(21);
+      dGroundEvaporation_dTCanopy=out_data%bin(1)%rkind(22); dGroundEvaporation_dTGround=out_data%bin(1)%rkind(23);
       dCanopyNetFlux_dCanLiq=out_data%bin(1)%rkind(24); dGroundNetFlux_dCanLiq=out_data%bin(1)%rkind(25)
       err=out_data%err; cmessage=out_data%msg ! error control 
       deallocate(in_data%bin,out_data%bin)
@@ -785,8 +799,10 @@ contains
       !   (Note:  SoilDrainage goes into aquifer, not runoff)
       scalarTotalRunoff  = scalarSurfaceRunoff + scalarAquiferBaseflow
      end if    
-    else ! error control
-     
+    else ! error control -- validate sub argument (must be a subroutine that is included in the above if blocks)
+     err=20
+     cmessage="Error in subTools: invalid sub argument requested."
+     message=trim(message)//trim(cmessage); return     
     end if
     end associate
    end subroutine subTools
