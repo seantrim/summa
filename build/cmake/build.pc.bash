@@ -21,6 +21,9 @@
 #export LIBRARY_LINKS="-lnetcdff;-lnetcdf;-Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_gf_lp64.a ${MKLROOT}/lib/intel64/libmkl_gnu_thread.a ${MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group;-lgomp;-lpthread;-lm;-ldl"                        # list of library links -- Intel oneMKL builds
 #export FLAGS_OPT="-m64;-I"${MKLROOT}/include";-flto=1;-fuse-linker-plugin"   # optional compiler flags -- Intel oneMKL builds
 
+export INCLUDES_DIRS='/usr/include'
+export LIBRARY_LINKS='-lopenblas;-lnetcdff;-lnetcdf'
+
 # CMake Commands (build type controlled using DCMAKE_BUILD_TYPE)
-cmake -B ../cmake_build -S . -DCMAKE_BUILD_TYPE=BE
-cmake --build ../cmake_build --target all
+cmake -B ../cmake_build -S . -DCMAKE_BUILD_TYPE=Sundials
+cmake --build ../cmake_build --target all -j 4

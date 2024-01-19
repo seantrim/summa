@@ -18,8 +18,51 @@ The important modeling features are:
  1. The physical processes can be organized in different spatial configurations, including model elements of different shape and connectivity (e.g., nested multi-scale grids and HRUs).
 
 
+## Getting Started
+
+### Prerequisites
+SUMMA-Sundials requires the following software to be installed on your system:
+ * [CMake](https://cmake.org/) (version 3.10 or higher)
+ * [gfortran](https://fortran-lang.org/en/learn/os_setup/install_gfortran/)
+ * [NetCDF-Fortran](https://www.unidata.ucar.edu/software/netcdf/) (version 4.4.4 or higher)
+ * [OpenBLAS](https://www.openblas.net/) or [LAPACK](https://netlib.org/lapack/)
+ * [Sundials](https://computing.llnl.gov/projects/sundials) (version 6.6 or higher)
+
+Most of these packages are available through the apt package manager on Ubuntu.
+
+### Installing Sundials
+```bash
+wget https://github.com/LLNL/sundials/releases/download/v6.6.0/sundials-6.6.0.tar.gz
+tar --warning=no-unknown-keyword -xzf sundials-6.6.0.tar.gz
+cd sundials-6.6.0
+mkdir /usr/local/sundials # or wherever you want to install sundials (remember to change -DCMAKE_INSTALL_PREFIX below)
+mkdir builddir && cd builddir
+cmake ../../sundials-6.6.0 -DBUILD_FORTRAN_MODULE_INTERFACE=ON -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=/usr/local/sundials -DEXAMPLES_INSTALL_PATH=/code/sundials/instdir/examples
+make -j
+make install
+```
+
+### Installing SUMMA
+```bash
+git clone -b sundials https://github.com/uofs-simlab/summa.git
+export SUNDIALS_PATH=/usr/local/sundials # or wherever you installed sundials
+cd summa/build/cmake
+./build.pc.bash # for local build (comments in script give extra details if needed)
+```
+
+## Running Summa
+```bash
+summa_sundials.exe -g start_gru num_gru -m /path/to/file_manager.txt
+```
+
+### Configuring Summa
+SUMMA depends on the file_manager.txt to point to the correct files for a simulation. For example test cases see the [Laugh Tests](https://git.cs.usask.ca/numerical_simulations_lab/laugh_tests.git)
+
+
 ## Documentation
 SUMMA documentation is available [online](http://summa.readthedocs.io/) and remains a work in progress. Additional SUMMA information including publications, test data sets, and sample applications can be found on the [SUMMA web site](http://www.ral.ucar.edu/projects/summa) at NCAR.
+
+
 
 
 ## Credits
