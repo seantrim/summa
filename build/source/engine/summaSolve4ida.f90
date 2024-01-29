@@ -80,6 +80,7 @@ USE mDecisions_module,only:       &
  private::setSolverParams
  private::find_rootdir
  public::layerDisCont4ida
+ public::layerDisCont4cvode
  private::getErrMessage
  public::summaSolve4ida
 
@@ -132,7 +133,7 @@ subroutine summaSolve4ida(                         &
                       err,message)               ! intent(out):   error control
 
   !======= Inclusions ===========
-  USE fida_mod                                    ! Fortran interface to IDA
+  USE fcvode_mod                                  ! Fortran interface to CVODE
   USE fsundials_context_mod                       ! Fortran interface to SUNContext
   USE fnvector_serial_mod                         ! Fortran interface to serial N_Vector
   USE fsundials_nvector_mod                       ! Fortran interface to generic N_Vector
@@ -146,9 +147,10 @@ subroutine summaSolve4ida(                         &
   USE fsundials_nonlinearsolver_mod               ! Fortran interface to generic SUNNonlinearSolver
   USE allocspace_module,only:allocLocal           ! allocate local data structures
   USE getVectorz_module, only:checkFeas           ! check feasibility of state vector
+  USE eval8summa_module,only:eval8summa4cvode
   USE eval8summaWithPrime_module,only:eval8summa4ida      ! DAE/ODE functions
   USE eval8summaWithPrime_module,only:eval8summaWithPrime ! residual of DAE
-  USE computJacobWithPrime_module,only:computJacob4ida    ! system Jacobian
+  USE computJacob_module,only:computJacob4cvode    ! system Jacobian
   USE tol4ida_module,only:computWeight4ida        ! weight required for tolerances
   USE var_lookup,only:maxvarDecisions             ! maximum number of decisions
 
@@ -205,6 +207,7 @@ subroutine summaSolve4ida(                         &
   ! --------------------------------------------------------------------------------------------------------------------------------
   ! local variables
   ! --------------------------------------------------------------------------------------------------------------------------------
+  real(rkind), pointer :: stateVecTemp(:)
   type(N_Vector),           pointer :: sunvec_y             ! sundials solution vector
   type(N_Vector),           pointer :: sunvec_yp            ! sundials derivative vector
   type(N_Vector),           pointer :: sunvec_av            ! sundials tolerance vector
@@ -342,21 +345,21 @@ subroutine summaSolve4ida(                         &
   call setInitialCondition(nState, stateVecInit, sunvec_y, sunvec_yp)
 
   ! create memory
-  ida_mem = FIDACreate(sunctx)
+  ida_mem = FCVODECreate(CV_BDF, sunctx)
   if (.not. c_associated(ida_mem)) then; err=20; message='summaSolve4ida: ida_mem = NULL'; return; endif
 
   ! Attach user data to memory
-  retval = FIDASetUserData(ida_mem, c_loc(eqns_data))
-  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDASetUserData'; return; endif
+  retval = FCVODESetUserData(ida_mem, c_loc(eqns_data))
+  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODESetUserData'; return; endif
 
   ! Set the function IDA will use to advance the state
   t0 = 0._rkind
-  retval = FIDAInit(ida_mem, c_funloc(eval8summa4ida), t0, sunvec_y, sunvec_yp)
-  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDAInit'; return; endif
+  retval = FCVODEInit(ida_mem, c_funloc(eval8summa4cvode), t0, sunvec_y)
+  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODEInit'; return; endif
 
   ! set tolerances
-  retval = FIDAWFtolerances(ida_mem, c_funloc(computWeight4ida))
-  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDAWFtolerances'; return; endif
+  retval = FCVODEWFtolerances(ida_mem, c_funloc(computWeight4ida))
+  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODEWFtolerances'; return; endif
 
   ! initialize rootfinding problem and allocate space, counting roots
   if(detect_events)then
@@ -376,8 +379,8 @@ subroutine summaSolve4ida(                         &
     allocate( rootsfound(nRoot) )
     allocate( rootdir(nRoot) )
     rootdir = 0
-    retval = FIDARootInit(ida_mem, nRoot, c_funloc(layerDisCont4ida))
-    if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDARootInit'; return; endif
+    retval = FCVODERootInit(ida_mem, nRoot, c_funloc(layerDisCont4cvode))
+    if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODERootInit'; return; endif
   else ! will not use, allocate at something
     nRoot = 1
     allocate( rootsfound(nRoot) )
@@ -412,18 +415,18 @@ subroutine summaSolve4ida(                         &
 
   ! Attach the matrix and linear solver
   ! For the nonlinear solver, IDA uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it
-  retval = FIDASetLinearSolver(ida_mem, sunlinsol_LS, sunmat_A);
-  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDASetLinearSolver'; return; endif
+  retval = FCVODESetLinearSolver(ida_mem, sunlinsol_LS, sunmat_A);
+  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODESetLinearSolver'; return; endif
 
   ! Set the user-supplied Jacobian routine
-  if(.not.use_fdJac)then
-    retval = FIDASetJacFn(ida_mem, c_funloc(computJacob4ida))
-    if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDASetJacFn'; return; endif
+     if(.not.use_fdJac)then
+    !retval = FCVODESetJacFn(ida_mem, c_funloc(computJacob4cvode))
+    if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODESetJacFn'; return; endif
   endif
 
   ! Enforce the solver to stop at end of the time step
-  retval = FIDASetStopTime(ida_mem, dt_cur)
-  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDASetStopTime'; return; endif
+  retval = FCVODESetStopTime(ida_mem, dt_cur)
+  if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODESetStopTime'; return; endif
 
   ! Set solver parameters at end of setup
   call setSolverParams(dt_cur, nint(mpar_data%var(iLookPARAM%maxiter)%dat(1)), ida_mem, retval)
@@ -431,8 +434,8 @@ subroutine summaSolve4ida(                         &
 
   ! Disable error messages and warnings
   if(offErrWarnMessage) then
-    retval = FIDASetErrFile(ida_mem, c_null_ptr)
-    retval = FIDASetNoInactiveRootWarn(ida_mem)
+    retval = FCVODESetErrFile(ida_mem, c_null_ptr)
+    retval = FCVODESetNoInactiveRootWarn(ida_mem)
   endif
 
   !*********************** Main Solver * loop on one_step mode *****************************
@@ -445,16 +448,17 @@ subroutine summaSolve4ida(                         &
     ! call this at beginning of step to reduce root bouncing (only looking in one direction)
     if(detect_events .and. .not.tinystep)then
       call find_rootdir(eqns_data, rootdir)
-      retval = FIDASetRootDirection(ida_mem, rootdir)
-      if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDASetRootDirection'; return; endif
+      retval = FCVODESetRootDirection(ida_mem, rootdir)
+      if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODESetRootDirection'; return; endif
     endif
 
     eqns_data%firstFluxCall = .false. ! already called for initial
     eqns_data%firstSplitOper = .true. ! always true at start of dt_cur since no splitting
 
     ! call IDASolve, advance solver just one internal step
-    retvalr = FIDASolve(ida_mem, dt_cur, tret, sunvec_y, sunvec_yp, IDA_ONE_STEP)
+    retvalr = FCVODE(ida_mem, dt_cur, sunvec_y, tret, CV_ONE_STEP)
     ! early return if IDASolve failed
+
     if( retvalr < 0 )then
       idaSucceeds = .false.
       call getErrMessage(retvalr,cmessage)
@@ -471,7 +475,7 @@ subroutine summaSolve4ida(                         &
     if(tooMuchMelt)exit
 
     ! get the last stepsize and difference from previous end time, not necessarily the same
-    retval = FIDAGetLastStep(ida_mem, dt_last)
+    retval = FCVODEGetLastStep(ida_mem, dt_last)
     dt_diff = tret(1) - tretPrev
     nSteps = nSteps + 1 ! number of time steps taken in solver
 
@@ -504,6 +508,7 @@ subroutine summaSolve4ida(                         &
                                                     + dCompress_dPsiPrev(:)  * mLayerMatricHeadPrimePrev(:) ) * dt_diff/2._rkind
 
     ! save required quantities for next step
+
     eqns_data%scalarCanopyTempPrev     = eqns_data%scalarCanopyTempTrial
     eqns_data%scalarCanopyIcePrev      = eqns_data%scalarCanopyIceTrial
     eqns_data%scalarCanopyLiqPrev      = eqns_data%scalarCanopyLiqTrial
@@ -522,27 +527,28 @@ subroutine summaSolve4ida(                         &
 
     ! Restart for where vegetation and layers cross freezing point
     if(detect_events)then
-      if (retvalr .eq. IDA_ROOT_RETURN) then !IDASolve succeeded and found one or more roots at tret(1)
+      if (retvalr .eq. CV_ROOT_RETURN) then !CVODE succeeded and found one or more roots at tret(1)
         ! rootsfound[i]= +1 indicates that gi is increasing, -1 g[i] decreasing, 0 no root
-        !retval = FIDAGetRootInfo(ida_mem, rootsfound)
-        !if (retval < 0) then; err=20; message='summaSolve4ida: error in FIDAGetRootInfo'; return; endif
+        !retval = FCVODEGetRootInfo(ida_mem, rootsfound)
+        !if (retval < 0) then; err=20; message='summaSolve4ida: error in FCVODEGetRootInfo'; return; endif
         !print '(a,f15.7,2x,17(i2,2x))', "time, rootsfound[] = ", tret(1), rootsfound
         ! Reininitialize solver for running after discontinuity and restart
-        retval = FIDAReInit(ida_mem, tret(1), sunvec_y, sunvec_yp)
-        if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDAReInit'; return; endif
+        retval = FCVODEReInit(ida_mem, tret(1), sunvec_y)
+        if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODEReInit'; return; endif
         if(dt_last(1) < 0.1_rkind)then ! don't keep calling if step is small (more accurate with this tiny but getting hung up)
-          retval = FIDARootInit(ida_mem, 0, c_funloc(layerDisCont4ida))
+          retval = FCVODERootInit(ida_mem, 0, c_funloc(layerDisCont4cvode))
           tinystep = .true.
         else
-          retval = FIDARootInit(ida_mem, nRoot, c_funloc(layerDisCont4ida))
+          retval = FCVODERootInit(ida_mem, nRoot, c_funloc(layerDisCont4cvode))
           tinystep = .false.
         endif
-        if (retval /= 0) then; err=20; message='summaSolve4ida: error in FIDARootInit'; return; endif
+        if (retval /= 0) then; err=20; message='summaSolve4ida: error in FCVODERootInit'; return; endif
       endif
     endif
 
   enddo ! while loop on one_step mode until time dt_cur
   !****************************** End of Main Solver ***************************************
+
 
   if(idaSucceeds)then
     ! copy to output data
@@ -586,7 +592,7 @@ subroutine summaSolve4ida(                         &
   deallocate( rootsfound )
   deallocate( rootdir )
 
-  call FIDAFree(ida_mem)
+  call FCVODEFree(ida_mem)
   retval = FSUNLinSolFree(sunlinsol_LS)
   if(retval /= 0)then; err=20; message='summaSolve4ida: unable to free the linear solver'; return; endif
   call FSUNMatDestroy(sunmat_A)
@@ -637,6 +643,7 @@ subroutine setSolverParams(dt_cur,nonlin_iter,ida_mem,retval)
   !======= Inclusions ===========
   USE, intrinsic :: iso_c_binding
   USE fida_mod   ! Fortran interface to IDA
+  USE fcvode_mod
 
   !======= Declarations =========
   implicit none
@@ -657,36 +664,36 @@ subroutine setSolverParams(dt_cur,nonlin_iter,ida_mem,retval)
   real(qp),parameter          :: h_init = 0         ! initial stepsize
  
   ! Set the maximum BDF order
-  retval = FIDASetMaxOrd(ida_mem, max_order)
+  retval = FCVODESetMaxOrd(ida_mem, max_order)
   if (retval /= 0) return
 
   ! Set coefficient in the nonlinear convergence test
-  retval = FIDASetNonlinConvCoef(ida_mem, coef_nonlin)
+  retval = FCVODESetNonlinConvCoef(ida_mem, coef_nonlin)
   if (retval /= 0) return
 
   ! Set maximun number of nonliear iterations, maybe should just make 4 (instead of SUMMA parameter)
-  retval = FIDASetMaxNonlinIters(ida_mem, nonlin_iter)
+  retval = FCVODESetMaxNonlinIters(ida_mem, nonlin_iter)
   if (retval /= 0) return
 
   !  Set maximum number of convergence test failures
-  retval = FIDASetMaxConvFails(ida_mem, convtest_fail)
+  retval = FCVODESetMaxConvFails(ida_mem, convtest_fail)
   if (retval /= 0) return
 
   !  Set maximum number of error test failures
-  retval = FIDASetMaxErrTestFails(ida_mem, acurtest_fail)
+  retval = FCVODESetMaxErrTestFails(ida_mem, acurtest_fail)
   if (retval /= 0) return
 
   ! Set maximum number of steps
-  retval = FIDASetMaxNumSteps(ida_mem, max_step)
+  retval = FCVODESetMaxNumSteps(ida_mem, max_step)
   if (retval /= 0) return
 
   ! Set maximum stepsize
   h_max = dt_cur
-  retval = FIDASetMaxStep(ida_mem, h_max)
+  retval = FCVODESetMaxStep(ida_mem, h_max)
   if (retval /= 0) return
 
   ! Set initial stepsize
-  retval = FIDASetInitStep(ida_mem, h_init)
+  retval = FCVODESetInitStep(ida_mem, h_init)
   if (retval /= 0) return
 
 end subroutine setSolverParams
@@ -865,6 +872,95 @@ integer(c_int) function layerDisCont4ida(t, sunvec_u, sunvec_up, gout, user_data
   return
 
 end function layerDisCont4ida
+
+
+integer(c_int) function layerDisCont4cvode(t, sunvec_u, gout, user_data) &
+      result(ierr) bind(C,name='layerDisCont4cvode')
+
+  !======= Inclusions ===========
+  use, intrinsic :: iso_c_binding
+  use fsundials_nvector_mod
+  use fnvector_serial_mod
+  use soil_utils_module,only:crit_soilT  ! compute the critical temperature below which ice exists
+  use globalData,only:integerMissing     ! missing integer
+  use var_lookup,only:iLookINDEX         ! named variables for structure elements
+  use multiconst,only:Tfreeze            ! freezing point of pure water (K)
+
+  !======= Declarations =========
+  implicit none
+
+  ! calling variables
+  real(c_double), value      :: t         ! current time
+  type(N_Vector)             :: sunvec_u  ! solution N_Vector
+  real(c_double)             :: gout(999) ! root function values, if (nVeg + nSnow + 2*nSoil)>999, problem
+  type(c_ptr),    value      :: user_data ! user-defined data
+
+  ! local variables
+  integer(i4b)               :: i,ind     ! indices
+  integer(i4b)               :: nState    ! number of states
+  integer(i4b)               :: nSnow     ! number of snow layers
+  integer(i4b)               :: nSoil     ! number of soil layers
+  real(rkind)                :: xPsi      ! matric head at layer (m)
+  real(rkind)                :: TcSoil    ! critical point when soil begins to freeze (K)
+
+  ! pointers to data in SUNDIALS vectors
+  real(c_double), pointer :: uu(:)
+  type(data4ida), pointer :: eqns_data      ! equations data
+
+  !======= Internals ============
+  ! get equations data from user-defined data
+  call c_f_pointer(user_data, eqns_data)
+  nState = eqns_data%nState
+  nSnow = eqns_data%nSnow
+  nSoil = eqns_data%nSoil
+
+  ! get data array from SUNDIALS vector
+  uu(1:nState) => FN_VGetArrayPointer(sunvec_u)
+
+  ! initialize
+  ind = 0
+
+  ! identify the critical point when vegetation begins to freeze
+  if(eqns_data%indx_data%var(iLookINDEX%ixVegNrg)%dat(1)/=integerMissing)then
+    ind = ind+1
+    gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixVegNrg)%dat(1)) - Tfreeze
+  endif
+
+  if(nSnow>0)then
+    do i = 1,nSnow
+      ! identify the critical point when the snow layer begins to freeze
+      if(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)/=integerMissing)then
+        ind = ind+1
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)) - Tfreeze
+      endif
+    end do
+  endif
+
+  if(nSoil>0)then
+    do i = 1,nSoil
+      ! identify the critical point when soil matrix potential goes below 0 and Tfreeze depends only on temp
+      if (eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i)/=integerMissing)then
+        ind = ind+1
+        xPsi = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i))
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i))
+      else
+        xPsi = eqns_data%prog_data%var(iLookPROG%mLayerMatricHead)%dat(i)
+      endif
+      ! identify the critical point when the soil layer begins to freeze
+      if(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)/=integerMissing)then
+        ind = ind+1
+        TcSoil = crit_soilT(xPsi)
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)) - TcSoil
+      endif
+    end do
+  endif
+
+  ! return success
+  ierr = 0
+  return
+
+end function layerDisCont4cvode
+
 
 ! ----------------------------------------------------------------
 ! getErrMessage: private routine to get error message for IDA solver

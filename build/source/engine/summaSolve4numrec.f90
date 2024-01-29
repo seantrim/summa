@@ -943,6 +943,7 @@ contains
                   nLayers,                 & ! intent(in):    total number of layers
                   nState,                  & ! intent(in):    total number of state variables
                   .false.,                 & ! intent(in):    not inside Sundials solver
+                  .false., &
                   firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
                   firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
                   .false.,                 & ! intent(in):    not processing the first iteration in a splitting operation

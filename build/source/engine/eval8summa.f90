@@ -54,7 +54,7 @@ USE var_lookup,only:iLookINDEX                   ! named variables for structure
 USE var_lookup,only:iLookDIAG                    ! named variables for structure elements
 USE var_lookup,only:iLookFLUX                    ! named variables for structure elements
 USE var_lookup,only:iLookDERIV                   ! named variables for structure elements
-
+USE eval8summaWithPrime_module,only:eval8summa4ida
 ! look-up values for the choice of heat capacity computation
 USE mDecisions_module,only:  &
  closedForm,                 & ! heat capacity using closed form, not using enthalpy
@@ -71,6 +71,7 @@ private
 public::eval8summa
 #ifdef SUNDIALS_ACTIVE
 public::eval8summa4kinsol
+public::eval8summa4cvode
 #endif
 public::imposeConstraints
 
@@ -89,6 +90,7 @@ subroutine eval8summa(&
                       nLayers,                 & ! intent(in):    total number of layers
                       nState,                  & ! intent(in):    total number of state variables
                       insideSUN,               & ! intent(in):    flag to indicate if we are inside Sundials solver
+                      insideCVODE, & ! intent(in):  flag to indicate if we are inside the CVODE solver
                       firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
                       firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
                       firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
@@ -135,7 +137,10 @@ subroutine eval8summa(&
   USE computHeatCap_module,only:computCm
   USE computHeatCap_module, only:computStatMult         ! recompute state multiplier
   USE computResid_module,only:computResid               ! compute residuals given a state vector
+  USE computResidWithPrime_module,only:computResidWithPrime
   USE computThermConduct_module,only:computThermConduct ! recompute thermal conductivity and derivatives
+         USE computResidWithPrime_module,only:computResidWithPrime      ! compute residuals given a state vector
+
   implicit none
   ! --------------------------------------------------------------------------------------------------------------------------------
   ! --------------------------------------------------------------------------------------------------------------------------------
@@ -147,6 +152,7 @@ subroutine eval8summa(&
   integer(i4b),intent(in)         :: nLayers                ! total number of layers
   integer(i4b),intent(in)         :: nState                 ! total number of state variables
   logical(lgt),intent(in)         :: insideSUN              ! flag to indicate if we are inside Sundials solver
+  logical(lgt),intent(in)         :: insideCVODE
   logical(lgt),intent(in)         :: firstSubStep           ! flag to indicate if we are processing the first sub-step
   logical(lgt),intent(inout)      :: firstFluxCall          ! flag to indicate if we are processing the first flux call
   logical(lgt),intent(in)         :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
@@ -321,7 +327,6 @@ subroutine eval8summa(&
       ixBeg  = 1
       ixEnd  = nSoil
     endif
-
     ! initialize to state variable from the last update
     scalarCanairTempTrial     = scalarCanairTemp
     scalarCanopyTempTrial     = scalarCanopyTemp
@@ -360,7 +365,9 @@ subroutine eval8summa(&
                     err,cmessage)               ! intent(out):   error control
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
 
-    ! update diagnostic variables and derivatives
+       ! update diagnostic variables and derivatives
+       !if (.not.insideCVODE) then
+    !if (.not.insideCVODE) then
     call updateVars(&
                     ! input
                     .false.,                                   & ! intent(in):    logical flag to adjust temperature to account for the energy used in melt+freeze
@@ -384,7 +391,7 @@ subroutine eval8summa(&
                     ! output: error control
                     err,cmessage)                                ! intent(out):   error control
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
-
+    !   endif
     if(updateCp)then
        ! *** compute volumetric heat capacity C_p
       if(ixHowHeatCap == enthalpyFD)then
@@ -423,7 +430,6 @@ subroutine eval8summa(&
                         ! output: error control
                         err,cmessage)                  ! intent(out): error control
         if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
-
 
         ! *** compute volumetric heat capacity C_p = dH_T/dT
         call computHeatCap(&
@@ -519,8 +525,7 @@ subroutine eval8summa(&
                     sMul,                             & ! intent(out): multiplier for state vector (used in the residual calculations)
                     err,cmessage)                       ! intent(out): error control
       if(err/=0)then; message=trim(message)//trim(cmessage); return; endif  ! (check for errors)
-
-      ! update thermal conductivity
+         ! update thermal conductivity
       call computThermConduct(&
                           ! input: control variables
                           computeVegFlux,               & ! intent(in):    flag to denote if computing the vegetation flux
@@ -585,15 +590,14 @@ subroutine eval8summa(&
       mLayerCmTrial = 0._qp
       dCm_dTk       = 0._rkind
       dCm_dTkCanopy = 0._rkind
-    endif ! needCm
+   endif ! needCm
+   !endif
 
     ! save the number of flux calls per time step
     indx_data%var(iLookINDEX%numberFluxCalc)%dat(1) = indx_data%var(iLookINDEX%numberFluxCalc)%dat(1) + 1
-
     ! only need to check longwave balance with numerical recipes solver 
     checkLWBalance = .false.
     if(ixNumericalMethod==numrec) checkLWBalance = .true.
-
     ! compute the fluxes for a given state vector
     call computFlux(&
                     ! input-output: model control
@@ -640,6 +644,7 @@ subroutine eval8summa(&
                     err,cmessage)                ! intent(out):   error code and error message
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
 
+       !if (insideCVODE) return
     ! compute soil compressibility (-) and its derivative w.r.t. matric head (m)
     ! NOTE: we already extracted trial matrix head and volumetric liquid water as part of the flux calculations
     ! use non-prime version
@@ -661,9 +666,13 @@ subroutine eval8summa(&
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
 
     ! compute the total change in storage associated with compression of the soil matrix (kg m-2 s-1)
-    scalarSoilCompress = sum(mLayerCompress(1:nSoil)*mLayerDepth(nSnow+1:nLayers))*iden_water
+       scalarSoilCompress = sum(mLayerCompress(1:nSoil)*mLayerDepth(nSnow+1:nLayers))*iden_water
+              !if (insideCVODE) return
+
 
     ! compute the residual vector
+       !if (.not.insideCVODE) then
+       !prog_data%var(iLookPROG%scalarCanairTemp)%dat(1) = scalarCanairTempTrial
     call computResid(&
                       ! input: model control
                       dt_cur,                    & ! intent(in):  length of the time step (seconds)
@@ -698,13 +707,13 @@ subroutine eval8summa(&
                       err,cmessage)                ! intent(out): error control
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
 
+       
     ! compute the function evaluation
-    rVecScaled = fScale(:)*real(resVec(:), rkind)   ! scale the residual vector (NOTE: residual vector is in quadruple precision)
-    fEval      = 0.5_rkind*dot_product(rVecScaled,rVecScaled)
-
+       rVecScaled = fScale(:)*real(resVec(:), rkind)   ! scale the residual vector (NOTE: residual vector is in quadruple precision)
+       fEval      = 0.5_rkind*dot_product(rVecScaled,rVecScaled)
+ !endif
   ! end association with the information in the data structures
   end associate
-
 end subroutine eval8summa
 
 #ifdef SUNDIALS_ACTIVE
@@ -770,6 +779,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                 eqns_data%nLayers,                 & ! intent(in):    number of layers
                 eqns_data%nState,                  & ! intent(in):    number of state variables in the current subset
                 .true.,                            & ! intent(in):    inside SUNDIALS solver
+                .false., &
                 eqns_data%firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
                 eqns_data%firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
                 eqns_data%firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
@@ -1114,6 +1124,104 @@ subroutine imposeConstraints(model_decisions,indx_data, prog_data, mpar_data, st
   end associate
 
 end subroutine imposeConstraints
+#ifdef SUNDIALS_ACTIVE
+
+integer(c_int) function eval8summa4cvode(tres, sunvec_y, sunvec_yp, user_data) &
+      result(ierr) bind(C,name='eval8summa4cvode')
+
+  !======= Inclusions ===========
+  use, intrinsic :: iso_c_binding
+  use fsundials_nvector_mod
+  use fnvector_serial_mod
+  use type4ida
+
+
+  !======= Declarations =========
+  implicit none
+
+  ! calling variables
+  real(rkind), value          :: tres             ! current time         t
+  type(N_Vector)              :: sunvec_y         ! solution N_Vector    y
+  type(N_Vector)              :: sunvec_yp        ! derivative N_Vector  y'
+  type(c_ptr), value          :: user_data        ! user-defined data
+
+  ! pointers to data in SUNDIALS vectors
+  type(data4ida), pointer     :: eqns_data        ! equations data
+  real(rkind), pointer        :: stateVec(:)      ! solution vector
+  real(rkind), pointer        :: stateVecPrime(:) ! derivative vector
+  real(rkind), allocatable        :: rVec(:)          ! residual vector
+  logical(lgt)                :: feasible         ! feasibility of state vector
+  real(rkind) :: fNew
+  type(N_Vector) :: sunvec_r
+  real(rkind), allocatable :: stateVecTemp(:)
+  integer(i4b)                    :: iLayer
+  !real(rkind), allocatable :: fScale(:)
+  !======= Internals ============
+  
+  ! get equations data from user-defined data
+  call c_f_pointer(user_data, eqns_data)
+
+  ! get data arrays from SUNDIALS vectors
+  stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
+  stateVecTemp = stateVec
+  stateVecPrime(1:eqns_data%nState) => FN_VGetArrayPointer(sunvec_yp)
+  allocate(rVec(eqns_data%nState))
+  rVec(:) = 0
+
+  ! compute the flux vector for a given state vector
+  call eval8summa(&
+                ! input: model control
+       eqns_data%dt,                      & ! intent(in):    data step
+       eqns_data%dt, &
+                eqns_data%nSnow,                   & ! intent(in):    number of snow layers
+                eqns_data%nSoil,                   & ! intent(in):    number of soil layers
+                eqns_data%nLayers,                 & ! intent(in):    number of layers
+                eqns_data%nState,                  & ! intent(in):    number of state variables in the current subset
+                .true.,                            & ! intent(in):    inside SUNDIALS solver
+                .true., & ! intent(in): inside CVODE
+                eqns_data%firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                eqns_data%firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
+                eqns_data%firstSplitOper,          & ! intent(inout): flag to indicate if we are processing the first flux call in a splitting operation
+                eqns_data%computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                ! input: state vectors
+                stateVec,                          & ! intent(in):    model state vector
+                stateVec, & ! intent(in): scale - not used for CVODE
+                eqns_data%sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                ! input: data structures
+                eqns_data%model_decisions,         & ! intent(in):    model decisions
+                eqns_data%lookup_data,             & ! intent(in):    lookup data
+                eqns_data%type_data,               & ! intent(in):    type of vegetation and soil
+                eqns_data%attr_data,               & ! intent(in):    spatial attributes
+                eqns_data%mpar_data,               & ! intent(in):    model parameters
+                eqns_data%forc_data,               & ! intent(in):    model forcing data
+                eqns_data%bvar_data,               & ! intent(in):    average model variables for the entire basin
+                eqns_data%prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                ! input-output: data structures
+                eqns_data%indx_data,               & ! intent(inout): index data
+                eqns_data%diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                eqns_data%flux_data,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                eqns_data%deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                ! input-output: here we need to pass some extra variables that do not get updated in in the IDA loops
+                eqns_data%ixSaturation, &
+                eqns_data%dBaseflow_dMatric, &
+                feasible, &
+                stateVecPrime, &
+                eqns_data%resSink, &
+                rVec, fNew, &
+                eqns_data%err,eqns_data%message)     ! intent(out):   error control
+
+  
+    
+  if(eqns_data%err > 0)then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; endif
+     if(eqns_data%err < 0)then; eqns_data%message=trim(eqns_data%message); ierr=1; return; endif
+  
+  ! return success
+  ierr = 0
+  return
+
+end function eval8summa4cvode
+#endif
 
 
 end module eval8summa_module

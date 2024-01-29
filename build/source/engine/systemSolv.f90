@@ -433,6 +433,7 @@ subroutine systemSolv(&
                     nLayers,                 & ! intent(in):    number of layers
                     nState,                  & ! intent(in):    number of state variables in the current subset
                     .false.,                 & ! intent(in):    not inside Sundials solver
+                    .false., &
                     firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
                     firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
                     firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation

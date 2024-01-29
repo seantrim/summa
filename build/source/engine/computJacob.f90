@@ -74,6 +74,8 @@ real(rkind),parameter     :: verySmall=tiny(1.0_rkind)     ! a very small number
 private
 public::computJacob
 #ifdef SUNDIALS_ACTIVE
+
+public::computJacob4cvode
 public::computJacob4kinsol
 #endif
 
@@ -1091,8 +1093,77 @@ integer(c_int) function computJacob4kinsol(sunvec_y, sunvec_r, sunmat_J, &
   return
             
 end function computJacob4kinsol
-#endif
 
+
+integer(c_int) function computJacob4cvode(t, sunvec_y, sunvec_yp, &
+     sunmat_J, user_data, sunvec_temp1, sunvec_temp2, sunvec_temp3) result(ierr) bind(C, name='computJacob4cvode')
+  !======= Inclusions ===========
+  use, intrinsic :: iso_c_binding
+  use fsundials_nvector_mod
+  use fsundials_matrix_mod
+  use fnvector_serial_mod
+  use fsunmatrix_band_mod
+  use fsunmatrix_dense_mod
+  use type4ida
+
+  !======= Declarations =========
+  implicit none
+
+  ! calling variables
+  real(rkind), value            :: t              ! current time
+  type(N_Vector)                :: sunvec_y       ! solution N_Vector
+  type(N_Vector)                :: sunvec_yp      ! derivative N_Vector
+  type(SUNMatrix)               :: sunmat_J       ! Jacobian SUNMatrix
+  type(c_ptr), value            :: user_data      ! user-defined data
+  type(N_Vector)                :: sunvec_temp1   ! temporary N_Vector
+  type(N_Vector)                :: sunvec_temp2   ! temporary N_Vector
+  type(N_Vector)                :: sunvec_temp3   ! temporary N_Vector
+
+  ! pointers to data in SUNDIALS vectors
+  real(rkind), pointer          :: Jac(:,:)       ! Jacobian matrix
+  type(data4ida), pointer       :: eqns_data      ! equations data
+  ! ----------------------------------------------------------------
+
+  ! get equations data from user-defined data
+  call c_f_pointer(user_data, eqns_data)
+
+  ! get data arrays from SUNDIALS vectors
+  if (eqns_data%ixMatrix==ixBandMatrix) Jac(1:nBands, 1:eqns_data%nState) => FSUNBandMatrix_Data(sunmat_J)
+  if (eqns_data%ixMatrix==ixFullMatrix) Jac(1:eqns_data%nState, 1:eqns_data%nState) => FSUNDenseMatrix_Data(sunmat_J)
+
+  ! compute the analytical Jacobian matrix
+  ! NOTE: The derivatives were computed in the previous call to computFlux
+  !       This occurred either at the call to eval8summaWithPrime at the start of systemSolv
+  !        or in the call to eval8summaWithPrime in the previous iteration
+  call computJacob(&
+                ! input: model control
+                
+                1._qp,                                    & ! intent(in):    length of the time step (seconds)
+                eqns_data%nSnow,                          & ! intent(in):    number of snow layers
+                eqns_data%nSoil,                          & ! intent(in):    number of soil layers
+                eqns_data%nLayers,                        & ! intent(in):    total number of layers
+                eqns_data%computeVegFlux,                 & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                (eqns_data%model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel), & ! intent(in):    flag to indicate if we need to compute baseflow
+                eqns_data%ixMatrix,                       & ! intent(in):    form of the Jacobian matrix
+                eqns_data%indx_data,                      & ! intent(in):    index data
+                eqns_data%prog_data,                      & ! intent(in):    model prognostic variables for a local HRU
+                eqns_data%diag_data,                      & ! intent(in):    model diagnostic variables for a local HRU
+                eqns_data%deriv_data,                     & ! intent(in):    derivatives in model fluxes w.r.t. relevant state variables
+                eqns_data%dBaseflow_dMatric,              & ! intent(in):    derivative in baseflow w.r.t. matric head (s-1)
+                eqns_data%dMat, &
+                ! input: state variables
+                Jac,                                      & ! intent(out):   Jacobian matrix
+                ! output: error control
+                eqns_data%err,eqns_data%message)            ! intent(out):   error code and error message
+  if(eqns_data%err > 0)then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; endif
+  if(eqns_data%err < 0)then; eqns_data%message=trim(eqns_data%message); ierr=1; return; endif
+
+  ! return success
+  ierr = 0
+  return
+
+end function computJacob4cvode
+#endif
 ! **********************************************************************************************************
 ! private function: get the off-diagonal index in the band-diagonal matrix
 ! **********************************************************************************************************
