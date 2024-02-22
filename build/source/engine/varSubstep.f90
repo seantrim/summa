@@ -77,7 +77,8 @@ USE multiconst,only:&
 USE mDecisions_module,only:       &
                     numrec       ,&  ! home-grown backward Euler solution using free versions of Numerical recipes
                     kinsol       ,&  ! SUNDIALS backward Euler solution using Kinsol
-                    ida              ! SUNDIALS solution using IDA
+                    ida          ,&  ! SUNDIALS solution using IDA
+                    cvode            ! SUNDIALS solution using CVODE
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -404,7 +405,7 @@ subroutine varSubstep(&
 
       ! identify the need to check the mass balance
       select case(ixNumericalMethod)
-        case(ida);            checkMassBalance = .false. ! IDA balance agreement levels are controlled by set tolerances (maybe kinsol should be false too)
+        case(ida, cvode);     checkMassBalance = .false. ! IDA balance agreement levels are controlled by set tolerances (maybe kinsol should be false too)
         case(kinsol, numrec); checkMassBalance = .true.  ! (.not.scalarSolution)
       end select
 
@@ -782,7 +783,7 @@ subroutine updateProg(dt,nSnow,nSoil,nLayers,doAdjustTemp,computeVegFlux,untappe
     verySmall_snow = verySmall*2._rkind
 
     select case(ixNumericalMethod)
-      case(ida)
+      case(ida, cvode)
 #ifdef SUNDIALS_ACTIVE
         ! IDA precision needs to vary based on set tolerances
         verySmall_veg = mpar_data%var(iLookPARAM%absTolWatVeg)%dat(1)*2._rkind

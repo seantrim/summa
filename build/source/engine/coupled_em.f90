@@ -84,7 +84,8 @@ USE mDecisions_module,only:         &
 USE mDecisions_module,only:         &
                       numrec       ,&      ! home-grown backward Euler solution using free versions of Numerical recipes
                       kinsol       ,&      ! SUNDIALS backward Euler solution using Kinsol
-                      ida                  ! SUNDIALS solution using IDA
+                      ida          ,&      ! SUNDIALS solution using IDA
+                      cvode                ! SUNDIALS solution using CVODE
 
 ! privacy
 implicit none
@@ -1211,7 +1212,7 @@ subroutine coupled_em(&
 
       ! identify the need to check the mass balance, both methods should work if tolerance coarse enough
       select case(ixNumericalMethod)
-        case(ida);            checkMassBalance = .false. ! IDA balance agreement levels are controlled by set tolerances
+        case(ida, cvode);            checkMassBalance = .false. ! IDA balance agreement levels are controlled by set tolerances
         case(kinsol, numrec); checkMassBalance = .true.  ! KINSOL or numrec give finite difference dt_sub fluxes and were summed for an average flux
         case default; err=20; message=trim(message)//'expect num_method to be ida, kinsol, or numrec (or itertive, which is numrec)'; return
       end select

@@ -102,7 +102,8 @@ USE mDecisions_module,only:  &
 USE mDecisions_module,only:&
                     numrec       ,&  ! home-grown backward Euler solution using free versions of Numerical recipes
                     kinsol       ,&  ! SUNDIALS backward Euler solution using Kinsol
-                    ida              ! SUNDIALS solution using IDA
+                    ida          ,&  ! SUNDIALS solution using IDA
+                    cvode            ! SUNDIALS solution using CVODE
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -162,6 +163,7 @@ subroutine systemSolv(&
   USE eval8summaWithPrime_module,only:eval8summaWithPrime ! get the fluxes and residuals
   USE summaSolve4ida_module,only:summaSolve4ida           ! solve DAE by IDA
   USE summaSolve4kinsol_module,only:summaSolve4kinsol     ! solve DAE by KINSOL
+  USE summaSolve4cvode_module,only:summaSolve4cvode       ! solve by CVODE
 #endif
   USE eval8summa_module,only:eval8summa                ! get the fluxes and residuals
   USE summaSolve4numrec_module,only:summaSolve4numrec  ! solve DAE by numerical recipes
@@ -330,7 +332,7 @@ subroutine systemSolv(&
     if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
     ! allocate space for mLayerCmpress_sum at the start of the time step
-    if(ixNumericalMethod==ida)then
+    if(ixNumericalMethod==ida .or. ixNumericalMethod==cvode)then
       allocate( mLayerCmpress_sum(nSoil) )
     else
       allocate( mLayerCmpress_sum(0) ) ! allocate zero-length dimnensions to avoid passing around an unallocated matrix
@@ -595,6 +597,108 @@ subroutine systemSolv(&
           scalarSoilCompress = sum(mLayerCompress(1:nSoil)*mLayerDepth(nSnow+1:nLayers))*iden_water
         end associate soilVars
 
+      case(cvode)
+        ! get tolerance vectors
+        call popTol4ida(&
+                        ! input
+                        nState,                           & ! intent(in):    number of desired state variables
+                        prog_data,                        & ! intent(in):    model prognostic variables for a local HRU
+                        diag_data,                        & ! intent(in):    model diagnostic variables for a local HRU
+                        indx_data,                        & ! intent(in):    indices defining model states and layers
+                        mpar_data,                        & ! intent(in):    model parameters
+                        ! output
+                        atol,                             & ! intent(out):   absolute tolerances vector (mixed units)
+                        rtol,                             & ! intent(out):   relative tolerances vector (mixed units)
+                        err,cmessage)                       ! intent(out):   error control
+        if(err/=0)then; message=trim(message)//trim(cmessage); return; endif  ! (check for errors)
+
+        ! allocate space for the temporary flux_sum structure
+        call allocLocal(flux_meta(:),flux_sum,nSnow,nSoil,err,cmessage)
+        if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
+
+        ! initialize flux_sum
+        do concurrent ( iVar=1:size(flux_meta) )
+          flux_sum%var(iVar)%dat(:) = 0._rkind
+        end do
+        ! initialize sum of compression of the soil matrix
+        mLayerCmpress_sum(:) = 0._rkind
+
+        !---------------------------
+        ! * solving y' = g(y) by CVODE, y is the state vector and y' is the time derivative vector dy/dt
+        !---------------------------
+        ! iterations and updates to trial state vector, fluxes, and derivatives are done inside CVODE solver
+        call summaSolve4cvode(&
+                          dt_cur,                  & ! intent(in):    current stepsize
+                          dt,                      & ! intent(in):    entire time step for drainage pond rate
+                          atol,                    & ! intent(in):    absolute tolerance
+                          rtol,                    & ! intent(in):    relative tolerance
+                          nSnow,                   & ! intent(in):    number of snow layers
+                          nSoil,                   & ! intent(in):    number of soil layers
+                          nLayers,                 & ! intent(in):    number of snow+soil layers
+                          nState,                  & ! intent(in):    number of state variables in the current subset
+                          ixMatrix,                & ! intent(in):    type of matrix (dense or banded)
+                          firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                          computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                          scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                          ! input: state vector
+                          stateVecTrial,           & ! intent(in):    model state vector at the beginning of the data time step
+                          sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                          dMat,                    & ! intent(inout)  diagonal of the Jacobian matrix (excludes fluxes)
+                          ! input: data structures
+                          model_decisions,         & ! intent(in):    model decisions
+                          lookup_data,             & ! intent(in):    lookup tables
+                          type_data,               & ! intent(in):    type of vegetation and soil
+                          attr_data,               & ! intent(in):    spatial attributes
+                          mpar_data,               & ! intent(in):    model parameters
+                          forc_data,               & ! intent(in):    model forcing data
+                          bvar_data,               & ! intent(in):    average model variables for the entire basin
+                          prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                          ! input-output: data structures
+                          indx_data,               & ! intent(inout): index data
+                          diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                          flux_temp,               & ! intent(inout): model fluxes for a local HRU
+                          flux_sum,                & ! intent(inout): sum of fluxes model fluxes for a local HRU over a data step
+                          deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                          mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
+                          ! output
+                          ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                          sunSucceeds,             & ! intent(out):   flag to indicate if cvode successfully solved the problem in current data step
+                          tooMuchMelt,             & ! intent(inout): flag to denote that there was too much melt
+                          nSteps,                  & ! intent(out):   number of time steps taken in solver
+                          stateVecNew,             & ! intent(out):   model state vector (y) at the end of the data time step
+                          stateVecPrime,           & ! intent(out):   derivative of model state vector (y') at the end of the data time step
+                          err,cmessage)              ! intent(out):   error control
+        ! check if CVODE is successful, only fail outright in the case of a non-recoverable error
+        if( .not.sunSucceeds )then
+          message=trim(message)//trim(cmessage)
+          !if(err.ne.-20 .or. err=0) err = 20 ! 0 if infeasible solution, could happen since not using imposeConstraints 
+          if(err.ne.-20) err = 20 ! -20 is a recoverable error
+          return
+        else
+          if (tooMuchMelt) return !exit to start same step over after merge
+        endif
+        niter = 0  ! iterations are counted inside cvode solver
+
+        ! save the computed solution
+        stateVecTrial = stateVecNew
+
+        ! compute average flux
+        do iVar=1,size(flux_meta)
+          flux_temp%var(iVar)%dat(:) = ( flux_sum%var(iVar)%dat(:) ) /  dt_cur
+        end do
+
+        ! compute the total change in storage associated with compression of the soil matrix (kg m-2)
+        soilVars_cvode: associate(&
+          ! layer geometry
+          mLayerDepth             => prog_data%var(iLookPROG%mLayerDepth)%dat               ,& ! depth of each layer in the snow-soil sub-domain (m)
+          mLayerCompress          => diag_data%var(iLookDIAG%mLayerCompress)%dat            ,& ! change in storage associated with compression of the soil matrix (-)
+          scalarSoilCompress      => diag_data%var(iLookDIAG%scalarSoilCompress)%dat(1)      & ! total change in storage associated with compression of the soil matrix (kg m-2 s-1)
+          )
+          mLayerCompress = mLayerCmpress_sum /  dt_cur
+          scalarSoilCompress = sum(mLayerCompress(1:nSoil)*mLayerDepth(nSnow+1:nLayers))*iden_water
+        end associate soilVars_Cvode
+
+   
       case(kinsol)
         !---------------------------
         ! * solving F(y) = 0 by Backward Euler with KINSOL, y is the state vector 

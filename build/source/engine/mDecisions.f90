@@ -60,6 +60,7 @@ integer(i4b),parameter,public :: laiScaling           =  72    ! exponential fun
 integer(i4b),parameter,public :: numrec               =  81    ! home-grown backward Euler solution using free versions of Numerical recipes
 integer(i4b),parameter,public :: kinsol               =  82    ! SUNDIALS backward Euler solution using Kinsol
 integer(i4b),parameter,public :: ida                  =  83    ! SUNDIALS solution using IDA
+integer(i4b),parameter,public :: cvode                =  84    ! SUNDIALS solution using CVODE
 ! look-up values for method used to compute derivative
 integer(i4b),parameter,public :: numerical            =  91    ! numerical solution
 integer(i4b),parameter,public :: analytical           =  92    ! analytical solution
@@ -400,13 +401,14 @@ subroutine mDecisions(err,message)
     case('kinsol'  ); model_decisions(iLookDECISIONS%num_method)%iDecision = kinsol          ! SUNDIALS backward Euler solution using Kinsol
     case('sundials'); model_decisions(iLookDECISIONS%num_method)%iDecision = ida             ! SUNDIALS solution using IDA
     case('ida'     ); model_decisions(iLookDECISIONS%num_method)%iDecision = ida             ! SUNDIALS solution using IDA
+    case('cvode'   ); model_decisions(iLookDECISIONS%num_method)%iDecision = cvode
     case default
       err=10; message=trim(message)//"unknown numerical method [option="//trim(model_decisions(iLookDECISIONS%num_method)%cDecision)//"]"; return
   end select
 
   ! make sure compiled with SUNDIALS if want to use it
 #ifndef SUNDIALS_ACTIVE
-  if(model_decisions(iLookDECISIONS%num_method)%iDecision==ida .or. model_decisions(iLookDECISIONS%num_method)%iDecision==kinsol)then
+  if(model_decisions(iLookDECISIONS%num_method)%iDecision==ida .or. model_decisions(iLookDECISIONS%num_method)%iDecision==kinsol .or. model_decisions(iLookDECISIONS%num_method)%iDecision==cvode)then
     err=20; message=trim(message)//'cannot use num_method as ida or kinsol if did not compile with -DCMAKE_BUILD_TYPE=Sundials'; return
   endif
 #endif

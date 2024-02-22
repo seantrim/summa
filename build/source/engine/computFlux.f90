@@ -232,6 +232,7 @@ subroutine computFlux(&
   ! initialize error control
   err=0; message='computFlux/'
 
+
   call initialize_computFlux ! Preliminary operations to start routine
 
   ! *** CALCULATE ENERGY FLUXES OVER VEGETATION ***
@@ -438,7 +439,8 @@ contains
    ixSnowSoilNrg                => indx_data%var(iLookINDEX%ixSnowSoilNrg)%dat,            & ! intent(in): [i4b(:)] indices for energy states in the snow+soil subdomain
    mLayerNrgFlux                => flux_data%var(iLookFLUX%mLayerNrgFlux)%dat              ) ! intent(out): [dp] net energy flux for each layer within the snow+soil domain (J m-3 s-1)
    ! *** WRAP UP ***
-   ! define model flux vector for the vegetation sub-domain
+    ! define model flux vector for the vegetation sub-domain
+
    if (ixCasNrg/=integerMissing) fluxVec(ixCasNrg) = scalarCanairNetNrgFlux/canopyDepth
    if (ixVegNrg/=integerMissing) fluxVec(ixVegNrg) = scalarCanopyNetNrgFlux/canopyDepth
    if (ixVegHyd/=integerMissing) fluxVec(ixVegHyd) = scalarCanopyNetLiqFlux   ! NOTE: solid fluxes are handled separately
@@ -463,7 +465,7 @@ contains
    ! NOTE: ixVolFracWat  and ixVolFracLiq can also include states in the soil domain, hence enable primary variable switching
    if (nSnowSoilHyd>0) then  ! check if any hydrology states exist
      do iLayer=1,nLayers     ! loop through non-missing energy state variables in the snow+soil domain
-       if (ixSnowSoilHyd(iLayer)/=integerMissing) then   ! check if a given hydrology state exists
+        if (ixSnowSoilHyd(iLayer)/=integerMissing) then   ! check if a given hydrology state exists
          select case(layerType(iLayer))
            case(iname_snow); fluxVec(ixSnowSoilHyd(iLayer)) = mLayerLiqFluxSnow(iLayer)
            case(iname_soil); fluxVec(ixSnowSoilHyd(iLayer)) = mLayerLiqFluxSoil(iLayer-nSnow)
@@ -473,8 +475,10 @@ contains
      end do
    end if  ! end if any hydrology states exist
    ! compute the flux vector for the aquifer
+
    if (ixAqWat/=integerMissing) fluxVec(ixAqWat) = scalarAquiferTranspire + scalarAquiferRecharge - scalarAquiferBaseflow
   end associate
+
 
    firstFluxCall=.false. ! set the first flux call to false
  end subroutine finalize_computFlux

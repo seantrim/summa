@@ -220,7 +220,7 @@ endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Sundials)
     message("\nUsing SUNDIALS libraries for IDA and Kinsol, should have been installed previously")
-    set(LIB_SUNDIALS -lsundials_fcvode_mod -lsundials_fnvecmanyvector_mod -lsundials_fnvecserial_mod -lsundials_fsunlinsoldense_mod -lsundials_fsunmatrixdense_mod -lsundials_fkinsol_mod -lsundials_fsunnonlinsolnewton_mod)
+    set(LIB_SUNDIALS -lsundials_fcvode_mod -lsundials_fida_mod -lsundials_fnvecmanyvector_mod -lsundials_fnvecserial_mod -lsundials_fsunlinsoldense_mod -lsundials_fsunmatrixdense_mod -lsundials_fkinsol_mod -lsundials_fsunnonlinsolnewton_mod)
 elseif(CMAKE_BUILD_TYPE MATCHES BE)
     message("\nUsing Backward Euler based off free versions of Numerical Recipes only")
 else()
@@ -338,6 +338,8 @@ set(MODRUN
     ${ENGINE_DIR}/canopySnow.f90
     ${ENGINE_DIR}/derivforce.f90
     ${ENGINE_DIR}/getVectorz.f90
+        ${ENGINE_DIR}/computPrime.f90
+
     ${ENGINE_DIR}/indexState.f90
     ${ENGINE_DIR}/layerMerge.f90
     ${ENGINE_DIR}/layerDivide.f90
@@ -389,6 +391,7 @@ set(SOLVER_SUNDIALS
     ${ENGINE_DIR}/computResidWithPrime.f90
     ${ENGINE_DIR}/eval8summaWithPrime.f90
     ${ENGINE_DIR}/summaSolve4ida.f90
+    ${ENGINE_DIR}/summaSolve4cvode.f90
     ${ENGINE_DIR}/summaSolve4kinsol.f90)
 
 # Driver support modules

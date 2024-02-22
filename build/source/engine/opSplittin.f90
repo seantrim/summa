@@ -103,7 +103,8 @@ USE data_types,only:&
 USE mDecisions_module,only:       &
                     numrec       ,& ! home-grown backward Euler solution using free versions of Numerical recipes
                     kinsol       ,& ! SUNDIALS backward Euler solution using Kinsol
-                    ida             ! SUNDIALS solution using IDA
+                    ida          ,& ! SUNDIALS solution using IDA
+                    cvode           ! SUNDIALS solution using CVODE
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -374,7 +375,7 @@ subroutine opSplittin(&
    associate(ixNumericalMethod => model_decisions(iLookDECISIONS%num_method)%iDecision) ! intent(in): [i4b] choice of numerical solver
     ! we just solve the fully coupled problem if IDA for now, splitting can happen otherwise
     select case(ixNumericalMethod)
-     case(ida);            nCoupling = 1
+     case(ida, cvode);     nCoupling = 1
      case(kinsol, numrec); nCoupling = 2
     end select
    end associate
