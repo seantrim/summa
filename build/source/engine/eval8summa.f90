@@ -54,7 +54,11 @@ USE var_lookup,only:iLookINDEX                   ! named variables for structure
 USE var_lookup,only:iLookDIAG                    ! named variables for structure elements
 USE var_lookup,only:iLookFLUX                    ! named variables for structure elements
 USE var_lookup,only:iLookDERIV                   ! named variables for structure elements
+
+#ifdef SUNDIALS_ACTIVE
 USE eval8summaWithPrime_module,only:eval8summa4ida
+#endif
+
 ! look-up values for the choice of heat capacity computation
 USE mDecisions_module,only:  &
  closedForm,                 & ! heat capacity using closed form, not using enthalpy
@@ -137,9 +141,10 @@ subroutine eval8summa(&
   USE computHeatCap_module,only:computCm
   USE computHeatCap_module, only:computStatMult         ! recompute state multiplier
   USE computResid_module,only:computResid               ! compute residuals given a state vector
-  USE computResidWithPrime_module,only:computResidWithPrime
   USE computThermConduct_module,only:computThermConduct ! recompute thermal conductivity and derivatives
-         USE computResidWithPrime_module,only:computResidWithPrime      ! compute residuals given a state vector
+#ifdef SUNDIALS_ACTIVE
+  USE computResidWithPrime_module,only:computResidWithPrime      ! compute residuals given a state vector
+#endif
 
   implicit none
   ! --------------------------------------------------------------------------------------------------------------------------------
@@ -801,9 +806,10 @@ subroutine eval8summa_cvode(&
   USE computHeatCap_module,only:computCm
   USE computHeatCap_module, only:computStatMult         ! recompute state multiplier
   USE computResid_module,only:computResid               ! compute residuals given a state vector
-  USE computResidWithPrime_module,only:computResidWithPrime
   USE computThermConduct_module,only:computThermConduct ! recompute thermal conductivity and derivatives
+#ifdef SUNDIALS_ACTIVE
   USE computResidWithPrime_module,only:computResidWithPrime      ! compute residuals given a state vector
+#endif
     USE computPrime_module,only:computePrime
 
 
