@@ -210,6 +210,8 @@ subroutine computFlux(&
   real(rkind)                        :: above_soilLiqFluxDeriv      ! derivative in layer above soil (canopy or snow) liquid flux w.r.t. liquid water
   real(rkind)                        :: above_soildLiq_dTk          ! derivative of layer above soil (canopy or snow) liquid flux w.r.t. temperature
   real(rkind)                        :: above_soilFracLiq           ! fraction of liquid water layer above soil (canopy or snow) (-)
+  logical(lgt),parameter             :: which_fluxes=.false.        ! flag to confirm which flux calculators are utilized
+
   ! ---------------------- classes for flux subroutine arguments (classes defined in data_types module) ----------------------
   !      ** intent(in) arguments **       ||       ** intent(inout) arguments **        ||      ** intent(out) arguments **
   type(in_type_vegNrgFlux) :: in_vegNrgFlux;                                            type(out_type_vegNrgFlux) :: out_vegNrgFlux ! vegNrgFlux arguments
@@ -396,6 +398,61 @@ contains
    ixGroundwater                => model_decisions(iLookDECISIONS%groundwatr)%iDecision, & ! intent(in): [i4b] groundwater parameterization
    iLayerLiqFluxSnow            => flux_data%var(iLookFLUX%iLayerLiqFluxSnow)%dat,       & ! intent(out): [dp(0:)] vertical liquid water flux at snow layer interfaces (-)
    iLayerLiqFluxSoil            => flux_data%var(iLookFLUX%iLayerLiqFluxSoil)%dat        ) ! intent(out): [dp(0:)] vertical liquid water flux at soil layer interfaces (-)
+
+   ! verify which flux calculators are utilized
+   if ((which_fluxes).and.(firstFluxCall)) then
+    print *, "The follwing flux calculators are utilized:"
+    associate(&
+      ixCasNrg => indx_data%var(iLookINDEX%ixCasNrg)%dat(1), & ! intent(in): [i4b] index of canopy air space energy state variable
+      ixVegNrg => indx_data%var(iLookINDEX%ixVegNrg)%dat(1), & ! intent(in): [i4b] index of canopy energy state variable
+      ixTopNrg => indx_data%var(iLookINDEX%ixTopNrg)%dat(1)  ) ! intent(in): [i4b] index of upper-most energy state in the snow+soil subdomain
+      ! identify the need to calculate the energy flux over vegetation
+      doVegNrgFlux = (ixCasNrg/=integerMissing .or. ixVegNrg/=integerMissing .or. ixTopNrg/=integerMissing)
+      if (doVegNrgFlux) then ! if necessary, calculate the energy fluxes over vegetation
+       print *, "vegNrgFlux"
+      end if
+    end associate
+
+    associate(nSnowSoilNrg => indx_data%var(iLookINDEX%nSnowSoilNrg)%dat(1)) ! intent(in): [i4b] number of energy state variables in the snow+soil domain
+      if (nSnowSoilNrg>0) then ! if necessary, calculate energy fluxes at layer interfaces through the snow and soil domain
+       print *, "ssdNrgFlux"
+      end if
+    end associate
+
+    associate(ixVegHyd => indx_data%var(iLookINDEX%ixVegHyd)%dat(1)) ! intent(in): [i4b] index of canopy hydrology state variable (mass)
+      if (ixVegHyd/=integerMissing) then ! if necessary, calculate liquid water fluxes through vegetation
+       print *, "vegLiqFlux"
+      end if
+    end associate
+
+    associate(nSnowOnlyHyd => indx_data%var(iLookINDEX%nSnowOnlyHyd)%dat(1)) ! intent(in): [i4b] number of hydrology variables in the snow domain
+      if (nSnowOnlyHyd>0) then ! if necessary, compute liquid fluxes through snow
+       print *, "snowLiqFlx"
+      end if
+    end associate
+
+    associate(nSoilOnlyHyd => indx_data%var(iLookINDEX%nSoilOnlyHyd)%dat(1)) ! intent(in): [i4b] number of hydrology variables in the soil domain
+      if (nSoilOnlyHyd>0) then ! if necessary, calculate the liquid flux through soil
+       print *, "soilLiqFlx"
+      end if 
+    end associate
+
+    associate(nSoilOnlyHyd => indx_data%var(iLookINDEX%nSoilOnlyHyd)%dat(1)) ! intent(in): [i4b] number of hydrology variables in the soil domain
+      if (nSoilOnlyHyd>0) then ! check if computing soil hydrology
+        if (local_ixGroundwater==qbaseTopmodel) then 
+          print *, "groundWatr"
+        end if
+      end if
+    end associate
+
+    associate(ixAqWat => indx_data%var(iLookINDEX%ixAqWat)%dat(1)) ! intent(in): [i4b] index of water storage in the aquifer
+      if (ixAqWat/=integerMissing) then ! check if computing aquifer fluxes
+        if (local_ixGroundwater==bigBucket) then ! compute fluxes for the big bucket
+          print *, "bigAquifer"
+        end if ! end check aquifer model decision
+      end if  ! if computing aquifer fluxes
+    end associate
+   end if
 
    numFluxCalls = numFluxCalls+1 ! increment the number of flux calls
 
