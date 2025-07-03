@@ -23,7 +23,7 @@ module summa_modelRun
 
 ! access missing values
 USE globalData,only:integerMissing   ! missing integer
-USE globalData,only:realMissing      ! missing double precision number
+USE globalData,only:realMissing      ! missing real number
 
 ! named variables
 USE globalData,only:yes,no           ! .true. and .false.
@@ -76,16 +76,16 @@ contains
  integer(i4b)                          :: iGRU,jGRU,kGRU        ! GRU indices
  ! local variables: veg phenology
  logical(lgt)                          :: computeVegFluxFlag    ! flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
- real(rkind)                              :: notUsed_canopyDepth   ! NOT USED: canopy depth (m)
- real(rkind)                              :: notUsed_exposedVAI    ! NOT USED: exposed vegetation area index (m2 m-2)
+ real(rkind)                           :: notUsed_canopyDepth   ! NOT USED: canopy depth (m)
+ real(rkind)                           :: notUsed_exposedVAI    ! NOT USED: exposed vegetation area index (m2 m-2)
  ! local variables: parallelize the model run
  integer(i4b), allocatable             :: ixExpense(:)          ! ranked index GRU w.r.t. computational expense
  integer(i4b), allocatable             :: totalFluxCalls(:)     ! total number of flux calls for each GRU
  ! local variables: timing information
  integer*8                             :: openMPstart,openMPend ! time for the start of the parallelization section
  integer*8, allocatable                :: timeGRUstart(:)       ! time GRUs start
- real(rkind),  allocatable                :: timeGRUcompleted(:)   ! time required to complete each GRU
- real(rkind),  allocatable                :: timeGRU(:)            ! time spent on each GRU
+ real(rkind),  allocatable             :: timeGRUcompleted(:)   ! time required to complete each GRU
+ real(rkind),  allocatable             :: timeGRU(:)            ! time spent on each GRU
  ! ---------------------------------------------------------------------------------------
  ! associate to elements in the data structure
  summaVars: associate(&
@@ -132,20 +132,21 @@ contains
     ! (compute the exposed LAI and SAI and whether veg is buried by snow)
     call vegPhenlgy(&
                     ! model control
-                    model_decisions,                & ! intent(in):    model decisions
-                    fracJulDay,                     & ! intent(in):    fractional julian days since the start of year
-                    yearLength,                     & ! intent(in):    number of days in the current year
-                    ! input/output: data structures
-                    typeStruct%gru(iGRU)%hru(iHRU), & ! intent(in):    type of vegetation and soil
-                    attrStruct%gru(iGRU)%hru(iHRU), & ! intent(in):    spatial attributes
-                    mparStruct%gru(iGRU)%hru(iHRU), & ! intent(in):    model parameters
-                    progStruct%gru(iGRU)%hru(iHRU), & ! intent(inout): model prognostic variables for a local HRU
-                    diagStruct%gru(iGRU)%hru(iHRU), & ! intent(inout): model diagnostic variables for a local HRU
+                    gru_struc(iGRU)%hruInfo(iHRU)%nSnow, & ! intent(in):    number of snow layers in the HRU
+                    model_decisions,                     & ! intent(in):    model decisions
+                    fracJulDay,                          & ! intent(in):    fractional julian days since the start of year
+                    yearLength,                          & ! intent(in):    number of days in the current year
+                    ! input/output: data structures      
+                    typeStruct%gru(iGRU)%hru(iHRU),      & ! intent(in):    type of vegetation and soil
+                    attrStruct%gru(iGRU)%hru(iHRU),      & ! intent(in):    spatial attributes
+                    mparStruct%gru(iGRU)%hru(iHRU),      & ! intent(in):    model parameters
+                    progStruct%gru(iGRU)%hru(iHRU),      & ! intent(inout): model prognostic variables for a local HRU
+                    diagStruct%gru(iGRU)%hru(iHRU),      & ! intent(inout): model diagnostic variables for a local HRU
                     ! output
-                    computeVegFluxFlag,             & ! intent(out): flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
-                    notUsed_canopyDepth,            & ! intent(out): NOT USED: canopy depth (m)
-                    notUsed_exposedVAI,             & ! intent(out): NOT USED: exposed vegetation area index (m2 m-2)
-                    err,cmessage)                     ! intent(out): error control
+                    computeVegFluxFlag,                  & ! intent(out): flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
+                    notUsed_canopyDepth,                 & ! intent(out): NOT USED: canopy depth (m)
+                    notUsed_exposedVAI,                  & ! intent(out): NOT USED: exposed vegetation area index (m2 m-2)
+                    err,cmessage)                          ! intent(out): error control
     if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
 
     ! save the flag for computing the vegetation fluxes

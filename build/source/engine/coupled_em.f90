@@ -22,6 +22,7 @@ module coupled_em_module
 
 ! homegrown solver data types
 USE nrtype
+USE globalData,only: verySmall ! a very small number used as an additive constant to check if substantial difference among real numbers
 
 ! physical constants
 USE multiconst,only:&
@@ -63,7 +64,7 @@ USE globalData,only:averageFlux_meta       ! metadata on the timestep-average mo
 USE globalData,only:data_step              ! time step of forcing data (s)
 USE globalData,only:model_decisions        ! model decision structure
 USE globalData,only:globalPrintFlag        ! the global print flag
-USE globalData,only:realMissing            ! missing double precision number
+USE globalData,only:realMissing            ! missing real number
 
 
 ! look-up values for the maximum interception capacity
@@ -99,8 +100,6 @@ USE mDecisions_module,only:         &
 implicit none
 private
 public::coupled_em
-! algorithmic parameters
-real(rkind),parameter     :: verySmall=1.e-6_rkind   ! used as an additive constant to check if substantial difference among real numbers
 contains
 
 
@@ -472,6 +471,7 @@ subroutine coupled_em(&
     ! compute the exposed LAI and SAI and whether veg is buried by snow
     call vegPhenlgy(&
                     ! model control
+                    nSnow,                       & ! intent(in):    number of snow layers
                     model_decisions,             & ! intent(in):    model decisions
                     ! input/output: data structures
                     fracJulDay,                  & ! intent(in):    fractional julian days since the start of year

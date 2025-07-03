@@ -34,7 +34,7 @@ USE globalData,only:iname_soil        ! named variables for soil
 
 ! access missing values
 USE globalData,only:integerMissing  ! missing integer
-USE globalData,only:realMissing     ! missing double precision number
+USE globalData,only:realMissing     ! missing real number
 
 ! access metadata
 USE globalData,only:prog_meta,diag_meta,flux_meta,indx_meta   ! metadata
@@ -132,7 +132,7 @@ contains
  real(rkind)                     :: fracLiq                ! fraction of liquid water (-)
  integer(i4b),parameter          :: ixVisible=1            ! named variable to define index in array of visible part of the spectrum
  integer(i4b),parameter          :: ixNearIR=2             ! named variable to define index in array of near IR part of the spectrum
- real(rkind),parameter           :: verySmall=1.e-10_rkind ! a very small number (used for error checking)
+ real(rkind),parameter           :: snowDepthTol=1.e-10_rkind ! tolerance for the snow depth difference (m)
  ! --------------------------------------------------------------------------------------------------------
  ! initialize error control
  err=0; message="layerDivide/"
@@ -343,11 +343,11 @@ contains
   end do
 
   ! check
-  if(abs(sum(mLayerDepth(1:nSnow)) - scalarSnowDepth) > verySmall)then
+  if(abs(sum(mLayerDepth(1:nSnow)) - scalarSnowDepth) > snowDepthTol)then
    print*, 'nSnow = ', nSnow
    write(*,'(a,1x,f30.25,1x)') 'sum(mLayerDepth(1:nSnow)) = ', sum(mLayerDepth(1:nSnow))
    write(*,'(a,1x,f30.25,1x)') 'scalarSnowDepth           = ', scalarSnowDepth
-   write(*,'(a,1x,f30.25,1x)') 'epsilon(scalarSnowDepth)  = ', epsilon(scalarSnowDepth)
+   write(*,'(a,1x,f30.25,1x)') 'snowDepthTol              = ', snowDepthTol
    message=trim(message)//'sum of layer depths does not equal snow depth'
    err=20; return
   end if

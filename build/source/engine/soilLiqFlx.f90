@@ -42,6 +42,8 @@ USE data_types,only:out_type_qDrainFlux    ! derived type for intent(out) argume
 ! missing values
 USE globalData,only:integerMissing         ! missing integer
 USE globalData,only:realMissing            ! missing real number
+USE globalData,only:veryBig                ! a very big number
+USE globalData,only:verySmall              ! a small number used as an additive constant to check if substantial difference among real numbers
 
 ! physical constants
 USE multiconst,only:iden_water             ! intrinsic density of water    (kg m-3)
@@ -91,10 +93,10 @@ implicit none
 private
 public :: soilLiqFlx
 ! constant parameters
-real(rkind),parameter     :: verySmall=1.e-12_rkind       ! a very small number (used to avoid divide by zero)
-real(rkind),parameter     :: veryBig=1.e+20_rkind         ! a very big number (used to effectively set infiltration excess to zero)
-real(rkind),parameter     :: dx=1.e-8_rkind               ! finite difference increment
+real(rkind),parameter     :: verySmaller=1.e-12_rkind ! a very small number (used to avoid divide by zero), note that this is smaller than the usual small number in globalData
 contains
+
+
 ! ***************************************************************************************************************
 ! public subroutine soilLiqFlx: compute liquid water fluxes and their derivatives
 ! ***************************************************************************************************************
@@ -230,7 +232,7 @@ contains
   &)
    ixIce = 0  ! initialize the index of the ice layer (0 means no ice in the soil profile)
    do iLayer=1,nSoil ! (loop through soil layers)
-     if (mLayerVolFracIceTrial(iLayer) > verySmall) ixIce = iLayer
+     if (mLayerVolFracIceTrial(iLayer) > verySmaller) ixIce = iLayer
    end do
   end associate
  end subroutine initialize_soilLiqFlx
@@ -297,7 +299,7 @@ contains
    message      => out_soilLiqFlx % cmessage & ! intent(out): error message
   &)
    ! check fractions sum to one
-   if (abs(sum(mLayerTranspireFrac) - 1._rkind) > verySmall) then
+   if (abs(sum(mLayerTranspireFrac) - 1._rkind) > verySmaller) then
     message=trim(message)//'fraction transpiration in soil layers does not sum to one'
     err=20; return_flag=.true.; return
    end if
@@ -806,7 +808,7 @@ contains
        dHydCondMacro_dMatric = 0._rkind
      end if
      ! compute derivatives for micropores
-     if (scalarVolFracIceTrial > verySmall) then
+     if (scalarVolFracIceTrial > verySmaller) then
        dK_dPsi__noIce        = dHydCond_dPsi(scalarMatricHeadLiqTrial,scalarSatHydCond,vGn_alpha,vGn_n,vGn_m,.true.)  ! analytical
        dHydCondMicro_dTemp   = dPsiLiq_dTemp*dK_dPsi__noIce  ! m s-1 K-1
        dHydCondMicro_dMatric = hydCond_noIce*dIceImpede_dLiq*scalardTheta_dPsi + dK_dPsi__noIce*iceImpedeFac
@@ -1681,7 +1683,7 @@ contains
   &)
 
    availCapacity = theta_sat*rootingDepth - rootZoneIce
-   if (rootZoneLiq > availCapacity+verySmall) then
+   if (rootZoneLiq > availCapacity+verySmaller) then
      message=trim(message)//'liquid water in the root zone exceeds capacity'
      err=20; return_flag=.true.; return
    end if
@@ -1831,6 +1833,8 @@ contains
      xLimg            = alpha*soilIceScale/rootZoneIce  ! upper limit of the integral
  
      !if we use this, we will have a derivative of scalarFrozenArea w.r.t. water and temperature in each layer (through mLayerVolFracIce)
+     ! Should fix to deal with frozen area in the root zone
+     !scalarFrozenArea = 1._rkind - gammp(alpha,xLimg)      ! fraction of frozen area
      scalarFrozenArea = 0._rkind
      dFrozenArea_dWat(1:nSoil) = 0._rkind
      dFrozenArea_dTk(1:nSoil)  = 0._rkind
@@ -1882,6 +1886,10 @@ contains
 
  subroutine update_surfaceFlx_liquidFlux_infiltration
   ! **** Update operations for surfaceFlx: flux condition -- final infiltration and runoff calculations ****
+  ! local variables
+  real(rkind) :: scalarInfilArea_unfrozen ! infiltration area that is not frozen
+
+  ! compute infiltration and runoff
   associate(&
    ! input: flux at the upper boundary
    scalarRainPlusMelt => in_surfaceFlx % scalarRainPlusMelt , & ! rain plus melt, used as input to the soil zone before computing surface runoff (m s-1)
@@ -1899,13 +1907,23 @@ contains
    scalarSurfaceRunoff_SE    => out_surfaceFlx % scalarSurfaceRunoff_SE    , & ! saturation excess surface runoff (m s-1)
    scalarSurfaceInfiltration => out_surfaceFlx % scalarSurfaceInfiltration   & ! surface infiltration (m s-1)
   &)
+   ! unfrozen infiltration area
+   scalarInfilArea_unfrozen=(1._rkind - scalarFrozenArea)*scalarInfilArea
+
    ! compute infiltration (m s-1), if after first flux call in a splitting operation does not change
-   scalarSurfaceInfiltration = (1._rkind - scalarFrozenArea)*scalarInfilArea*min(scalarRainPlusMelt,xMaxInfilRate)
+   scalarSurfaceInfiltration = scalarInfilArea_unfrozen*min(scalarRainPlusMelt,xMaxInfilRate)
  
    ! compute surface runoff (m s-1)
    scalarSurfaceRunoff    = scalarRainPlusMelt - scalarSurfaceInfiltration
-   scalarSurfaceRunoff_IE = scalarSurfaceRunoff ! infiltration excess runoff 
-   scalarSurfaceRunoff_SE = 0._rkind            ! saturation excess runoff 
+   if (scalarRainPlusMelt.gt.xMaxInfilRate) then ! infiltration excess runoff occurs
+    ! saturation excess runoff
+    scalarSurfaceRunoff_SE = scalarRainPlusMelt * (1._rkind - scalarInfilArea_unfrozen) ! (rain plus melt) * (saturated area) 
+    ! remaining runoff is infiltration excess
+    scalarSurfaceRunoff_IE = scalarSurfaceRunoff - scalarSurfaceRunoff_SE ! infiltration excess runoff     
+   else ! infiltration excess runoff does not occur
+    scalarSurfaceRunoff_SE = scalarSurfaceRunoff ! saturation excess runoff 
+    scalarSurfaceRunoff_IE = 0._rkind            ! infiltration excess runoff 
+   end if
  
    ! set surface hydraulic conductivity and diffusivity to missing (not used for flux condition)
    surfaceHydCond = realMissing
@@ -2083,19 +2101,19 @@ contains
          err=20; return_flag=.true.; return
        end if
        ! derivatives in hydraulic conductivity at the layer interface (m s-1)
-       dHydCondIface_dVolLiqAbove = dHydCond_dVolLiq(ixUpper)*nodeHydCondTrial(ixLower) * 0.5_rkind/max(iLayerHydCond,verySmall)
-       dHydCondIface_dVolLiqBelow = dHydCond_dVolLiq(ixLower)*nodeHydCondTrial(ixUpper) * 0.5_rkind/max(iLayerHydCond,verySmall)
+       dHydCondIface_dVolLiqAbove = dHydCond_dVolLiq(ixUpper)*nodeHydCondTrial(ixLower) * 0.5_rkind/max(iLayerHydCond,verySmaller)
+       dHydCondIface_dVolLiqBelow = dHydCond_dVolLiq(ixLower)*nodeHydCondTrial(ixUpper) * 0.5_rkind/max(iLayerHydCond,verySmaller)
        ! derivatives in hydraulic diffusivity at the layer interface (m2 s-1)
-       dDiffuseIface_dVolLiqAbove = dDiffuse_dVolLiq(ixUpper)*nodeDiffuseTrial(ixLower) * 0.5_rkind/max(iLayerDiffuse,verySmall)
-       dDiffuseIface_dVolLiqBelow = dDiffuse_dVolLiq(ixLower)*nodeDiffuseTrial(ixUpper) * 0.5_rkind/max(iLayerDiffuse,verySmall)
+       dDiffuseIface_dVolLiqAbove = dDiffuse_dVolLiq(ixUpper)*nodeDiffuseTrial(ixLower) * 0.5_rkind/max(iLayerDiffuse,verySmaller)
+       dDiffuseIface_dVolLiqBelow = dDiffuse_dVolLiq(ixLower)*nodeDiffuseTrial(ixUpper) * 0.5_rkind/max(iLayerDiffuse,verySmaller)
        ! derivatives in the flux w.r.t. volumetric liquid water content
        dq_dHydStateAbove = -dDiffuseIface_dVolLiqAbove*dLiq/dz + iLayerDiffuse/dz + dHydCondIface_dVolLiqAbove
        dq_dHydStateBelow = -dDiffuseIface_dVolLiqBelow*dLiq/dz - iLayerDiffuse/dz + dHydCondIface_dVolLiqBelow
      case(mixdform)
        ! derivatives in hydraulic conductivity
        if (useGeometric) then
-         dHydCondIface_dMatricAbove = dHydCond_dMatric(ixUpper)*nodeHydCondTrial(ixLower) * 0.5_rkind/max(iLayerHydCond,verySmall)
-         dHydCondIface_dMatricBelow = dHydCond_dMatric(ixLower)*nodeHydCondTrial(ixUpper) * 0.5_rkind/max(iLayerHydCond,verySmall)
+         dHydCondIface_dMatricAbove = dHydCond_dMatric(ixUpper)*nodeHydCondTrial(ixLower) * 0.5_rkind/max(iLayerHydCond,verySmaller)
+         dHydCondIface_dMatricBelow = dHydCond_dMatric(ixLower)*nodeHydCondTrial(ixUpper) * 0.5_rkind/max(iLayerHydCond,verySmaller)
        else
          dHydCondIface_dMatricAbove = dHydCond_dMatric(ixUpper)/2._rkind
          dHydCondIface_dMatricBelow = dHydCond_dMatric(ixLower)/2._rkind

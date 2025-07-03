@@ -87,11 +87,8 @@ public::popStateVec
 public::getScaling
 public::varExtract
 public::checkFeas
-
-! common variables
-real(rkind),parameter :: valueMissing=-9999._rkind ! missing value
-
 contains
+
 
 ! **********************************************************************************************************
 ! public subroutine popStateVec: populate model state vectors

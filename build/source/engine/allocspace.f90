@@ -55,10 +55,10 @@ USE data_types,only:var_info               ! data type for metadata
 
 ! access missing values
 USE globalData,only:integerMissing         ! missing integer
-USE globalData,only:realMissing            ! missing double precision number
+USE globalData,only:realMissing            ! missing real number
 
 USE globalData,only: nTimeDelay            ! number of timesteps in the time delay histogram
-USE globalData,only: nBand                 ! number of spectral bands
+USE globalData,only: nSpecBand             ! number of spectral bands
 
 ! access variable types
 USE var_lookup,only:iLookVarType           ! look up structure for variable typed
@@ -572,7 +572,7 @@ contains
   else
    select case(metadata(iVar)%vartype)
     case(iLookVarType%scalarv); allocate(varData%var(iVar)%dat(1),stat=err)
-    case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nBand),stat=err)
+    case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nSpecBand),stat=err)
     case(iLookVarType%midSnow); allocate(varData%var(iVar)%dat(nSnow),stat=err)
     case(iLookVarType%midSoil); allocate(varData%var(iVar)%dat(nSoil),stat=err)
     case(iLookVarType%midToto); allocate(varData%var(iVar)%dat(nLayers),stat=err)
@@ -638,7 +638,7 @@ contains
   else
    select case(metadata(iVar)%vartype)
     case(iLookVarType%scalarv); allocate(varData%var(iVar)%dat(1),stat=err)
-    case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nBand),stat=err)
+    case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nSpecBand),stat=err)
     case(iLookVarType%midSnow); allocate(varData%var(iVar)%dat(nSnow),stat=err)
     case(iLookVarType%midSoil); allocate(varData%var(iVar)%dat(nSoil),stat=err)
     case(iLookVarType%midToto); allocate(varData%var(iVar)%dat(nLayers),stat=err)
@@ -701,7 +701,7 @@ contains
   else
    select case(metadata(iVar)%vartype)
     case(iLookVarType%scalarv); allocate(varData%var(iVar)%dat(1),stat=err)
-    case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nBand),stat=err)
+    case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nSpecBand),stat=err)
     case(iLookVarType%midSnow); allocate(varData%var(iVar)%dat(nSnow),stat=err)
     case(iLookVarType%midSoil); allocate(varData%var(iVar)%dat(nSoil),stat=err)
     case(iLookVarType%midToto); allocate(varData%var(iVar)%dat(nLayers),stat=err)

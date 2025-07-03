@@ -22,6 +22,7 @@ module stomResist_module
 
 ! data types
 USE nrtype
+USE globalData,only:realMissing     ! missing real number
 
 ! physical constants
 USE multiconst, only: Rgas     ! universal gas constant (J mol-1 K-1)
@@ -41,7 +42,7 @@ USE var_lookup,only:iLookDIAG           ! named variables for structure elements
 USE var_lookup,only:iLookFLUX           ! named variables for structure elements
 USE var_lookup,only:iLookFORCE          ! named variables for structure elements
 USE var_lookup,only:iLookPARAM          ! named variables for structure elements
-USE var_lookup,only:iLookDECISIONS                           ! named variables for elements of the decision structure
+USE var_lookup,only:iLookDECISIONS      ! named variables for elements of the decision structure
 
 ! look-up values for the stomatal resistance formulation
 USE mDecisions_module,only:  &
@@ -96,8 +97,7 @@ integer(i4b),parameter :: jLoc = 1   ! j-location
 ! conversion factors
 real(rkind),parameter     :: joule2umolConv=4.6_rkind   ! conversion factor from joules to umol photons (umol J-1)
 ! algorithmic parameters
-real(rkind),parameter     :: missingValue=-9999._rkind  ! missing value, used when diagnostic or state variables are undefined
-real(rkind),parameter     :: mpe=1.e-6_rkind            ! prevents overflow error if division by zero
+real(rkind),parameter     :: mpe=1.e-6_rkind            ! prevents overflow error if division by zero, from NOAH mpe value
 real(rkind),parameter     :: dx=1.e-6_rkind             ! finite difference increment
 
 contains
@@ -206,8 +206,8 @@ contains
    scalarStomResistSunlit = minStomatalResistance/scalarTranspireLim
    scalarStomResistShaded = scalarStomResistSunlit
    ! set photosynthesis to missing (not computed)
-   scalarPhotosynthesisSunlit = missingValue
-   scalarPhotosynthesisShaded = missingValue
+   scalarPhotosynthesisSunlit = realMissing
+   scalarPhotosynthesisShaded = realMissing
 
   ! *******************************************************************************************************************************************
 

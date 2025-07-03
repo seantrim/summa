@@ -58,13 +58,8 @@ USE mDecisions_module,only:      &
 implicit none
 private
 public::computThermConduct
-
-! algorithmic parameters
-real(rkind),parameter     :: valueMissing=-9999._rkind  ! missing value, used when diagnostic or state variables are undefined
-real(rkind),parameter     :: verySmall=1.e-6_rkind   ! used as an additive constant to check if substantial difference among real numbers
-real(rkind),parameter     :: mpe=1.e-6_rkind         ! prevents overflow error if division by zero
-real(rkind),parameter     :: dx=1.e-6_rkind          ! finite difference increment
 contains
+
 
 ! **********************************************************************************************************
 ! public subroutine computThermConduct: recompute diagnostic energy variables (thermal conductivity)

@@ -25,6 +25,6 @@ MODULE nrtype
  real(rkind),     PARAMETER :: TWOPI_D=6.283185307179586476925286766559005768394_rkind
  ! missing values
  real(rkind),     parameter :: nr_quadMissing=-9999._qp   ! missing quadruple precision number
- real(rkind),     parameter :: nr_realMissing=-9999._rkind   ! missing double precision number
+ real(rkind),     parameter :: nr_realMissing=-9999._rkind   ! missing real number
  integer(i4b), parameter :: nr_integerMissing=-9999    ! missing integer
 END MODULE nrtype

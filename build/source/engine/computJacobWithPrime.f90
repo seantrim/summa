@@ -83,13 +83,9 @@ USE mDecisions_module,only:  &
  enthalpyForm                  ! use enthalpy with soil temperature-enthalpy analytical solution
 
 implicit none
-! define constants
-real(rkind),parameter     :: verySmall=tiny(1.0_rkind)     ! a very small number
-
 private
 public::computJacobWithPrime
 public::computJacob4ida
-
 contains
 
 
@@ -687,7 +683,7 @@ subroutine computJacobWithPrime(&
               aJac(ixOffDiag(nrgState,watState),watState) = dVolHtCapBulk_dPsi0(iLayer) * mLayerTempPrime(jLayer) &
                                                            + mLayerCm(jLayer) * dVolTot_dPsi0(iLayer) * cj + dCm_dPsi0(iLayer) * mLayerVolFracWatPrime(jLayer) &
                                                            + (dt/mLayerDepth(jLayer))*(-dNrgFlux_dWatBelow(jLayer-1) + dNrgFlux_dWatAbove(jLayer)) + mLayerCm(jLayer) * d2VolTot_dPsi02(iLayer) * mLayerMatricHeadPrime(iLayer)
-              if(mLayerdTheta_dTk(jLayer) > verySmall)then  ! ice is present
+              if(mLayerdTheta_dTk(jLayer) > tiny(1.0_rkind))then  ! ice is present
                 aJac(ixOffDiag(nrgState,watState),watState) = -LH_fu0*iden_water * dVolTot_dPsi0(iLayer) * cj &
                                                              - LH_fu0*iden_water * mLayerMatricHeadPrime(iLayer) * d2VolTot_dPsi02(iLayer) + aJac(ixOffDiag(nrgState,watState),watState) ! dNrg/dMat (J m-3 m-1) -- dMat changes volumetric water, and hence ice content
               endif
@@ -1021,7 +1017,7 @@ subroutine computJacobWithPrime(&
               aJac(nrgState,watState) = dVolHtCapBulk_dPsi0(iLayer) * mLayerTempPrime(jLayer) &
                                        + mLayerCm(jLayer) * dVolTot_dPsi0(iLayer) * cj + dCm_dPsi0(iLayer) * mLayerVolFracWatPrime(jLayer) &
                                        + (dt/mLayerDepth(jLayer))*(-dNrgFlux_dWatBelow(jLayer-1) + dNrgFlux_dWatAbove(jLayer)) + mLayerCm(jLayer) * d2VolTot_dPsi02(iLayer) * mLayerMatricHeadPrime(iLayer)
-              if(mLayerdTheta_dTk(jLayer) > verySmall)then  ! ice is present
+              if(mLayerdTheta_dTk(jLayer) > tiny(1.0_rkind))then  ! ice is present
                 aJac(nrgState,watState) = -LH_fu0*iden_water * dVolTot_dPsi0(iLayer) * cj &
                                          - LH_fu0*iden_water * mLayerMatricHeadPrime(iLayer) * d2VolTot_dPsi02(iLayer) + aJac(nrgState,watState) ! dNrg/dMat (J m-3 m-1) -- dMat changes volumetric water, and hence ice content
               endif

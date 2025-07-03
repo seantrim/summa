@@ -63,7 +63,7 @@ MODULE globalData
 
   ! define missing values
   real(rkind),parameter,public                :: quadMissing    = nr_quadMissing    ! (from nrtype) missing quadruple precision number
-  real(rkind),parameter,public                :: realMissing    = nr_realMissing    ! (from nrtype) missing double precision number
+  real(rkind),parameter,public                :: realMissing    = nr_realMissing    ! (from nrtype) missing real number
   integer(i4b),parameter,public               :: integerMissing = nr_integerMissing ! (from nrtype) missing integer
   ! define run modes
   integer(i4b),parameter,public               :: iRunModeFull=1                     ! named variable defining running mode as full run (all GRUs)
@@ -119,7 +119,7 @@ MODULE globalData
   integer(i4b),parameter,public               :: iJac1=1                            ! first layer of the Jacobian to print
   integer(i4b),parameter,public               :: iJac2=100                          ! last layer of the Jacobian to print 
   ! define limit checks
-  real(rkind),parameter,public                :: verySmall=tiny(1.0_rkind)          ! a very small number
+  real(rkind),parameter,public                :: verySmall=1.e-6_rkind              ! a small number used as an additive constant to check if substantial difference among real numbers
   real(rkind),parameter,public                :: veryBig=1.e+20_rkind               ! a very big number
   ! define algorithmic control parameters
   real(rkind),parameter,public                :: dx = 1.e-8_rkind                   ! finite difference increment
@@ -201,6 +201,7 @@ MODULE globalData
   type(hru2gru_map),allocatable,save,public      :: index_map(:)                      ! hru2gru map
   ! define variables used for the vegetation phenology
   real(rkind),dimension(12),save,public          :: greenVegFrac_monthly              ! fraction of green vegetation in each month (0-1)
+  real(rkind),save,public                        :: minExpLogHgt                      ! minimum height of transition from the exponential to the logarithmic wind profile (m)
   ! define the model output file
   character(len=256),save,public                 :: fileout=''                        ! output filename
   character(len=256),save,public                 :: output_fileSuffix=''              ! suffix for the output file
@@ -273,8 +274,8 @@ MODULE globalData
   real(rkind),save,public                        :: tmZoneOffsetFracDay               ! time zone offset in fractional days
   integer(i4b),save,public                       :: yearLength                        ! number of days in the current year
   ! define fixed dimensions
-  integer(i4b),parameter,public                  :: nBand=2                          ! number of spectral bands
-  integer(i4b),parameter,public                  :: nTimeDelay=2000                  ! number of time steps in the time delay histogram (default: ~1 season = 24*365/4)
+  integer(i4b),parameter,public                  :: nSpecBand=2                       ! number of spectral bands
+  integer(i4b),parameter,public                  :: nTimeDelay=2000                   ! number of time steps in the time delay histogram (default: ~1 season = 24*365/4)
   ! printing step frequency
   integer(i4b),parameter,public                  :: print_step_freq = 1000           
   character(len=1024),public,save                :: fname                            ! temporary filename

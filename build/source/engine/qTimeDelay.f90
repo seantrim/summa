@@ -22,6 +22,7 @@ module qTimeDelay_module
 
 ! data types
 USE nrtype
+USE globalData,only:realMissing               ! missing real number
 
 ! look-up values for the sub-grid routing method
 USE mDecisions_module,only:      &
@@ -59,7 +60,6 @@ contains
  integer(i4b),intent(out)   :: err                       ! error code
  character(*),intent(out)   :: message                   ! error message
  ! internal
- real(rkind),parameter      :: valueMissing=-9999._rkind ! missing value
  integer(i4b)               :: nTDH                      ! number of points in the time-delay histogram
  integer(i4b)               :: iFuture                   ! index in time delay histogram
  ! initialize error control
@@ -95,7 +95,7 @@ contains
  ! For open water SUMMA doesn't run any calculations
  !  the values for any output variables in the netCDF will stay at the value at which they were initialized, which may be a large negative
  ! Coast may be similarly large and negative
- !if (averageRoutedRunoff < 0._rkind) averageRoutedRunoff = valueMissing
+ !if (averageRoutedRunoff < 0._rkind) averageRoutedRunoff = realMissing
 
 
  end subroutine qOverland

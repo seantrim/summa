@@ -23,6 +23,7 @@ USE nrtype
 USE netcdf
 USE globalData,only: ixHRUfile_min,ixHRUfile_max
 USE globalData,only: nTimeDelay   ! number of hours in the time delay histogram
+USE globalData,only: nSpecBand    ! number of spectral bands
 implicit none
 private
 public::read_icond
@@ -200,7 +201,6 @@ contains
  integer(i4b)                           :: nSoil, nSnow, nToto      ! # layers
  integer(i4b)                           :: nTDH                     ! number of points in time-delay histogram
  integer(i4b)                           :: iLayer,jLayer            ! layer indices
- integer(i4b),parameter                 :: nBand=2                  ! number of spectral bands
  character(len=32),parameter            :: scalDimName   ='scalarv' ! dimension name for scalar data
  character(len=32),parameter            :: midSoilDimName='midSoil' ! dimension name for soil-only layers
  character(len=32),parameter            :: midTotoDimName='midToto' ! dimension name for layered varaiables
@@ -326,7 +326,7 @@ contains
     endif
 
     ! initialize the spectral albedo
-    progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%spectralSnowAlbedoDiffuse)%dat(1:nBand) = progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1)
+    progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%spectralSnowAlbedoDiffuse)%dat(1:nSpecBand) = progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1)
 
    end do ! iHRU
   end do ! iGRU

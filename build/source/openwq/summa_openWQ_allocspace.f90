@@ -53,10 +53,10 @@ module allocspace_progStuct_module
   
   ! access missing values
   USE globalData,only:integerMissing         ! missing integer
-  USE globalData,only:realMissing            ! missing double precision number
+  USE globalData,only:realMissing            ! missing real number
   
   USE globalData,only: nTimeDelay            ! number of timesteps in the time delay histogram
-  USE globalData,only: nBand                 ! number of spectral bands
+  USE globalData,only: nSpecBand             ! number of spectral bands
   
   ! access variable types
   USE var_lookup,only:iLookVarType           ! look up structure for variable typed
