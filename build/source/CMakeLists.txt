@@ -144,6 +144,15 @@ set(SOLVER_SUNDIALS
     ${ENGINE_DIR}/summaSolve4kinsol.f90
     CACHE INTERNAL "SOLVER_SUNDIALS")
 
+# Nested Newton library modules
+set(NNSOLV
+    ${NNSOLV_DIR}/kind_params.f90
+    ${NNSOLV_DIR}/Newton_solvers.f90
+    ${NNSOLV_DIR}/Newton_functions.f90
+    ${NNSOLV_DIR}/Richards.f90
+    ${NNSOLV_DIR}/Richards_exact.f90
+    CACHE INTERNAL "NNSOLV")
+
 # Driver support modules
 set(DRIVER
     ${DRIVER_DIR}/summa_type.f90
