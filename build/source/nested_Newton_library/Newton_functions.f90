@@ -415,4 +415,7 @@ contains
   end associate
  end function df2_Rich_dh
 
+
+ !! ******************************* SUMMA procedures below ******************************* !!
+
 end module Newton_functions
