@@ -144,6 +144,7 @@ set(DSHARE_DIR ${F_MASTER}/build/source/dshare)
 set(ENGINE_DIR ${F_MASTER}/build/source/engine)
 set(HOOKUP_DIR ${F_MASTER}/build/source/hookup)
 set(NETCDF_DIR ${F_MASTER}/build/source/netcdf)
+set(NNSOLV_DIR ${F_MASTER}/build/source/nested_Newton_library) #SJT: nested Newton library
 set(NOAHMP_DIR ${F_MASTER}/build/source/noah-mp)
 
 #=========================================================================================
@@ -159,7 +160,7 @@ add_subdirectory(${F_MASTER}/build/source/)
 #=========================================================================================
 
 set(COMM_ALL ${NRPROC} ${HOOKUP} ${DATAMS} ${UTILMS})
-set(SUMMA_ALL ${NETCDF} ${PRELIM} ${MODRUN} ${SOLVER} ${DRIVER})
+set(SUMMA_ALL ${NETCDF} ${PRELIM} ${MODRUN} ${SOLVER} ${NNSOLV} ${DRIVER}) #SJT: added NNSOLV
 set(MAIN_SUMMA ${DRIVER_DIR}/summa_driver.f90)
 
 if (USE_NEXTGEN)
