@@ -12,16 +12,17 @@ module Newton_functions
    logical      :: verbose ! flag for full output
    logical      :: inner   ! flag to indicate the execution of inner iterations
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
-   integer(i4b) :: n             ! vector size
-   integer(i4b) :: kmax,lmax     ! max # of classical/outer and inner iterations
-   integer(i4b) :: kcount,lcount ! total # of classical/outer and inner iterations
-   integer(i4b) :: unit          ! file unit number for solver output
+   integer(i4b) :: n                 ! vector size
+   integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
+   integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
+   integer(i4b) :: unit              ! file unit number for solver output
    real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
-   real(r8b)                :: R(-1:1)   ! max residual computed for iterations j-1, j, and j+1 (estimated)  
-   real(r8b)                :: R_inner(-1:1)   ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
-   character(:),allocatable :: convergence
+   real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
+   real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
+   character(:),allocatable :: convergence   ! string for convergence control option
   contains
+   ! procedures used prior to calling the solver
    procedure :: allocate_memory => f_allocate_memory ! allocate array data components 
    procedure :: initial_guess   => f_initial_guess   ! apply initial guess strategy
    procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
@@ -30,6 +31,8 @@ module Newton_functions
  type,extends(f_obj_base),public :: f_obj_input_functions
   contains
    ! ** routines that point to external sources ** !
+   ! note: - these procedures are not directly called in the solver
+   !       - however, these procedures may be called within procedures that are called in the solver
 
 !   ! f=space minus time
 !   ! scalar input routines
@@ -50,19 +53,19 @@ module Newton_functions
   contains
    ! *** these procedures take the procedures from f_obj_input_functions type as input *** !
    ! vector routines
-   procedure :: f_vec =>  f_diff_vec
-   procedure :: f1_vec => f1_Rich_vec
-   procedure :: f2_vec => f2_Rich_vec
-   procedure :: dfdx_vec => dfdx_diff_vec 
+   procedure :: f_vec  => f_diff_vec  ! solver
+   procedure :: f1_vec => f1_Rich_vec ! solver
+   procedure :: f2_vec => f2_Rich_vec ! solver
+   procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
-   procedure :: J => Jacobian_f_Rich_vec
-   procedure :: J1 => Jacobian_f1_Rich_vec
-   procedure :: J2 => Jacobian_f2_Rich_vec
+   procedure :: J  => Jacobian_f_Rich_vec  ! solver
+   procedure :: J1 => Jacobian_f1_Rich_vec ! solver
+   procedure :: J2 => Jacobian_f2_Rich_vec ! solver
    
    ! scalar routines
-   procedure :: f => f_diff 
-   procedure :: dfdx => dfdx_diff 
+   procedure :: f     => f_diff 
+   procedure :: dfdx  => dfdx_diff 
    procedure :: df1dx => df1_Rich_dh 
    procedure :: df2dx => df2_Rich_dh 
  end type f_obj_type
@@ -120,29 +123,14 @@ contains
  end subroutine f_set_tolerance
 
  subroutine f_initial_guess(f_obj,method)
-  ! ** initial guess strategy for f_obj_base class **
+  ! ** initial guess strategy for time-dependent algorithms for f_obj_base class **
+  ! note: it may be possible to add filtering techniques for the initial guess to improve efficiency
   class(f_obj_base),intent(inout) :: f_obj
   character(*),intent(in)         :: method
-  real(r8b),parameter :: pi =3.1415926535897932_r8b 
-  real(r8b),parameter :: hIG=-0.25_r8b
 
   ! Note: avoid unintentional reallocation of object components (use array slices for assignment statements)
   if (method.eq.'previous') then 
    f_obj % x0 = f_obj % x1 ! initial guess -- solution from previous time step
-  else if (method.eq.'linear') then
-   f_obj % x0(1:Richards_obj % nz) = Richards_obj % hBC
-  else if (method.eq.'quadratic') then
-   associate(nz => Richards_obj % nz, zg => Richards_obj % zg, hBC => Richards_obj % hBC, L => Richards_obj % L)
-    f_obj % x0 = 4._r8b*(hBC-hIG)/L**2_i4b*(zg(1:nz) - L/2._r8b)**2_i4b+hIG ! quadratic
-   end associate
-  else if (method.eq.'bell') then
-   associate(nz => Richards_obj % nz, zg => Richards_obj % zg, hBC => Richards_obj % hBC, L => Richards_obj % L)
-    f_obj % x0 = -(hBC-hIG)*exp(-(zg(1:nz) - L/2._r8b)**2_i4b/(L/4._r8b)**2_i4b)+hBC ! bell curve
-   end associate
-  else if (method.eq.'sine') then
-   associate(nz => Richards_obj % nz, zg => Richards_obj % zg, hBC => Richards_obj % hBC, L => Richards_obj % L)
-    f_obj % x0 = hIG*sin(pi*zg(1:nz)/L)+hBC ! sinusoid
-   end associate
   else
    print *, "Error in f_initial_guess: method argument not currently supported."
   end if
