@@ -1,6 +1,7 @@
 module Newton_functions
- use kind_params,only: i4b,r8b
+ use kind_params,only: i4b,r8b ! kind parameters
  use Richards,only : Richards_obj ! Richards test problem
+ use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
  implicit none
  private
 
@@ -405,5 +406,43 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
+
+ function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
+  class(f_obj_type),intent(in) :: f_obj
+  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b),allocatable        :: J(:,:)
+!  real(r8b)                    :: x ! current guess
+!  integer(i4b)                 :: icol,irow
+  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
+  ! SUMMA variables
+  type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
+  type(out_type_computJacob)   :: out_computJacob ! computJacob output object  
+
+  ! memory allocation 
+  if (f_obj % banded) then ! banded storage
+   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    nrow_banded=subdiag+superdiag+1
+    allocate(J(1:nrow_banded,1:n))
+   end associate
+  else ! full matrix storage
+   associate(n => f_obj % n)
+    allocate(J(1:n,1:n))
+   end associate
+  end if
+
+  J=0._r8b ! SJT: temporary statement for build testing -- remove this
+
+!SJT: continue by enabling the following operations
+!   associate(&
+!    err       => out_SS4HG % err      ,& 
+!    message   => out_SS4HG % message   &     
+!   &)
+!    call initialize_computJacob_summaSolve4homegrown
+!    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
+!    call finalize_computJacob_summaSolve4homegrown
+!    if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! (check for errors)
+!   end associate
+
+ end function Jacobian_f_SUMMA_vec
 
 end module Newton_functions
