@@ -142,6 +142,7 @@ set(SOLVER_SUNDIALS
     ${ENGINE_DIR}/eval8summaWithPrime.f90
     ${ENGINE_DIR}/summaSolve4ida.f90
     ${ENGINE_DIR}/summaSolve4kinsol.f90
+    ${ENGINE_DIR}/summaSolve4arkode.f90
     CACHE INTERNAL "SOLVER_SUNDIALS")
 
 # Nested Newton library modules
