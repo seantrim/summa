@@ -628,6 +628,19 @@ contains
   end associate layerVars
  end subroutine enforce_mass_conservation
 
+ subroutine solve_with_ARKODE
+  ! contains initialize-update-finalize sequence for ARKODE
+  ! note: may be able to use solve_with_IDA internal subroutine as a guide for development
+#ifdef SUNDIALS_ACTIVE
+  ! [...] initialize operations here
+
+  ! update operations
+  ! call summaSolve4arkode(...) 
+
+  ! [...] finalize operations here
+#endif
+ end subroutine solve_with_ARKODE
+
  subroutine solve_with_IDA
 #ifdef SUNDIALS_ACTIVE
   ! get tolerance vectors
