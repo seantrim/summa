@@ -1,7 +1,14 @@
 module Newton_functions
+ ! nested Newton solver modules
  use kind_params,only: i4b,r8b ! kind parameters
  use Richards,only : Richards_obj ! Richards test problem
+ ! SUMMA modules (for access to constant data and procedures)
+ use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
+ use data_types,only: in_type_summaSolve4homegrown ! objects for SUMMA's summaSolve4homegrown routine
+ use data_types,only: model_options  ! type for SUMMA's model decision structure
+ use var_lookup,only: iLookDECISIONS ! named variables for elements of the SUMMA decision structure
+ use mDecisions_module,only:qbaseTopmodel ! SUMMA groundwater parameterization model decision
  implicit none
  private
 
@@ -30,6 +37,9 @@ module Newton_functions
  end type f_obj_base
 
  type,extends(f_obj_base),public :: f_obj_input_functions
+   ! SUMMA data
+   type(model_options),allocatable :: model_decisions(:)       ! model decisions
+   type(in_type_summaSolve4homegrown) :: in_SS4HG  ! summaSolve4homegrown input object: model control variables and previous function evaluation
   contains
    ! ** routines that point to external sources ** !
    ! note: - these procedures are not directly called in the solver
@@ -411,8 +421,6 @@ contains
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J(:,:)
-!  real(r8b)                    :: x ! current guess
-!  integer(i4b)                 :: icol,irow
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
   ! SUMMA variables
   type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
@@ -432,12 +440,26 @@ contains
 
   J=0._r8b ! SJT: temporary statement for build testing -- remove this
 
+  ! initialize
+  ! *** Transfer data to in_computJacob class object from local variables in summaSolve4homegrown ***
+  associate(&
+   ixGroundwater  => f_obj % model_decisions(iLookDECISIONS%groundwatr)%iDecision,&  ! intent(in): [i4b] groundwater parameterization
+   dt_cur         => f_obj % in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
+   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+   nLayers        => f_obj % in_SS4HG % nLayers        ,& ! intent(in): total number of layers
+   ixMatrix       => f_obj % in_SS4HG % ixMatrix       ,& ! intent(in): type of matrix (full or band diagonal)
+   computeVegFlux => f_obj % in_SS4HG % computeVegFlux  & ! intent(in): flag to indicate if computing fluxes over vegetation
+  &)   
+   call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),ixMatrix)
+  end associate 
+
 !SJT: continue by enabling the following operations
 !   associate(&
 !    err       => out_SS4HG % err      ,& 
 !    message   => out_SS4HG % message   &     
 !   &)
-!    call initialize_computJacob_summaSolve4homegrown
+!    call initialize_computJacob_summaSolve4homegrown ! SJT: done above
 !    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
 !    call finalize_computJacob_summaSolve4homegrown
 !    if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! (check for errors)
