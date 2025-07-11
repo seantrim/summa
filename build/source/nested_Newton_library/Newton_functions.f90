@@ -5,7 +5,7 @@ module Newton_functions
  ! SUMMA modules (for access to constant data and procedures)
  use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
- use data_types,only: in_type_summaSolve4homegrown ! objects for SUMMA's summaSolve4homegrown routine
+ use data_types,only: in_type_summaSolve4homegrown,out_type_summaSolve4homegrown ! objects for SUMMA's summaSolve4homegrown routine
  use data_types,only: model_options  ! type for SUMMA's model decision structure
  use var_lookup,only: iLookDECISIONS ! named variables for elements of the SUMMA decision structure
  use mDecisions_module,only:qbaseTopmodel ! SUMMA groundwater parameterization model decision
@@ -39,7 +39,8 @@ module Newton_functions
  type,extends(f_obj_base),public :: f_obj_input_functions
    ! SUMMA data
    type(model_options),allocatable :: model_decisions(:)       ! model decisions
-   type(in_type_summaSolve4homegrown) :: in_SS4HG  ! summaSolve4homegrown input object: model control variables and previous function evaluation
+   type(in_type_summaSolve4homegrown)  :: in_SS4HG  ! summaSolve4homegrown input object: model control variables and previous function evaluation
+   type(out_type_summaSolve4homegrown) :: out_SS4HG ! summaSolve4homegrown output object: model control variables and previous function evaluation
   contains
    ! ** routines that point to external sources ** !
    ! note: - these procedures are not directly called in the solver
@@ -143,7 +144,7 @@ contains
   if (method.eq.'previous') then 
    f_obj % x0 = f_obj % x1 ! initial guess -- solution from previous time step
   else
-   print *, "Error in f_initial_guess: method argument not currently supported."
+   write(f_obj % unit,'(a66)') "Error in f_initial_guess: method argument not currently supported."
   end if
  end subroutine f_initial_guess
 
@@ -418,7 +419,7 @@ contains
  !! ******************************* SUMMA procedures below ******************************* !!
 
  function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
-  class(f_obj_type),intent(in) :: f_obj
+  class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J(:,:)
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
@@ -461,9 +462,19 @@ contains
 !   &)
 !    call initialize_computJacob_summaSolve4homegrown ! SJT: done above
 !    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
-!    call finalize_computJacob_summaSolve4homegrown
-!    if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! (check for errors)
+!    call finalize_computJacob_summaSolve4homegrown   !SJT: done below
+!    if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! (check for errors) ! SJT: done below
 !   end associate
+
+  ! finalize
+  ! *** Transfer data from out_computJacob class object to local variables in summaSolve4homegrown ***
+  ! note: "message" used for out_SS4HG data component but "cmessage" used within summaSolve4homegrown subroutine
+  associate(err => f_obj % out_SS4HG % err, cmessage => f_obj % out_SS4HG % message) 
+   call out_computJacob % finalize(err,cmessage)
+   if (err /= 0) then
+    write(f_obj % unit,*) "Error in Jacobian_f_SUMMA_vec: computJacob message="//trim(cmessage); stop
+   end if
+  end associate
 
  end function Jacobian_f_SUMMA_vec
 
