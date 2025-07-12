@@ -3,10 +3,12 @@ module Newton_functions
  use kind_params,only: i4b,r8b ! kind parameters
  use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
+ use nrtype,only: rkind ! SUMMA's kind parameters
  use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
  use data_types,only: in_type_summaSolve4homegrown,out_type_summaSolve4homegrown ! objects for SUMMA's summaSolve4homegrown routine
  use data_types,only: model_options  ! type for SUMMA's model decision structure
+ use data_types,only: var_ilength,var_dlength ! derived types for SUMMA data structures
  use var_lookup,only: iLookDECISIONS ! named variables for elements of the SUMMA decision structure
  use mDecisions_module,only:qbaseTopmodel ! SUMMA groundwater parameterization model decision
  implicit none
@@ -38,7 +40,15 @@ module Newton_functions
 
  type,extends(f_obj_base),public :: f_obj_input_functions
    ! SUMMA data
-   type(model_options),allocatable :: model_decisions(:)       ! model decisions
+   type(model_options),allocatable :: model_decisions(:) ! model decisions
+
+   type(var_ilength) :: indx_data                    ! indices defining model states and layers
+   type(var_dlength) :: prog_data                    ! prognostic variables for a local HRU
+   type(var_dlength) :: diag_data                    ! diagnostic variables for a local HRU
+   type(var_dlength) :: deriv_data                   ! derivatives in model fluxes w.r.t. relevant state variables
+   real(rkind),allocatable :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+   real(rkind),allocatable :: dMat(:)                ! diagonal matrix (excludes flux derivatives) 
+
    type(in_type_summaSolve4homegrown)  :: in_SS4HG  ! summaSolve4homegrown input object: model control variables and previous function evaluation
    type(out_type_summaSolve4homegrown) :: out_SS4HG ! summaSolve4homegrown output object: model control variables and previous function evaluation
   contains
@@ -455,16 +465,18 @@ contains
    call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),ixMatrix)
   end associate 
 
-!SJT: continue by enabling the following operations
-!   associate(&
-!    err       => out_SS4HG % err      ,& 
-!    message   => out_SS4HG % message   &     
-!   &)
-!    call initialize_computJacob_summaSolve4homegrown ! SJT: done above
-!    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
-!    call finalize_computJacob_summaSolve4homegrown   !SJT: done below
-!    if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! (check for errors) ! SJT: done below
-!   end associate
+   ! update
+   associate(&
+    indx_data         => f_obj % indx_data,&         ! indices defining model states and layers
+    prog_data         => f_obj % prog_data,&         ! prognostic variables for a local HRU
+    diag_data         => f_obj % diag_data,&         ! diagnostic variables for a local HRU
+    deriv_data        => f_obj % deriv_data,&        ! derivatives in model fluxes w.r.t. relevant state variables
+    dBaseflow_dMatric => f_obj % dBaseflow_dMatric,& ! derivative in baseflow w.r.t. matric head (s-1)
+    dMat              => f_obj % dMat,&              ! diagonal matrix (excludes flux derivatives) 
+    aJac              => J &                         ! Jacobian
+   &)
+    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
+   end associate
 
   ! finalize
   ! *** Transfer data from out_computJacob class object to local variables in summaSolve4homegrown ***
