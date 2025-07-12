@@ -81,7 +81,8 @@ module Newton_functions
    procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
-   procedure :: J  => Jacobian_f_Rich_vec  ! solver
+   procedure :: J  => Jacobian_f_SUMMA_vec  ! solver
+   !procedure :: J  => Jacobian_f_Rich_vec  ! solver
    procedure :: J1 => Jacobian_f1_Rich_vec ! solver
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
    
