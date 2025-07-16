@@ -47,6 +47,7 @@ if (USE_SUNDIALS)
     message("ENABLING SUNDIALS")
     find_package(SUNDIALS REQUIRED)
     list(APPEND EXT_TARGETS SUNDIALS::fida_mod_shared
+                            SUNDIALS::farkode_mod_shared
                             SUNDIALS::fkinsol_mod_shared)
     add_compile_definitions(SUNDIALS_ACTIVE)
     set(EXEC_NAME summa_sundials.exe)
