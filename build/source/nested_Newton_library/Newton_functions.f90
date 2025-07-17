@@ -450,8 +450,6 @@ contains
    end associate
   end if
 
-  J=0._r8b ! SJT: temporary statement for build testing -- remove this
-
   ! initialize
   ! *** Transfer data to in_computJacob class object from local variables in summaSolve4homegrown ***
   associate(&
