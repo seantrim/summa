@@ -136,6 +136,7 @@ contains
  USE eval8summa_module,  only: imposeConstraints
  USE matrixOper_module,  only: lapackSolv
  USE matrixOper_module,  only: scaleMatrices
+ USE Newton_functions,   only: f_obj_type ! type for nested Newton solver objects
  implicit none
  ! --------------------------------------------------------------------------------------------------------------------------------
  type(in_type_summaSolve4homegrown),intent(in)     :: in_SS4HG  ! model control variables and previous function evaluation
@@ -202,6 +203,9 @@ contains
  type(in_type_lineSearchRefinement)  :: in_TRR  ! trustRegionRefinement
  type(out_type_lineSearchRefinement) :: out_TRR ! trustRegionRefinement
  type(out_type_lineSearchRefinement) :: out_SRF ! safeRootFinder
+ ! nested Newton test variables -- SJT: temporary (to be replaced or transitioned elsewhere once functionality is confirmed)
+ logical(lgt),parameter :: nested_Newton_test=.true. ! flag for controlling nested Newton test operations (replace with model decisions if needed)
+ type(f_obj_type) :: nested_Newton ! nested Newton solver object
  ! --------------------------------------------------------------------------------------------------------------------------------
  ! --------------------------------------------------------------------------------------------------------------------------------
 
@@ -248,6 +252,49 @@ contains
 
    ! compute the Jacobian
    call update_Jacobian; if (return_flag) return ! compute Jacobian for Newton step -- return if error
+
+   ! test for nested Newton solver -- SJT: temporary (elements to be relocated once functionality is confirmed)
+   if (nested_Newton_test) then
+    print *, "Nested Newton Test: A"
+    print *, "sum(aJac) = ",sum(aJac)
+
+    ! * interface Jacobian array structure info *
+    ! matrix structure
+    if (in_SS4HG % ixMatrix == ixBandMatrix) then
+     nested_Newton % banded = .true.
+     nested_Newton % subdiag   = kl
+     nested_Newton % superdiag = ku
+    else if (in_SS4HG % ixMatrix == ixFullMatrix) then
+     nested_Newton % banded = .false.
+    else
+     associate(&
+      err       => out_SS4HG % err      ,& 
+      message   => out_SS4HG % message   &     
+     &)
+      err=20; message=trim(message)//'ixMatrix value for Jacobian structure not supported';
+      return_flag=.true.; return
+     end associate
+    end if
+    ! # of columns of full matrix
+    nested_Newton % n = in_SS4HG % nState
+
+    ! * interface SUMMA data *
+    ! allocatable data components that require allocation on assignment
+    nested_Newton % model_decisions   = model_decisions   ! model decisions
+    nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1)
+    nested_Newton % dMat              = dMat              ! diagonal matrix (excludes flux derivatives)
+
+    ! data components that are not allocatable
+    nested_Newton % indx_data  =  indx_data  ! indices defining model states and layers
+    nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU
+    nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
+    nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
+
+    nested_Newton % in_SS4HG = in_SS4HG ! input object for summaSolve4homegrown
+
+    print *, sum(nested_Newton % J(stateVecTrial)) ! SJT: --- currently no dependence on stateVecTrial argument -- add call to eval8summa 
+    stop
+   end if
   end subroutine initialize_summaSolve4homegrown
 
   subroutine update_summaSolve4homegrown
