@@ -101,12 +101,9 @@ contains
  ! public subroutine summaSolve4homegrown: calculate the iteration increment, evaluate the new state, and refine if necessary
  ! **************************************************************************************************************************
  subroutine summaSolve4homegrown(&
-                        in_SS4HG,               & ! intent(in): model control and previous function value
-                       ! input: model control
-                       !firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
+                       in_SS4HG,                & ! intent(in): model control and previous function value
                        ! input: state vectors
                        stateVecTrial,           & ! intent(in):    trial state vector
-                       !xMin,xMax,               & ! intent(inout): brackets of the root
                        fScale,                  & ! intent(in):    characteristic scale of the function evaluations
                        xScale,                  & ! intent(in):    characteristic scale of the state vector
                        rVec,                    & ! intent(in):    residual vector
@@ -127,7 +124,6 @@ contains
                        flux_data,               & ! intent(inout): model fluxes for a local HRU
                        deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                        ! input-output: baseflow
-                       !ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
                        dBaseflow_dMatric,       & ! intent(inout): derivative in baseflow w.r.t. matric head (s-1)
                        io_SS4HG,                & ! intent(inout): first flux call flag, root brackets, index of lowest saturated layer
                        ! output
@@ -144,11 +140,8 @@ contains
  ! --------------------------------------------------------------------------------------------------------------------------------
  type(in_type_summaSolve4homegrown),intent(in)     :: in_SS4HG  ! model control variables and previous function evaluation
  type(io_type_summaSolve4homegrown),intent(inout)  :: io_SS4HG  ! first flux call flag and baseflow variables
- ! input: model control
-! logical(lgt),intent(inout)      :: firstFluxCall            ! flag to indicate if we are processing the first flux call
  ! input: state vectors
  real(rkind),intent(in)          :: stateVecTrial(:)         ! trial state vector
-! real(rkind),intent(inout)       :: xMin,xMax                ! brackets of the root
  real(rkind),intent(in)          :: fScale(:)                ! characteristic scale of the function evaluations
  real(rkind),intent(in)          :: xScale(:)                ! characteristic scale of the state vector
  real(qp),intent(in)             :: rVec(:)   ! NOTE: qp     ! residual vector
@@ -169,7 +162,6 @@ contains
  type(var_dlength),intent(inout) :: flux_data                ! model fluxes for a local HRU
  type(var_dlength),intent(inout) :: deriv_data               ! derivatives in model fluxes w.r.t. relevant state variables
  ! input-output: baseflow
-! integer(i4b),intent(inout)      :: ixSaturation             ! index of the lowest saturated layer (NOTE: only computed on the first iteration)
  real(rkind),intent(inout)       :: dBaseflow_dMatric(:,:)   ! derivative in baseflow w.r.t. matric head (s-1)
  ! output: flux and residual vectors
  real(rkind),intent(out)         :: stateVecNew(:)           ! new state vector
