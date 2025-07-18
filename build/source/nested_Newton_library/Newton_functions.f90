@@ -3,14 +3,19 @@ module Newton_functions
  use kind_params,only: i4b,r8b ! kind parameters
  use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
- use nrtype,only: rkind ! SUMMA's kind parameters
+ use nrtype,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
+ use eval8summa_module, only: eval8summa                       ! SUMMA's eval8summa routine
  use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
- use data_types,only: in_type_summaSolve4homegrown,out_type_summaSolve4homegrown ! objects for SUMMA's summaSolve4homegrown routine
- use data_types,only: model_options  ! type for SUMMA's model decision structure
+ use data_types,only: in_type_summaSolve4homegrown,& ! objects for SUMMA's summaSolve4homegrown routine
+                     &io_type_summaSolve4homegrown,&
+                     &out_type_summaSolve4homegrown 
+ use data_types,only: model_options           ! type for SUMMA's model decision structure
  use data_types,only: var_ilength,var_dlength ! derived types for SUMMA data structures
- use var_lookup,only: iLookDECISIONS ! named variables for elements of the SUMMA decision structure
- use mDecisions_module,only:qbaseTopmodel ! SUMMA groundwater parameterization model decision
+ use data_types,only: var_i,var_d             ! derived types for SUMMA data vectors
+ use data_types,only: zLookup                 ! derived type for SUMMA lookup tables
+ use var_lookup,only: iLookDECISIONS          ! named variables for elements of the SUMMA decision structure
+ use mDecisions_module,only:qbaseTopmodel     ! SUMMA groundwater parameterization model decision
  implicit none
  private
 
@@ -39,8 +44,17 @@ module Newton_functions
  end type f_obj_base
 
  type,extends(f_obj_base),public :: f_obj_input_functions
-   ! SUMMA data
+   ! * SUMMA data *
    type(model_options),allocatable :: model_decisions(:) ! model decisions
+
+   type(zLookup)     :: lookup_data                  ! lookup tables
+   type(var_dlength) :: flux_init                    ! model fluxes at the start of the time step
+   type(var_i)       :: type_data                    ! type of vegetation and soil
+   type(var_d)       :: attr_data                    ! spatial attributes
+   type(var_d)       :: forc_data                    ! model forcing data
+   type(var_dlength) :: mpar_data                    ! model parameters
+   type(var_dlength) :: bvar_data                    ! model variables for the local basin
+
 
    type(var_ilength) :: indx_data                    ! indices defining model states and layers
    type(var_dlength) :: prog_data                    ! prognostic variables for a local HRU
@@ -49,8 +63,18 @@ module Newton_functions
    real(rkind),allocatable :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
    real(rkind),allocatable :: dMat(:)                ! diagonal matrix (excludes flux derivatives) 
 
-   type(in_type_summaSolve4homegrown)  :: in_SS4HG  ! summaSolve4homegrown input object: model control variables and previous function evaluation
-   type(out_type_summaSolve4homegrown) :: out_SS4HG ! summaSolve4homegrown output object: model control variables and previous function evaluation
+   type(in_type_summaSolve4homegrown)  :: in_SS4HG   ! summaSolve4homegrown input object: model control variables and previous function evaluation
+   type(io_type_summaSolve4homegrown)  :: io_SS4HG   ! summaSolve4homegrown io object: model control variables and previous function evaluation
+   type(out_type_summaSolve4homegrown) :: out_SS4HG  ! summaSolve4homegrown output object: model control variables and previous function evaluation
+
+   ! additional variables for eval8summa call
+   logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
+   real(rkind),allocatable :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
+   real(qp),allocatable    :: sMul(:)    ! NOTE: qp  ! multiplier for state vector for the residual calculations
+   logical(lgt) :: feasible                          ! feasibility flag
+   real(rkind),allocatable :: fluxVec0(:)            ! flux vector (mixed units)
+   real(rkind),allocatable :: rAdd(:)                ! additional terms in the residual vector
+   real(qp),allocatable    :: resVec(:)  ! NOTE: qp  ! residual vector 
   contains
    ! ** routines that point to external sources ** !
    ! note: - these procedures are not directly called in the solver
@@ -429,7 +453,65 @@ contains
 
  !! ******************************* SUMMA procedures below ******************************* !!
 
+ subroutine SUMMA_eval8summa(f_obj,xvec)
+  ! ** interface for SUMMA's eval8summa subroutine **
+  ! compute SUMMA derivative values and residual vector
+  ! note: - eval8summa was not refactored to use object arguments
+  !       - objects for summaSolve4homegrown were reused where possible
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
+  associate(&
+   stateVecTrial => xvec & ! current guess for state vector
+  &)
+   call eval8summa(&
+                    ! input: model control
+                    f_obj % in_SS4HG % dt_cur,                  & ! intent(in):    current stepsize
+                    f_obj % in_SS4HG % dt,                      & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
+                    f_obj % in_SS4HG % nSnow,                   & ! intent(in):    number of snow layers
+                    f_obj % in_SS4HG % nSoil,                   & ! intent(in):    number of soil layers
+                    f_obj % in_SS4HG % nLayers,                 & ! intent(in):    number of layers
+                    f_obj % in_SS4HG % nState,                  & ! intent(in):    number of state variables in the current subset
+                    .false.,                 & ! intent(in):    not inside Sundials solver
+                    f_obj % in_SS4HG % firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                    f_obj % io_SS4HG % firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
+                    f_obj % firstSplitOper,  & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
+                    f_obj % in_SS4HG % computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                    f_obj % in_SS4HG % scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                    ! input: state vectors
+                    stateVecTrial,                   & ! intent(in):    model state vector
+                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
+                    f_obj % sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                    ! input: data structures
+                    f_obj % model_decisions,         & ! intent(in):    model decisions
+                    f_obj % lookup_data,             & ! intent(in):    lookup tables
+                    f_obj % type_data,               & ! intent(in):    type of vegetation and soil
+                    f_obj % attr_data,               & ! intent(in):    spatial attributes
+                    f_obj % mpar_data,               & ! intent(in):    model parameters
+                    f_obj % forc_data,               & ! intent(in):    model forcing data
+                    f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
+                    f_obj % prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                    ! input-output: data structures
+                    f_obj % indx_data,               & ! intent(inout): index data
+                    f_obj % diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                    f_obj % flux_init,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                    f_obj % deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                    ! input-output: baseflow
+                    f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                    f_obj % dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    ! output
+                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                    f_obj % fluxVec0,                & ! intent(out):   flux vector
+                    f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                    f_obj % resVec,                  & ! intent(out):   residual vector
+                    f_obj % in_SS4HG % fOld,         & ! intent(out):   function evaluation
+                    f_obj % out_SS4HG % err,         & ! intent(out): error code
+                    f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
+  end associate
+ end subroutine SUMMA_eval8summa
+
  function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
+  ! ** Compute SUMMA's Jacobian **
+  ! solver variables
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J(:,:)
