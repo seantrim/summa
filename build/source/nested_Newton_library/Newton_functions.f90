@@ -80,6 +80,10 @@ module Newton_functions
    ! note: - these procedures are not directly called in the solver
    !       - however, these procedures may be called within procedures that are called in the solver
 
+   ! * Interfaces for SUMMA procedures  *
+   procedure :: SUMMA_eval8summa
+   procedure :: SUMMA_computJacob
+
 !   ! f=space minus time
 !   ! scalar input routines
 !   procedure :: f1 => f_Rich_space
@@ -458,7 +462,7 @@ contains
   ! compute SUMMA derivative values and residual vector
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
-  class(f_obj_type),intent(inout) :: f_obj
+  class(f_obj_input_functions),intent(inout) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   associate(&
    stateVecTrial => xvec & ! current guess for state vector
@@ -509,18 +513,18 @@ contains
   end associate
  end subroutine SUMMA_eval8summa
 
- function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
-  ! ** Compute SUMMA's Jacobian **
+ subroutine SUMMA_computJacob(f_obj,J)
+  ! ** Interface for SUMMA's computJacob subroutine **
   ! solver variables
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b),allocatable        :: J(:,:)
+  class(f_obj_input_functions),intent(inout) :: f_obj
+  real(r8b),allocatable,intent(out) :: J(:,:)
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
   ! SUMMA variables
   type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
   type(out_type_computJacob)   :: out_computJacob ! computJacob output object  
 
-  ! memory allocation 
+
+  ! memory allocation for Jacobian 
   if (f_obj % banded) then ! banded storage
    associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
     nrow_banded=subdiag+superdiag+1
@@ -568,6 +572,26 @@ contains
     write(f_obj % unit,*) "Error in Jacobian_f_SUMMA_vec: computJacob message="//trim(cmessage); stop
    end if
   end associate
+
+ end subroutine SUMMA_computJacob
+
+ function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
+  ! ** Compute SUMMA's Jacobian **
+  ! solver variables
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b),allocatable        :: J(:,:)
+  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
+  ! SUMMA variables
+  type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
+  type(out_type_computJacob)   :: out_computJacob ! computJacob output object  
+
+
+  ! compute derivatives based on current guess
+  call f_obj % SUMMA_eval8summa(xvec)
+
+  ! assemble Jacobian using the computed derivatives
+  call f_obj % SUMMA_computJacob(J)
 
  end function Jacobian_f_SUMMA_vec
 
