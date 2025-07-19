@@ -35,6 +35,8 @@ USE globalData,only:quadMissing     ! missing quadruple precision number
 USE globalData,only: nBands         ! length of the leading dimension of the band diagonal matrix
 USE globalData,only: ixFullMatrix   ! named variable for the full Jacobian matrix
 USE globalData,only: ixBandMatrix   ! named variable for the band diagonal matrix
+USE globalData,only: ku             ! number of super-diagonal bands
+USE globalData,only: kl             ! number of sub-diagonal bands
 USE globalData,only: iJac1          ! first layer of the Jacobian to print
 USE globalData,only: iJac2          ! last layer of the Jacobian to print
 
@@ -270,6 +272,8 @@ subroutine systemSolv(&
   ! flags
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
+  ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -286,6 +290,7 @@ subroutine systemSolv(&
       case(kinsol) ! solve for BE time step using KINSOL
         call solve_with_KINSOL; if (return_flag) return           ! solve using KINSOL -- return if error
       case(homegrown) ! solve for BE time step using Newton iterations
+        if (nested_Newton_flag) call nested_Newton_iterations ! nested Newton library
         call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
     end select
   end associate 
@@ -823,6 +828,77 @@ contains
   stateVecPrime = stateVecTrial ! prime values not used here, dummy
 #endif
  end subroutine solve_with_KINSOL
+
+ subroutine nested_Newton_iterations
+  ! ** Compute the backward Euler solution using the nested Newton library **
+  ! SJT: testing in progress
+  use Newton_functions,   only: f_obj_type ! type for nested Newton solver objects 
+  type(f_obj_type) :: nested_Newton ! nested Newton solver object
+  ! note: - reusing summaSolve4homegrown objects due to similarities in data requirements
+
+  ! initialize summaSolve4homegrown objects
+  associate(&
+   ! layer geometry
+   nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers
+   nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
+   )
+   call in_SS4HG % initialize(dt_cur,dt,iter,nSnow,nSoil,nLayers,nLeadDim,nState,ixMatrix,firstSubStep,computeVegFlux,scalarSolution,fOld)
+   call io_SS4HG % initialize(firstFluxCall,xMin,xMax,ixSaturation)
+  end associate
+
+  ! * interface Jacobian array structure info *
+  ! matrix structure
+  if (ixMatrix == ixBandMatrix) then
+   nested_Newton % banded = .true.
+   nested_Newton % subdiag   = kl
+   nested_Newton % superdiag = ku
+  else if (ixMatrix == ixFullMatrix) then
+   nested_Newton % banded = .false.
+  else
+   err=20; message=trim(message)//'ixMatrix value for Jacobian structure not supported';
+   return_flag=.true.; return
+  end if
+  ! # of columns of full matrix
+  nested_Newton % n = in_SS4HG % nState
+
+  ! * interface SUMMA data *
+  ! allocatable data components that require allocation on assignment
+  nested_Newton % model_decisions   = model_decisions   ! model decisions
+  nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1)
+  nested_Newton % dMat              = dMat              ! diagonal matrix (excludes flux derivatives)
+
+  nested_Newton % fScale            = fScale            ! characteristic scale of the function evaluations (mixed units)
+  nested_Newton % sMul              = sMul              ! multiplier for state vector for the residual calculation 
+
+  nested_Newton % fluxVec0          = fluxVec0          ! flux vector (mixed units)
+  nested_Newton % rAdd              = rAdd              ! additional terms in the residual vector
+  nested_Newton % resVec            = resVec            ! residual vector    
+
+
+  ! data components that are not allocatable
+  nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
+  !nested_Newton % feasible       = feasible      ! feasibility flag (output from eval8summa)
+
+  nested_Newton % lookup_data = lookup_data  ! lookup tables
+  nested_Newton % flux_init   = flux_init    ! model fluxes at the start of the time step
+  nested_Newton % type_data   = type_data    ! type of vegetation and soil
+  nested_Newton % attr_data   = attr_data    ! spatial attributes
+  nested_Newton % forc_data   = forc_data    ! model forcing data
+  nested_Newton % mpar_data   = mpar_data    ! model parameters
+  nested_Newton % bvar_data   = bvar_data    ! model variables for the local basin
+
+  nested_Newton % indx_data  =  indx_data  ! indices defining model states and layers
+  nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU
+  nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
+  nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
+
+  nested_Newton % in_SS4HG = in_SS4HG ! input object for summaSolve4homegrown
+  nested_Newton % io_SS4HG = io_SS4HG ! input-output object for summaSolve4homegrown
+
+  print *, "Nested Newton Test: A"
+  print *, sum(nested_Newton % J(stateVecTrial)) ! SJT: --- currently no dependence on stateVecTrial argument -- add call to eval8summa 
+
+ end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
   ! ** Compute the backward Euler solution using Newton iterations from homegrown solver **
