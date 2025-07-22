@@ -27,6 +27,7 @@ USE multiconst,only:iden_ice,iden_water    ! intrinsic density of ice and water 
 ! access missing values
 USE globalData,only:integerMissing         ! missing integer
 USE globalData,only:realMissing            ! missing real number
+USE globalData,only:maxVolIceContent       ! snow maximum volumetric ice content to store water (-)
 
 ! named variables
 USE var_lookup,only:iLookINDEX             ! named variables for structure elements
@@ -84,7 +85,6 @@ subroutine snowLiqFlx(&
   real(rkind)                       :: multResid                  ! multiplier for the residual water content (-)
   real(rkind),parameter             :: residThrs=550._rkind       ! ice density threshold to reduce residual liquid water content (kg m-3)
   real(rkind),parameter             :: residScal=10._rkind        ! scaling factor for residual liquid water content reduction factor (kg m-3)
-  real(rkind),parameter             :: maxVolIceContent=0.7_rkind ! maximum volumetric ice content to store water (-)
   real(rkind)                       :: availCap                   ! available storage capacity [0,1] (-)
   real(rkind)                       :: relSaturn                  ! relative saturation [0,1] (-)
   ! ------------------------------------------------------------------------------------------------------------------------------------------
@@ -172,7 +172,7 @@ subroutine snowLiqFlx(&
         iLayerLiqFluxSnowDeriv(iLayer) = ( (k_snow*mw_exp)/availCap ) * relSaturn**(mw_exp - 1._rkind)
         if (mLayerVolFracIce(iLayer) > maxVolIceContent) then ! NOTE: use start-of-step ice content, to avoid convergence problems
           ! ** allow liquid water to pass through under very high ice density
-          iLayerLiqFluxSnow(iLayer) = iLayerLiqFluxSnow(iLayer) + iLayerLiqFluxSnow(iLayer-1) !NOTE: derivative may need to be updated in future.
+          iLayerLiqFluxSnow(iLayer) = iLayerLiqFluxSnow(iLayer) + iLayerLiqFluxSnow(iLayer-1)
         end if
       else  ! flow does not occur
         iLayerLiqFluxSnow(iLayer)      = 0._rkind
