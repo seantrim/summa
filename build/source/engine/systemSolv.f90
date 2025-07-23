@@ -238,6 +238,7 @@ subroutine systemSolv(&
   real(rkind)                     :: fluxVec0(nState)              ! flux vector (mixed units)
   real(rkind)                     :: dMat(nState)                  ! diagonal matrix (excludes flux derivatives)
   real(qp)                        :: sMul(nState)    ! NOTE: qp    ! multiplier for state vector for the residual calculations
+  real(rkind),allocatable         :: fRHS(:)                       ! RHS function for ARKODE
   real(rkind)                     :: rAdd(nState)                  ! additional terms in the residual vector
   logical(lgt)                    :: feasible                      ! feasibility flag
   logical(lgt)                    :: sunSucceeds                   ! flag to indicate if SUNDIALS successfully solved the problem in current data step
@@ -478,6 +479,7 @@ contains
                     ! output
                     feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                     fluxVec0,                & ! intent(out):   flux vector
+                    fRHS,                    & ! intent(out):   RHS function for ARKODE
                     rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     resVec,                  & ! intent(out):   residual vector
                     fOld,                    & ! intent(out):   function evaluation

@@ -73,6 +73,7 @@ module Newton_functions
    real(qp),allocatable    :: sMul(:)    ! NOTE: qp  ! multiplier for state vector for the residual calculations
    logical(lgt) :: feasible                          ! feasibility flag
    real(rkind),allocatable :: fluxVec0(:)            ! flux vector (mixed units)
+   real(rkind),allocatable :: fRHS(:)                ! RHS function for ARKODE
    real(rkind),allocatable :: rAdd(:)                ! additional terms in the residual vector
    real(qp),allocatable    :: resVec(:)  ! NOTE: qp  ! residual vector 
   contains
@@ -505,6 +506,7 @@ contains
                     ! output
                     f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                     f_obj % fluxVec0,                & ! intent(out):   flux vector
+                    f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
                     f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     f_obj % resVec,                  & ! intent(out):   residual vector
                     f_obj % in_SS4HG % fOld,         & ! intent(out):   function evaluation

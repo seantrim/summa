@@ -124,6 +124,7 @@ subroutine eval8summa(&
                       ! output: flux and residual vectors
                       feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                       fluxVec,                 & ! intent(out):   flux vector
+                      fRHS,                    & ! intent(out):   RHS function for ARKODE
                       resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                       resVec,                  & ! intent(out):   residual vector
                       fEval,                   & ! intent(out):   function evaluation
@@ -178,11 +179,12 @@ subroutine eval8summa(&
   integer(i4b),intent(inout)      :: ixSaturation                ! index of the lowest saturated layer (NOTE: only computed on the first iteration)
   real(rkind),intent(out)         :: dBaseflow_dMatric(:,:)      ! derivative in baseflow w.r.t. matric head (s-1)
   ! output: flux and residual vectors
-  logical(lgt),intent(out)        :: feasible                    ! flag to denote the feasibility of the solution
-  real(rkind),intent(out)         :: fluxVec(:)                  ! flux vector
-  real(rkind),intent(out)         :: resSink(:)                  ! sink terms on the RHS of the flux equation
-  real(qp),intent(out)            :: resVec(:) ! NOTE: qp        ! residual vector
-  real(rkind),intent(out)         :: fEval                       ! function evaluation
+  logical(lgt),intent(out)            :: feasible                ! flag to denote the feasibility of the solution
+  real(rkind),intent(out)             :: fluxVec(:)              ! flux vector
+  real(rkind),allocatable,intent(out) :: fRHS(:)                 ! RHS function for ARKODE
+  real(rkind),intent(out)             :: resSink(:)              ! sink terms on the RHS of the flux equation
+  real(qp),intent(out)                :: resVec(:) ! NOTE: qp    ! residual vector
+  real(rkind),intent(out)             :: fEval                   ! function evaluation
   ! output: error control
   integer(i4b),intent(out)        :: err                         ! error code
   character(*),intent(out)        :: message                     ! error message
@@ -631,6 +633,7 @@ subroutine eval8summa(&
                       flux_data,                  & ! intent(in):  model fluxes for a local HRU
                       indx_data,                  & ! intent(in):  index data
                       ! output
+                      fRHS,                       & ! intent(out): RHS function for ARKODE
                       resSink,                    & ! intent(out): additional (sink) terms on the RHS of the state equation
                       resVec,                     & ! intent(out): residual vector
                       err,cmessage)                 ! intent(out): error control
@@ -676,6 +679,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
   real(rkind), pointer        :: stateVec(:) ! solution vector
   real(rkind), pointer        :: rVec(:)     ! residual vector
   logical(lgt)                :: feasible    ! feasibility of state vector
+  real(rkind),allocatable     :: fRHS(:)     ! RHS function for ARKODE, not needed here
   real(rkind)                 :: fNew        ! function values, not needed here
   integer(i4b)                :: err         ! error in imposeConstraints
   character(len=256)          :: message     ! error message of downwind routine
@@ -737,6 +741,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                  ! output: flux and residual vectors
                 feasible,                          & ! intent(out):   flag to denote the feasibility of the solution always true inside SUNDIALS
                 eqns_data%fluxVec,                 & ! intent(out):   flux vector
+                fRHS,                              & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 rVec,                              & ! intent(out):   residual vector
                 fNew,                              & ! intent(out):   new function evaluation
