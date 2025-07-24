@@ -216,7 +216,7 @@ subroutine computResid(&
 
     ! intialize additional terms on the RHS as zero
     rAdd(:) = 0._rkind
-    fRHS    = rAdd ! allocate and initialize right-hand-side function array (for fluxes and source terms)
+    fRHS    = rAdd ! allocate and initialize right-hand-side function array for ARKODE (fluxes plus source terms)
 
     ! compute energy associated with melt freeze for the vegetation canopy (J m-3)
     if (ixVegNrg/=integerMissing) rAdd(ixVegNrg) = rAdd(ixVegNrg) + LH_fus*( scalarCanopyIceTrial - scalarCanopyIce )/canopyDepth
@@ -255,24 +255,37 @@ subroutine computResid(&
     ! NOTE: sMul(ixVegHyd) = 1, but include as it converts all variables to quadruple precision
     ! --> energy balance
     if (mixdformNrg) then
-      if (ixCasNrg/=integerMissing) rVec(ixCasNrg) = ( scalarCanairEnthalpyTrial - scalarCanairEnthalpy )&
-                                                 & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
-      if (ixVegNrg/=integerMissing) rVec(ixVegNrg) = ( scalarCanopyEnthTempTrial - scalarCanopyEnthTemp )&
-                                                 & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+      if (ixCasNrg/=integerMissing) then
+        fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )
+        rVec(ixCasNrg) = ( scalarCanairEnthalpyTrial - scalarCanairEnthalpy )&
+                     & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
+      end if
+      if (ixVegNrg/=integerMissing) then
+        fRHS(ixVegNrg) = ( fVec(ixVegNrg) + rAdd(ixVegNrg)/dt )
+        rVec(ixVegNrg) = ( scalarCanopyEnthTempTrial - scalarCanopyEnthTemp )&
+                       & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+      end if
     else
-      if (ixCasNrg/=integerMissing) rVec(ixCasNrg) = sMul(ixCasNrg)*( scalarCanairTempTrial - scalarCanairTemp )&
-                                                 & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
-      if (ixVegNrg/=integerMissing) rVec(ixVegNrg) = sMul(ixVegNrg)*( scalarCanopyTempTrial - scalarCanopyTemp )&
-                                                 & + scalarCanopyCmTrial*( scalarCanopyWatTrial - scalarCanopyWat )/canopyDepth &
-                                                 & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+      if (ixCasNrg/=integerMissing) then
+        fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )/real(sMul(ixCasNrg),rkind)
+        rVec(ixCasNrg) = sMul(ixCasNrg)*( scalarCanairTempTrial - scalarCanairTemp )&
+                     & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
+      end if
+      if (ixVegNrg/=integerMissing) then
+        fRHS(ixVegNrg) = 0._rkind ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives 
+        rVec(ixVegNrg) = sMul(ixVegNrg)*( scalarCanopyTempTrial - scalarCanopyTemp )&
+                     & + scalarCanopyCmTrial*( scalarCanopyWatTrial - scalarCanopyWat )/canopyDepth &
+                     & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+      end if
     end if
     ! --> mass balance
     if (ixVegHyd/=integerMissing) then
       scalarCanopyHydTrial = merge(scalarCanopyWatTrial, scalarCanopyLiqTrial, (ixStateType( ixHydCanopy(ixVegVolume) )==iname_watCanopy) )
       scalarCanopyHyd      = merge(scalarCanopyWat,      scalarCanopyLiq,      (ixStateType( ixHydCanopy(ixVegVolume) )==iname_watCanopy) )
+      fRHS(ixVegHyd) = ( fVec(ixVegHyd) + rAdd(ixVegHyd)/dt )/real(sMul(ixVegHyd),rkind)
       rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - ( sMul(ixVegHyd)*scalarCanopyHyd + fVec(ixVegHyd)*dt + rAdd(ixVegHyd) )
       !rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - sMul(ixVegHyd)*scalarCanopyHyd&
-      !             & - real(fVec(ixVegHyd)*dt + rAdd(ixVegHyd),qp) ! may need all terms to be qp before doing the sum 
+      !             & - real(fVec(ixVegHyd)*dt + rAdd(ixVegHyd),qp) ! may need all terms to be qp before doing the sum to match original 
     end if
 
     ! compute the residual vector for the snow and soil sub-domains for energy
@@ -280,9 +293,11 @@ subroutine computResid(&
       ! loop through non-missing energy state variables in the snow+soil domain
       do concurrent (iLayer=1:nLayers,ixSnowSoilNrg(iLayer)/=integerMissing)   
         if (mixdformNrg) then
+          fRHS( ixSnowSoilNrg(iLayer) ) = ( fVec( ixSnowSoilNrg(iLayer) ) + rAdd( ixSnowSoilNrg(iLayer) )/dt )
           rVec( ixSnowSoilNrg(iLayer) ) = ( mLayerEnthTempTrial(iLayer) - mLayerEnthTemp(iLayer) )&
                                       & - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
         else
+          fRHS( ixSnowSoilNrg(iLayer) ) = 0._rkind ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives
           rVec( ixSnowSoilNrg(iLayer) ) = sMul( ixSnowSoilNrg(iLayer) )*( mLayerTempTrial(iLayer) - mLayerTemp(iLayer) )&
                                       & + mLayerCmTrial(iLayer)*( mLayerVolFracWatTrial(iLayer) - mLayerVolFracWat(iLayer) )&
                                         - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
@@ -301,14 +316,18 @@ subroutine computResid(&
         mLayerVolFracHyd(iLayer)      = merge(mLayerVolFracWat(iLayer),      mLayerVolFracLiq(iLayer),&
                                       & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
         ! compute the residual
+        fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt )
         rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
                                     & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
       end do 
     end if
 
     ! compute the residual vector for the aquifer
-    if (ixAqWat/=integerMissing) rVec(ixAqWat) = sMul(ixAqWat)*( scalarAquiferStorageTrial - scalarAquiferStorage )&
-                                             & - ( fVec(ixAqWat)*dt + rAdd(ixAqWat) )
+    if (ixAqWat/=integerMissing) then
+      fRHS(ixAqWat) = ( fVec(ixAqWat) + rAdd(ixAqWat)/dt )
+      rVec(ixAqWat) = sMul(ixAqWat)*( scalarAquiferStorageTrial - scalarAquiferStorage )&
+                  & - ( fVec(ixAqWat)*dt + rAdd(ixAqWat) )
+    end if
 
     if (globalPrintFlag) then
       write(*,'(a,1x,100(e12.5,1x))') 'rVec = ', rVec(min(iJac1,size(rVec)):min(iJac2,size(rVec)))
