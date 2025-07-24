@@ -43,7 +43,7 @@ module Newton_functions
    procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
  end type f_obj_base
 
- type,extends(f_obj_base),public :: f_obj_input_functions
+ type,extends(f_obj_base),public :: f_obj_inputs
    ! * SUMMA data *
    type(model_options),allocatable :: model_decisions(:) ! model decisions
 
@@ -98,11 +98,11 @@ module Newton_functions
    procedure :: f2 => f_Rich_space
    procedure :: df1dx_element => df_Rich_dh_element_time
    procedure :: df2dx_element => df_Rich_dh_element_space
- end type f_obj_input_functions
+ end type f_obj_inputs
 
- type,extends(f_obj_input_functions),public :: f_obj_type
+ type,extends(f_obj_inputs),public :: f_obj_type
   contains
-   ! *** these procedures take the procedures from f_obj_input_functions type as input *** !
+   ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
    procedure :: f_vec  => f_diff_vec  ! solver
    procedure :: f1_vec => f1_Rich_vec ! solver
@@ -193,7 +193,7 @@ contains
 
  real(r8b) function f_Rich_space(f_obj,x) result(f_space)
   ! ** space terms for discrete Richards' equation **
-  class(f_obj_input_functions),intent(in) :: f_obj
+  class(f_obj_inputs),intent(in) :: f_obj
   real(r8b),intent(in)         :: x ! current guess
 
   associate(i => Richards_obj % i)
@@ -204,7 +204,7 @@ contains
 
  real(r8b) function f_Rich_time(f_obj,x) result(f_time)
   ! ** time terms for discrete Richards' equation **
-  class(f_obj_input_functions),intent(in) :: f_obj
+  class(f_obj_inputs),intent(in) :: f_obj
   real(r8b),intent(in)         :: x ! current guess
 
   associate(i => Richards_obj % i)
@@ -214,7 +214,7 @@ contains
  end function f_Rich_time
 
  real(r8b) function df_Rich_dh_element_space(f_obj,x,j) result(dfdh_element_space)
-  class(f_obj_input_functions),intent(in) :: f_obj
+  class(f_obj_inputs),intent(in) :: f_obj
   real(r8b),intent(in)         :: x ! current guess
   integer(i4b),intent(in)      :: j
 
@@ -225,7 +225,7 @@ contains
  end function df_Rich_dh_element_space
 
  real(r8b) function df_Rich_dh_element_time(f_obj,x,j) result(dfdh_element_time)
-  class(f_obj_input_functions),intent(in) :: f_obj
+  class(f_obj_inputs),intent(in) :: f_obj
   real(r8b),intent(in)         :: x ! current guess
   integer(i4b),intent(in)      :: j
 
@@ -337,12 +337,12 @@ contains
  end function Jacobian_f2_Rich_vec
 
  function f_diff_vec(f_obj,xvec) result(f_vec)
-  ! *** form vector objective function using the Jordan decomposition ***
+  ! *** form non-linear vector function using the Jordan decomposition ***
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f_vec(1:f_obj % n) ! objective function vector
-  real(r8b)                    :: x
-  integer(i4b)                 :: i
+  real(r8b)                    :: f_vec(1:f_obj % n) ! non-linear function vector
+  !real(r8b)                    :: x
+  !integer(i4b)                 :: i
 
   f_vec=f_obj % f1_vec(xvec)- f_obj % f2_vec(xvec)
  end function f_diff_vec
@@ -350,8 +350,8 @@ contains
  function f1_Rich_vec(f_obj,xvec) result(f1_vec)
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f1_vec(1:f_obj % n) ! objective function vector
-  real(r8b)                    :: x
+  real(r8b)                    :: f1_vec(1:f_obj % n) ! non-linear function vector
+  !real(r8b)                    :: x
   integer(i4b)                 :: i
 
   associate(n => f_obj % n)
@@ -369,8 +369,8 @@ contains
  function f2_Rich_vec(f_obj,xvec) result(f2_vec)
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f2_vec(1:f_obj % n) ! objective function vector
-  real(r8b)                    :: x
+  real(r8b)                    :: f2_vec(1:f_obj % n) ! non-linear function vector
+  !real(r8b)                    :: x
   integer(i4b)                 :: i
 
   associate(n => f_obj % n)
@@ -386,7 +386,7 @@ contains
  end function f2_Rich_vec
 
  real(r8b) function f_diff(f_obj,x) result(f)
-  ! ** complete scalar objective function from Jordan decomposition **
+  ! ** complete scalar non-linear function from Jordan decomposition **
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: x ! current guess
 
@@ -463,8 +463,10 @@ contains
   ! compute SUMMA derivative values and residual vector
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
-  class(f_obj_input_functions),intent(inout) :: f_obj
+  class(f_obj_inputs),intent(inout) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
+
+  ! update
   associate(&
    stateVecTrial => xvec & ! current guess for state vector
   &)
@@ -513,12 +515,20 @@ contains
                     f_obj % out_SS4HG % err,         & ! intent(out): error code
                     f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
   end associate
+
+  ! finalize
+  ! note: "message" used for out_SS4HG data component but "cmessage" used within summaSolve4homegrown subroutine
+  associate(err => f_obj % out_SS4HG % err, cmessage => f_obj % out_SS4HG % message) 
+   if (err /= 0) then
+    write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(cmessage); stop
+   end if
+  end associate
  end subroutine SUMMA_eval8summa
 
  subroutine SUMMA_computJacob(f_obj,J)
   ! ** Interface for SUMMA's computJacob subroutine **
   ! solver variables
-  class(f_obj_input_functions),intent(inout) :: f_obj
+  class(f_obj_inputs),intent(inout) :: f_obj
   real(r8b),allocatable,intent(out) :: J(:,:)
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
   ! SUMMA variables
@@ -576,6 +586,20 @@ contains
   end associate
 
  end subroutine SUMMA_computJacob
+
+ function f_SUMMA_vec(f_obj,xvec) result(f_vec)
+  ! *** Compute SUMMA's vector non-linear function ***
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b)                    :: f_vec(1:f_obj % n) ! non-linear function vector
+
+  ! compute SUMMA residual (taken to be the non-linear function) based on current guess
+  ! note: - eval8summa may contain extraneous computations not needed for the residual
+  !       - perhaps introducing logical flags in eval8summa to isolate the required operations would boost efficiency 
+  call f_obj % SUMMA_eval8summa(xvec)
+
+  f_vec=real(f_obj % resVec,r8b)
+ end function f_SUMMA_vec
 
  function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
   ! ** Compute SUMMA's Jacobian **

@@ -203,7 +203,7 @@ contains
  type(out_type_lineSearchRefinement) :: out_TRR ! trustRegionRefinement
  type(out_type_lineSearchRefinement) :: out_SRF ! safeRootFinder
  ! nested Newton test variables -- SJT: temporary (to be replaced or transitioned elsewhere once functionality is confirmed)
- logical(lgt),parameter :: nested_Newton_flag=.false. ! flag for controlling nested Newton test operations (replace with model decisions if needed)
+ logical(lgt),parameter :: nested_Newton_flag=.true. ! flag for controlling nested Newton test operations (replace with model decisions if needed)
  ! --------------------------------------------------------------------------------------------------------------------------------
  ! --------------------------------------------------------------------------------------------------------------------------------
 
@@ -254,6 +254,7 @@ contains
    ! test for nested Newton solver -- SJT: temporary (elements to be relocated once functionality is confirmed)
    if (nested_Newton_flag) then
     print *, "Nested Newton Test: B"
+    print *, "sum(rVec) = ",sum(rVec)
     print *, "sum(aJac) = ",sum(aJac)
     stop
    end if

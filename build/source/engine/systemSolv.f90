@@ -274,7 +274,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -898,7 +898,8 @@ contains
   nested_Newton % io_SS4HG = io_SS4HG ! input-output object for summaSolve4homegrown
 
   print *, "Nested Newton Test: A"
-  print *, sum(nested_Newton % J(stateVecTrial)) ! SJT: --- currently no dependence on stateVecTrial argument -- add call to eval8summa 
+  print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial))
+  print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial)) 
 
  end subroutine nested_Newton_iterations
 
