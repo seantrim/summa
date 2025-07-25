@@ -146,8 +146,8 @@ contains
  aspect                  => attr_data(iLookATTR%aspect)                           , & ! mean azimuth of HRU in degrees E of N (degrees)
  cosZenith               => diag_data%var(iLookDIAG%scalarCosZenith)%dat(1)       , & ! average cosine of the zenith angle over time step DT
  ! measurement height
- mHeight                 => attr_data(iLookATTR%mHeight)                          , & ! latitude (degrees north)
- adjMeasHeight           => diag_data%var(iLookDIAG%scalarAdjMeasHeight)%dat(1)   , & ! adjusted measurement height (m)
+ mHeight                 => attr_data(iLookATTR%mHeight)                          , & ! measurement height (m)
+ adjMeasHeight           => diag_data%var(iLookDIAG%scalarAdjMeasHeight)%dat(1)   , & ! adjusted measurement height for cases snowDepth>mHeight (m)
  scalarSnowDepth         => prog_data%var(iLookPROG%scalarSnowDepth)%dat(1)       , & ! snow depth on the ground surface (m)
  heightCanopyTop         => mpar_data%var(iLookPARAM%heightCanopyTop)%dat(1)      , & ! height of the top of the canopy layer (m)
  ! model time
