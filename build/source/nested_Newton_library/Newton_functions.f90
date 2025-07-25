@@ -104,7 +104,8 @@ module Newton_functions
   contains
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
-   procedure :: f_vec  => f_diff_vec  ! solver
+   procedure :: f_vec  => f_SUMMA_vec ! solver
+   !procedure :: f_vec  => f_diff_vec  ! solver
    procedure :: f1_vec => f1_Rich_vec ! solver
    procedure :: f2_vec => f2_Rich_vec ! solver
    procedure :: dfdx_vec  => dfdx_diff_vec 
@@ -242,7 +243,6 @@ contains
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J(:,:)
   !real(r8b)                    :: J(1:f_obj % n,1:f_obj % n) ! original Jacobian (full matrix storage)
-  real(r8b)                    :: x ! current guess
   integer(i4b)                 :: icol,irow
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
 
@@ -275,7 +275,6 @@ contains
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J1(:,:)
   !real(r8b)                    :: J1(1:f_obj % n,1:f_obj % n)
-  real(r8b)                    :: x ! current guess
   integer(i4b)                 :: icol,irow
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
 
@@ -308,7 +307,6 @@ contains
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J2(:,:)
   !real(r8b)                    :: J2(1:f_obj % n,1:f_obj % n)
-  real(r8b)                    :: x ! current guess
   integer(i4b)                 :: icol,irow
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
 
@@ -341,8 +339,6 @@ contains
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b)                    :: f_vec(1:f_obj % n) ! non-linear function vector
-  !real(r8b)                    :: x
-  !integer(i4b)                 :: i
 
   f_vec=f_obj % f1_vec(xvec)- f_obj % f2_vec(xvec)
  end function f_diff_vec
@@ -351,7 +347,6 @@ contains
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b)                    :: f1_vec(1:f_obj % n) ! non-linear function vector
-  !real(r8b)                    :: x
   integer(i4b)                 :: i
 
   associate(n => f_obj % n)
@@ -370,7 +365,6 @@ contains
   class(f_obj_type),intent(in) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b)                    :: f2_vec(1:f_obj % n) ! non-linear function vector
-  !real(r8b)                    :: x
   integer(i4b)                 :: i
 
   associate(n => f_obj % n)
@@ -607,11 +601,6 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable        :: J(:,:)
-  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
-  ! SUMMA variables
-  type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
-  type(out_type_computJacob)   :: out_computJacob ! computJacob output object  
-
 
   ! compute derivatives based on current guess
   call f_obj % SUMMA_eval8summa(xvec)

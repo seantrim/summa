@@ -203,7 +203,7 @@ contains
  type(out_type_lineSearchRefinement) :: out_TRR ! trustRegionRefinement
  type(out_type_lineSearchRefinement) :: out_SRF ! safeRootFinder
  ! nested Newton test variables -- SJT: temporary (to be replaced or transitioned elsewhere once functionality is confirmed)
- logical(lgt),parameter :: nested_Newton_flag=.false. ! flag for controlling nested Newton test operations (replace with model decisions if needed)
+ logical(lgt),parameter :: nested_Newton_flag=.true. ! flag for controlling nested Newton test operations (replace with model decisions if needed)
  ! --------------------------------------------------------------------------------------------------------------------------------
  ! --------------------------------------------------------------------------------------------------------------------------------
 

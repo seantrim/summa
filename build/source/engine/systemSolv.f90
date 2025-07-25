@@ -274,7 +274,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -834,7 +834,9 @@ contains
  subroutine nested_Newton_iterations
   ! ** Compute the backward Euler solution using the nested Newton library **
   ! SJT: testing in progress
-  use Newton_functions,   only: f_obj_type ! type for nested Newton solver objects 
+  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for i/o
+  use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
+  use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
   type(f_obj_type) :: nested_Newton ! nested Newton solver object
   ! note: - reusing summaSolve4homegrown objects due to similarities in data requirements
 
@@ -897,10 +899,36 @@ contains
   nested_Newton % in_SS4HG = in_SS4HG ! input object for summaSolve4homegrown
   nested_Newton % io_SS4HG = io_SS4HG ! input-output object for summaSolve4homegrown
 
+  
+  ! * Nested Newton solver options *
+  nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+  nested_Newton % verbose = .true. ! verbose output=true, summarized output=false
+  ! set method for computing relative convergence error
+   ! 'strict' uses two consecutive iterations and is extremely conservative
+   !     |--> (actually computes the convergence error of the previous iteration)
+   ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
+  nested_Newton % convergence = 'strict' ! 'strict' or 'predictive' 
+  ! solver output
+  nested_Newton % unit = stdout ! file unit number for solver output
+  !open(unit=f_obj % unit,file="Newton_driver.dat")
+
+
+  ! set tolerance values
+  call nested_Newton % set_tolerance('strict',0.1e0_r8b,500_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+
+  ! allocate certain components of nested_Newton object
+  call nested_Newton % allocate_memory()
+
+  ! test block -- take out
   print *, "Nested Newton Test: A"
   print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial))
-  print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial)) 
+  print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial))
 
+  ! * Solver Operations *
+
+  nested_Newton % x1=stateVecTrial(1:nState)  ! initialize solution from previous time step
+
+  ! SJT: add iteration loop here
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
