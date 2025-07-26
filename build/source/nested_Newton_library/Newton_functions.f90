@@ -521,24 +521,30 @@ contains
 
  subroutine SUMMA_computJacob(f_obj,J)
   ! ** Interface for SUMMA's computJacob subroutine **
+  ! note: perhaps it is possible to reduce the number of arrays to save memory
   ! solver variables
   class(f_obj_inputs),intent(inout) :: f_obj
   real(r8b),allocatable,intent(out) :: J(:,:)
   integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
+  integer(i4b)                 :: nBands ! SUMMA's leading dimension for banded Jacobians
   ! SUMMA variables
   type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
   type(out_type_computJacob)   :: out_computJacob ! computJacob output object  
+  real(r8b),allocatable        :: aJac(:,:)       ! SUMMA Jacobian array with extra storage rows
 
 
   ! memory allocation for Jacobian 
   if (f_obj % banded) then ! banded storage
    associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
     nrow_banded=subdiag+superdiag+1
+    nBands=nrow_banded+subdiag
     allocate(J(1:nrow_banded,1:n))
+    allocate(aJac(1:nBands,1:n)) !note: first 1:subdiag rows are for extra storage -- Jacobian uses remaining rows
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
     allocate(J(1:n,1:n))
+    allocate(aJac(1:n,1:n))
    end associate
   end if
 
@@ -563,8 +569,7 @@ contains
     diag_data         => f_obj % diag_data,&         ! diagnostic variables for a local HRU
     deriv_data        => f_obj % deriv_data,&        ! derivatives in model fluxes w.r.t. relevant state variables
     dBaseflow_dMatric => f_obj % dBaseflow_dMatric,& ! derivative in baseflow w.r.t. matric head (s-1)
-    dMat              => f_obj % dMat,&              ! diagonal matrix (excludes flux derivatives) 
-    aJac              => J &                         ! Jacobian
+    dMat              => f_obj % dMat&               ! diagonal matrix (excludes flux derivatives) 
    &)
     call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
    end associate
@@ -578,6 +583,17 @@ contains
     write(f_obj % unit,*) "Error in Jacobian_f_SUMMA_vec: computJacob message="//trim(cmessage); stop
    end if
   end associate
+
+  ! store Jacobian used in solver
+  if (f_obj % banded) then ! banded storage
+   associate(n => f_obj % n, subdiag => f_obj % subdiag)
+    J(1:nrow_banded,1:n)=aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+   end associate
+  else ! full matrix storage
+   associate(n => f_obj % n)
+    J=aJac(1:n,1:n)
+   end associate
+  end if
 
  end subroutine SUMMA_computJacob
 

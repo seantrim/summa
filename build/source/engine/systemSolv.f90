@@ -274,7 +274,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -836,6 +836,7 @@ contains
   ! SJT: testing in progress
   use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for i/o
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
+  use Newton_solvers,                only: Newton_solve        ! nested Newton solver
   use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
   type(f_obj_type) :: nested_Newton ! nested Newton solver object
   ! note: - reusing summaSolve4homegrown objects due to similarities in data requirements
@@ -914,21 +915,28 @@ contains
 
 
   ! set tolerance values
-  call nested_Newton % set_tolerance('strict',0.1e0_r8b,500_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  call nested_Newton % set_tolerance('strict',0.1e0_r8b,100_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
 
   ! test block -- take out
   print *, "Nested Newton Test: A"
-  print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial))
+  print *, "ixMatrix,ixFullMatrix,ixBandMatrix:",ixMatrix,ixFullMatrix,ixBandMatrix
+  print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial)) 
   print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial))
+  print *, "Observed Shape of NN Jacobian:",shape(nested_Newton % J(stateVecTrial))
+  print *, "Expected shape of NN Jacobian:",nBands-kl,nState 
 
   ! * Solver Operations *
 
+  ! set up initial guess
   nested_Newton % x1=stateVecTrial(1:nState)  ! initialize solution from previous time step
+  call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
-  ! SJT: add iteration loop here
+  ! call solver
+  call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
+
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
