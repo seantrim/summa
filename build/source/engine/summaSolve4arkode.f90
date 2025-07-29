@@ -23,6 +23,7 @@ module summaSolve4arkode_module
  !======= Inclusions ===========
  USE, intrinsic :: iso_c_binding
  USE nrtype
+ USE type4kinsol ! reusing KINSOL data type due to overlap with ARKODE
  !USE type4ida
  
  ! access the global print flag
@@ -144,6 +145,7 @@ contains
   use fsunmatrix_dense_mod       ! Fortran interface to dense SUNMatrix
   use fsunlinsol_dense_mod       ! Fortran interface to dense SUNLinearSolver
   use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
+  use eval8summa_module,only: eval8summa4arkode ! RHS function evaluations
   !use analytic_mod               ! ODE functions
 
   !======= Declarations =========
@@ -216,7 +218,7 @@ contains
   type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
   type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
   type(c_ptr)                             :: arkode_mem ! ARKODE memory
-  integer(c_long)                         :: neq        ! # of equations ------ SJT: update this (possibly nState in SUNDIALS type)
+  integer(c_long)                         :: neq        ! # of equations 
   real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
   !======= Internals ============
@@ -235,7 +237,7 @@ contains
   dtout = 1.0d0
   nout = ceiling(tend/dtout)
 
-  ! define # of equations -- SJT: verify this
+  ! define # of equations
   neq = nstate
 
   ! create SUNDIALS N_Vector
@@ -246,10 +248,10 @@ contains
   ! initialize solution vector
   call FN_VConst(0.0d0, sunvec_y)
 
-  !! SJT: continue here -- RhsFn in SUMMA may be related to eval8summa (transformed from implicit form)
-  !! create ARKStep memory
-  !arkode_mem = FARKStepCreate(c_null_funptr, c_funloc(RhsFn), tstart, sunvec_y, ctx)
-  !if (.not. c_associated(arkode_mem)) print *, 'ERROR: arkode_mem = NULL'
+  ! SJT: continue here -- RhsFn in SUMMA may be related to eval8summa (transformed from implicit form)
+  ! create ARKStep memory
+  arkode_mem = FARKStepCreate(c_null_funptr, c_funloc(eval8summa4arkode), tstart, sunvec_y, ctx)
+  if (.not. c_associated(arkode_mem)) print *, 'ERROR: arkode_mem = NULL'
  
  end subroutine summaSolve4arkode
 

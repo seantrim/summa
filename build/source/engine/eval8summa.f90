@@ -77,6 +77,7 @@ private
 public::eval8summa
 #ifdef SUNDIALS_ACTIVE
 public::eval8summa4kinsol
+public::eval8summa4arkode
 #endif
 public::imposeConstraints
 
@@ -753,6 +754,123 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
   return
 
 end function eval8summa4kinsol
+#endif
+
+#ifdef SUNDIALS_ACTIVE
+! *****************************************************************************************************************
+! public function eval8summa4arkode: compute the RHS vector f(t,y) required for ARKODE solver (ODE: dy/dt = f(t,y))
+! *****************************************************************************************************************
+! Return values:
+!    0 = success,
+!    1 = recoverable error,
+!   -1 = non-recoverable error
+! ----------------------------------------------------------------
+integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
+      result(ierr) bind(C,name='eval8summa4arkode')
+
+  !======= Inclusions ===========
+  use, intrinsic :: iso_c_binding
+  use fsundials_core_mod
+  use type4kinsol
+
+  !======= Declarations =========
+  implicit none
+
+  ! calling variables
+  real(c_double), value       :: tn          ! current time
+  type(N_Vector)              :: sunvec_y    ! solution N_Vector    y
+  type(N_Vector)              :: sunvec_f    ! residual N_Vector    f(t,y)
+  type(c_ptr), value          :: user_data   ! user-defined data
+
+  ! pointers to data in SUNDIALS vectors
+  type(data4kinsol), pointer  :: eqns_data   ! equations data
+  real(rkind), pointer        :: stateVec(:) ! solution vector
+  real(rkind), allocatable    :: rVec(:)     ! residual vector
+  logical(lgt)                :: feasible    ! feasibility of state vector
+  real(rkind), allocatable    :: fRHS(:)     ! RHS function for ARKODE 
+  real(rkind), pointer        :: f(:)        ! pointer for RHS function for ARKODE
+  real(rkind)                 :: fNew        ! function values, not needed here
+  integer(i4b)                :: err         ! error in imposeConstraints
+  character(len=256)          :: message     ! error message of downwind routine
+
+  !======= Internals ============
+
+  ! get equations data from user-defined data
+  call c_f_pointer(user_data, eqns_data)
+
+  ! allocate memory
+  allocate(rVec(1:eqns_data%nState)) ! normally a deferred shape array but we need explicit allocation here
+
+  ! get data arrays from SUNDIALS vectors
+  stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
+  f(1:eqns_data%nState)         => FN_VGetArrayPointer(sunvec_f)
+
+!  ! increment the proposed iteration for simple error control if needed
+!  if (eqns_data%firstStateiteration) then
+!    eqns_data%firstStateIteration = .false.
+!  else
+!    call imposeConstraints(eqns_data%model_decisions,eqns_data%indx_data,eqns_data%prog_data,eqns_data%mpar_data,stateVec(:), &
+!      eqns_data%stateVecPrev, eqns_data%nState, eqns_data%nSoil, eqns_data%nSnow, message, err)
+!     if(err/=0)then; ierr=1; message="eval8summa4kinsol/"//trim(message); print*, message; return; end if  ! (check for errors)
+!  endif
+!  eqns_data%stateVecPrev = stateVec(:)  ! save the state vector for the next iteration
+  
+  ! compute the flux and the residual vector for a given state vector
+  call eval8summa(&
+                ! input: model control
+                eqns_data%dt_cur,                  & ! intent(in):    current stepsize
+                eqns_data%dt,                      & ! intent(in):    data step
+                eqns_data%nSnow,                   & ! intent(in):    number of snow layers
+                eqns_data%nSoil,                   & ! intent(in):    number of soil layers
+                eqns_data%nLayers,                 & ! intent(in):    number of layers
+                eqns_data%nState,                  & ! intent(in):    number of state variables in the current subset
+                .true.,                            & ! intent(in):    inside SUNDIALS solver
+                eqns_data%firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                eqns_data%firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
+                eqns_data%firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
+                eqns_data%computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                ! input: state vectors
+                stateVec,                          & ! intent(in):    model state vector
+                eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations
+                eqns_data%sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                ! input: data structures
+                eqns_data%model_decisions,         & ! intent(in):    model decisions
+                eqns_data%lookup_data,             & ! intent(in):    lookup data
+                eqns_data%type_data,               & ! intent(in):    type of vegetation and soil
+                eqns_data%attr_data,               & ! intent(in):    spatial attributes
+                eqns_data%mpar_data,               & ! intent(in):    model parameters
+                eqns_data%forc_data,               & ! intent(in):    model forcing data
+                eqns_data%bvar_data,               & ! intent(in):    average model variables for the entire basin
+                eqns_data%prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                ! input-output: data structures
+                eqns_data%indx_data,               & ! intent(inout): index data
+                eqns_data%diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                eqns_data%flux_data,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                eqns_data%deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                 ! input-output: baseflow
+                eqns_data%ixSaturation,            & ! intent(inout): index of the lowest saturated layer
+                eqns_data%dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                 ! output: flux and residual vectors
+                feasible,                          & ! intent(out):   flag to denote the feasibility of the solution always true inside SUNDIALS
+                eqns_data%fluxVec,                 & ! intent(out):   flux vector
+                fRHS,                              & ! intent(out):   RHS function for ARKODE
+                eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                rVec,                              & ! intent(out):   residual vector
+                fNew,                              & ! intent(out):   new function evaluation
+                eqns_data%err,eqns_data%message)     ! intent(out):   error control
+  if(eqns_data%err > 0)then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; endif
+  if(eqns_data%err < 0)then; eqns_data%message=trim(eqns_data%message); ierr=1; return; endif
+
+  ! assign RHS values to pointer variable
+  f=fRHS(1:eqns_data%nState)
+  
+  ! save residual and return success
+  !eqns_data%resVec = rVec
+  ierr = 0
+  return
+
+end function eval8summa4arkode
 #endif
 
 ! ***************************************************************************************************************************************
