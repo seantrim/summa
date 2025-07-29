@@ -456,6 +456,9 @@ contains
    end do ! end looping through basin variables
   endif  ! end if case for tdh variables being in init. cond. file
  endif  ! end if case for not being a singleHRU run
+ 
+ call nc_file_close(ncID,err,cmessage)
+ if(err/=0)then;message=trim(message)//trim(cmessage);return;end if
 
  end subroutine read_icond
 
