@@ -866,7 +866,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   f=fRHS(1:eqns_data%nState)
   
   ! save residual and return success
-  !eqns_data%resVec = rVec
+  eqns_data%resVec = rVec
   ierr = 0
   return
 
