@@ -75,7 +75,7 @@ USE mDecisions_module,only:       &
 
 ! privacy
  implicit none
- private::setInitialCondition
+ public::setInitialCondition ! set to public for ARKODE use 
  private::setSolverParams
  private::getErrMessage
  public::summaSolve4kinsol
