@@ -274,7 +274,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -291,8 +291,11 @@ subroutine systemSolv(&
       case(kinsol) ! solve for BE time step using KINSOL
         call solve_with_KINSOL; if (return_flag) return           ! solve using KINSOL -- return if error
       case(homegrown) ! solve for BE time step using Newton iterations
-        if (nested_Newton_flag) call nested_Newton_iterations ! nested Newton library
-        call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
+        if (nested_Newton_flag) then ! replace with model decision in future update -- test flag for now
+         call nested_Newton_iterations; if (return_flag) return ! nested Newton library
+        else
+         call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
+        end if
     end select
   end associate 
  
@@ -834,21 +837,23 @@ contains
  subroutine nested_Newton_iterations
   ! ** Compute the backward Euler solution using the nested Newton library **
   ! SJT: testing in progress
-  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for i/o
+  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for nested Newton solver output messages
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
   use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
   type(f_obj_type) :: nested_Newton ! nested Newton solver object
-  ! note: - reusing summaSolve4homegrown objects due to similarities in data requirements
+  ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
-  ! initialize summaSolve4homegrown objects
+  ! initialize SS4HG components within nested Newton object
   associate(&
    ! layer geometry
    nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers
    nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
    )
-   call in_SS4HG % initialize(dt_cur,dt,iter,nSnow,nSoil,nLayers,nLeadDim,nState,ixMatrix,firstSubStep,computeVegFlux,scalarSolution,fOld)
-   call io_SS4HG % initialize(firstFluxCall,xMin,xMax,ixSaturation)
+   call nested_Newton % in_SS4HG &
+                    & % initialize(dt_cur,dt,iter,nSnow,nSoil,nLayers,nLeadDim,nState,ixMatrix,firstSubStep,computeVegFlux,scalarSolution,fOld)
+   call nested_Newton % io_SS4HG &
+                    & % initialize(firstFluxCall,xMin,xMax,ixSaturation)
   end associate
 
   ! * interface Jacobian array structure info *
@@ -864,7 +869,7 @@ contains
    return_flag=.true.; return
   end if
   ! # of columns of full matrix
-  nested_Newton % n = in_SS4HG % nState
+  nested_Newton % n = nState
 
   ! * interface SUMMA data *
   ! allocatable data components that require allocation on assignment
@@ -897,13 +902,10 @@ contains
   nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
   nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
 
-  nested_Newton % in_SS4HG = in_SS4HG ! input object for summaSolve4homegrown
-  nested_Newton % io_SS4HG = io_SS4HG ! input-output object for summaSolve4homegrown
-
   
   ! * Nested Newton solver options *
   nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
-  nested_Newton % verbose = .true. ! verbose output=true, summarized output=false
+  nested_Newton % verbose = .false. ! verbose output=true, summarized output=false
   ! set method for computing relative convergence error
    ! 'strict' uses two consecutive iterations and is extremely conservative
    !     |--> (actually computes the convergence error of the previous iteration)
@@ -915,18 +917,18 @@ contains
 
 
   ! set tolerance values
-  call nested_Newton % set_tolerance('strict',0.1e0_r8b,100_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  call nested_Newton % set_tolerance('strict',0.01e0_r8b,50_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
 
   ! test block -- take out
-  print *, "Nested Newton Test: A"
-  print *, "ixMatrix,ixFullMatrix,ixBandMatrix:",ixMatrix,ixFullMatrix,ixBandMatrix
-  print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial)) 
-  print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial))
-  print *, "Observed Shape of NN Jacobian:",shape(nested_Newton % J(stateVecTrial))
-  print *, "Expected shape of NN Jacobian:",nBands-kl,nState 
+  !print *, "Nested Newton Test: A"
+  !print *, "ixMatrix,ixFullMatrix,ixBandMatrix:",ixMatrix,ixFullMatrix,ixBandMatrix
+  !print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial)) 
+  !print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial))
+  !print *, "Observed Shape of NN Jacobian:",shape(nested_Newton % J(stateVecTrial))
+  !print *, "Expected shape of NN Jacobian:",nBands-kl,nState 
 
   ! * Solver Operations *
 
@@ -936,6 +938,28 @@ contains
 
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
+
+  ! finalize operations for SS4HG objects (not all variables are used)
+  call nested_Newton % io_SS4HG &
+                   & % finalize(firstFluxCall,xMin,xMax,ixSaturation) ! xMin and xMax not used
+  call nested_Newton % out_SS4HG &
+                   & % finalize(fNew,converged,err,cmessage)          ! converged not used (nested Newton object used instead)
+
+  ! save the computed functions, residuals, and solution
+  fOld          = fNew   ! may be from previous Newton iteration
+  resVec        = nested_Newton % resVec ! may be from previous Newton iteration
+  stateVecTrial = nested_Newton % x1
+  stateVecPrime = stateVecTrial  !prime values not used here, dummy
+  nSteps = 1 ! number of time steps taken in solver
+
+  ! test block ------ take out
+  print *, "nested_Newton % converged=",nested_Newton % converged
+
+  ! check for convergence
+  if (.not.nested_Newton % converged) then ! if failed to converge
+   message=trim(message)//'failed to converge'
+   err=-20; return_flag=.true.; return ! recoverable error
+  end if
 
  end subroutine nested_Newton_iterations
 

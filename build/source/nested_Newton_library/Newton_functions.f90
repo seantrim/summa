@@ -22,10 +22,11 @@ module Newton_functions
  ! ***** Parent Type ***** !
  type, public :: f_obj_base
    ! ** Default data components used by the Newton solvers ** !
-   logical      :: banded  ! flag for banded Jacobians
-   logical      :: nested  ! flag for nested algorithm
-   logical      :: verbose ! flag for full output
-   logical      :: inner   ! flag to indicate the execution of inner iterations
+   logical      :: banded    ! flag for banded Jacobians
+   logical      :: nested    ! flag for nested algorithm
+   logical      :: verbose   ! flag for full output
+   logical      :: inner     ! flag to indicate the execution of inner iterations
+   logical      :: converged ! flag to indicate that the obtained solution meets the convergence criterion
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
@@ -505,7 +506,7 @@ contains
                     f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
                     f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     f_obj % resVec,                  & ! intent(out):   residual vector
-                    f_obj % in_SS4HG % fOld,         & ! intent(out):   function evaluation
+                    f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
                     f_obj % out_SS4HG % err,         & ! intent(out): error code
                     f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
   end associate

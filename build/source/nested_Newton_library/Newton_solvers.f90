@@ -39,6 +39,9 @@ contains
   integer(i4b) :: M                              ! # of rows/columns for linear system
   integer(i4b) :: nrow_banded                    ! # of rows for banded storage
 
+  ! initialize convergence flag
+  f_obj % converged = .false.
+
   ! allocate memory for choice of Jacobian storage
   if (f_obj % banded) then ! banded storage
    nrow_banded=f_obj % subdiag + f_obj % superdiag + 1
@@ -66,7 +69,10 @@ contains
 
    call check_residual_vector(f_obj,k,xkp1,xk,f_obj % tol,R_est,exit_flag)
    if (f_obj % verbose) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
-   if (exit_flag) exit
+   if (exit_flag) then ! exit loop if convergence criterion is met
+    f_obj % converged = .true.
+    exit
+   end if
 
    xk=xkp1 ! prep for next iteration - can probably evaluate in place
   end do
@@ -106,6 +112,9 @@ contains
   real(r8b) :: B(1:f_obj % n)                    ! right-hand side / solution vector
   integer(i4b) :: M                              ! # of rows/columns for linear system
   integer(i4b) :: nrow_banded                    ! # of rows for banded storage
+
+  ! initialize convergence flag
+  f_obj % converged = .false.
 
   ! allocate memory for choice of Jacobian storage
   if (f_obj % banded) then ! banded storage
@@ -166,7 +175,10 @@ contains
    if (f_obj % verbose) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
-   if (exit_outer) exit outer
+   if (exit_outer) then ! exit loop if convergence criterion is met
+    f_obj % converged = .true.
+    exit outer
+   end if
 
    xk0=xkp1lp1
   end do outer
