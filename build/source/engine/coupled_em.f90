@@ -289,6 +289,9 @@ subroutine coupled_em(&
   logical(lgt)                         :: computeEnthalpy        ! flag to compute enthalpy regardless of the model decision
   logical(lgt)                         :: enthalpyStateVec       ! flag if enthalpy is a state variable (IDA)
   logical(lgt)                         :: use_lookup             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
+  ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
+
   ! ----------------------------------------------------------------------------------------------------------------------------------------------
   ! initialize error control
   err=0; message="coupled_em/"
@@ -1014,6 +1017,14 @@ subroutine coupled_em(&
                       err,cmessage)                             ! intent(out):   error code and error message
       ! check for all errors (error recovery within opSplittin)
       if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; end if
+
+      if (nested_Newton_test) then
+       print *, "coupled_em Test A: after opSplittin call"
+       print *, "err=",err
+       print *, "tooMuchMelt=",tooMuchMelt
+       print *, "stepFailure=",stepFailure
+       print *, ""
+      end if
 
       ! process the flag for too much melt
       if(tooMuchMelt)then

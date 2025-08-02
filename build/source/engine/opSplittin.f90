@@ -313,6 +313,8 @@ subroutine opSplittin(&
   ! splitting method control variables
   logical(lgt)                    :: exit_split_select,exit_coupling,exit_stateThenDomain,exit_solution
   logical(lgt)                    :: cycle_split_select,cycle_coupling,cycle_stateThenDomain,cycle_domainSplit,cycle_solution
+  ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
   ! ------------------------ classes for subroutine arguments (classes defined in data_types module) ------------------------
   !      ** intent(in) arguments **         ||       ** intent(inout) arguments **        ||      ** intent(out) arguments **
   type(in_type_indexSplit)  :: in_indexSplit;                                             type(out_type_indexSplit)  :: out_indexSplit;  ! indexSplit arguments
@@ -929,6 +931,16 @@ subroutine opSplittin(&
                    indx_data,prog_data,diag_data,flux_data,flux_mean,deriv_data,bvar_data,&
                    out_varSubstep)                                                          ! intent(out): class object for model control
    call finalize_varSubstep
+  
+   if (nested_Newton_test) then
+    print *, "opSplittin Test A: after varSubstep call"
+    print *, "err=",err
+    print *, "failedMinimumStep=",failedMinimumStep
+    print *, "reduceCoupledStep=",reduceCoupledStep
+    print *, "tooMuchMelt=",tooMuchMelt
+    print *, ""
+   end if 
+
    if (err/=0) then 
     message=trim(message)//trim(cmessage) 
     if (err>0) then ! return for positive error codes

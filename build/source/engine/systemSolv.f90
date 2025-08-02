@@ -274,7 +274,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -915,9 +915,8 @@ contains
   nested_Newton % unit = stdout ! file unit number for solver output
   !open(unit=f_obj % unit,file="Newton_driver.dat")
 
-
   ! set tolerance values
-  call nested_Newton % set_tolerance('strict',0.01e0_r8b,50_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  call nested_Newton % set_tolerance('strict',1.0e-10_r8b,100_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
@@ -945,6 +944,15 @@ contains
   call nested_Newton % out_SS4HG &
                    & % finalize(fNew,converged,err,cmessage)          ! converged not used (nested Newton object used instead)
 
+  ! interface additional output that summaSolve4homegrown provides
+  indx_data  = nested_Newton % indx_data 
+  diag_data  = nested_Newton % diag_data 
+  flux_temp  = nested_Newton % flux_init 
+  deriv_data = nested_Newton % deriv_data
+  dBaseflow_dMatric = nested_Newton % dBaseflow_dMatric(:,:) 
+  fluxVec = nested_Newton % fluxVec0
+  resSink = nested_Newton % rAdd
+
   ! save the computed functions, residuals, and solution
   fOld          = fNew   ! may be from previous Newton iteration
   resVec        = nested_Newton % resVec ! may be from previous Newton iteration
@@ -952,14 +960,19 @@ contains
   stateVecPrime = stateVecTrial  !prime values not used here, dummy
   nSteps = 1 ! number of time steps taken in solver
 
-  ! test block ------ take out
-  print *, "nested_Newton % converged=",nested_Newton % converged
-
   ! check for convergence
   if (.not.nested_Newton % converged) then ! if failed to converge
    message=trim(message)//'failed to converge'
    err=-20; return_flag=.true.; return ! recoverable error
   end if
+
+  ! test block ------ take out
+  !print *, "systemSolv Test B: after Newton_solve call"
+  !print *, "nested_Newton % converged=",nested_Newton % converged
+  !print *, "err=",err
+  !print *, "object nSoil=",nested_Newton % indx_data%var(iLookINDEX%nSoil)%dat(1)
+  !print *, "indx_data nSoil=",indx_data%var(iLookINDEX%nSoil)%dat(1)
+  !print *, ""
 
  end subroutine nested_Newton_iterations
 

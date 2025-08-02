@@ -154,6 +154,7 @@ subroutine varSubstep(&
   ! error control
   character(LEN=256)                 :: cmessage                               ! error message of downwind routine
   ! general local variables
+  integer(i4b)                       :: nLayers_in                             ! number of layers for input to systemSolv
   integer(i4b)                       :: iVar                                   ! index of variables in data structures
   integer(i4b)                       :: iSoil                                  ! index of soil layers
   integer(i4b)                       :: ixLayer                                ! index in a given domain
@@ -198,6 +199,8 @@ subroutine varSubstep(&
   logical(lgt)                       :: computeEnthTemp                        ! flag to compute enthalpy regardless of the model decision
   logical(lgt)                       :: enthalpyStateVec                       ! flag if enthalpy is a state variable (ida)
   logical(lgt)                       :: use_lookup                             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
+  ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
 
   ! ---------------------------------------------------------------------------------------
   ! initialize error control
@@ -225,27 +228,7 @@ subroutine varSubstep(&
     ixNumericalMethod       => model_decisions(iLookDECISIONS%num_method)%iDecision   ,& ! intent(in):    [i4b]    choice of numerical solver
     ixNrgConserv            => model_decisions(iLookDECISIONS%nrgConserv)%iDecision   ,& ! intent(in):    [i4b]    choice of variable in either energy backward Euler residual or IDA state variable
     ! number of layers
-    nSnow                   => indx_data%var(iLookINDEX%nSnow)%dat(1)                 ,& ! intent(in):    [i4b]    number of snow layers
-    nSoil                   => indx_data%var(iLookINDEX%nSoil)%dat(1)                 ,& ! intent(in):    [i4b]    number of soil layers
-    nLayers                 => indx_data%var(iLookINDEX%nLayers)%dat(1)               ,& ! intent(in):    [i4b]    total number of layers
-    nSoilOnlyHyd            => indx_data%var(iLookINDEX%nSoilOnlyHyd )%dat(1)         ,& ! intent(in):    [i4b]    number of hydrology variables in the soil domain
     mLayerDepth             => prog_data%var(iLookPROG%mLayerDepth)%dat               ,& ! intent(in):    [dp(:)]  depth of each layer in the snow-soil sub-domain (m)
-    ! get indices for balances
-    ixCasNrg                => indx_data%var(iLookINDEX%ixCasNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy air space energy state variable
-    ixVegNrg                => indx_data%var(iLookINDEX%ixVegNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy energy state variable
-    ixVegHyd                => indx_data%var(iLookINDEX%ixVegHyd)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy hydrology state variable (mass)
-    ixTopNrg                => indx_data%var(iLookINDEX%ixTopNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of upper-most energy state in the snow+soil subdomain
-    ixTopHyd                => indx_data%var(iLookINDEX%ixTopHyd)%dat(1)              ,& ! intent(in):    [i4b]    index of upper-most hydrology state in the snow+soil subdomain
-    ixAqWat                 => indx_data%var(iLookINDEX%ixAqWat)%dat(1)               ,& ! intent(in):    [i4b]    index of water storage in the aquifer
-    ixSoilOnlyHyd           => indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for hydrology state variables in the soil domain
-    ixSnowSoilHyd           => indx_data%var(iLookINDEX%ixSnowSoilHyd)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for hydrology state variables in the snow+soil domain
-    ixSnowSoilNrg           => indx_data%var(iLookINDEX%ixSnowSoilNrg)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for energy state variables in the snow+soil domain
-    nSnowSoilNrg            => indx_data%var(iLookINDEX%nSnowSoilNrg)%dat(1)          ,& ! intent(in):    [i4b]    number of energy state variables in the snow+soil domain
-    nSnowSoilHyd            => indx_data%var(iLookINDEX%nSnowSoilHyd)%dat(1)          ,& ! intent(in):    [i4b]    number of hydrology state variables in the snow+soil domain
-    ! mapping between state vectors and control volumes
-    ixLayerActive           => indx_data%var(iLookINDEX%ixLayerActive)%dat            ,& ! intent(in):    [i4b(:)] list of indices for all active layers (inactive=integerMissing)
-    ixMapFull2Subset        => indx_data%var(iLookINDEX%ixMapFull2Subset)%dat         ,& ! intent(in):    [i4b(:)] mapping of full state vector to the state subset
-    ixControlVolume         => indx_data%var(iLookINDEX%ixControlVolume)%dat          ,& ! intent(in):    [i4b(:)] index of control volume for different domains (veg, snow, soil)
     ! model state variables (vegetation canopy)
     scalarCanairTemp        => prog_data%var(iLookPROG%scalarCanairTemp)%dat(1)       ,& ! intent(inout): [dp]     temperature of the canopy air space (K)
     scalarCanopyTemp        => prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1)       ,& ! intent(inout): [dp]     temperature of the vegetation canopy (K)
@@ -270,6 +253,7 @@ subroutine varSubstep(&
     )  ! end association with variables in the data structures
     ! *********************************************************************************************************************************************************
 
+
     ! initialize flag for the success of the substepping
     failedMinimumStep=.false.
 
@@ -288,21 +272,27 @@ subroutine varSubstep(&
     !   NOTE: this may just be amplifying the splitting error if maxstep is smaller than the full possible step
     maxstep = mpar_data%var(iLookPARAM%maxstep)%dat(1)  ! maximum time step (s).
 
-    ! allocate space for the temporary model flux structure
-    call allocLocal(flux_meta(:),flux_temp,nSnow,nSoil,err,cmessage)
-    if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
+    ! associate block for indx_data components
+    associate(&
+     nSnow                   => indx_data%var(iLookINDEX%nSnow)%dat(1)                 ,& ! intent(in):    [i4b]    number of snow layers
+     nSoil                   => indx_data%var(iLookINDEX%nSoil)%dat(1)                  & ! intent(in):    [i4b]    number of soil layers
+    &)
+      ! allocate space for the temporary model flux structure
+      call allocLocal(flux_meta(:),flux_temp,nSnow,nSoil,err,cmessage)
+      if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
-    ! initialize the model fluxes (some model fluxes are not computed in the iterations)
-    do iVar=1,size(flux_data%var)
-      flux_temp%var(iVar)%dat(:) = flux_data%var(iVar)%dat(:)
-    end do
+      ! initialize the model fluxes (some model fluxes are not computed in the iterations)
+      do iVar=1,size(flux_data%var)
+        flux_temp%var(iVar)%dat(:) = flux_data%var(iVar)%dat(:)
+      end do
 
-    ! initialize the total energy fluxes (modified in updateProg)
-    sumCanopyEvaporation = 0._rkind  ! canopy evaporation/condensation (kg m-2 s-1)
-    sumLatHeatCanopyEvap = 0._rkind  ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
-    sumSenHeatCanopy     = 0._rkind  ! sensible heat flux from the canopy to the canopy air space (W m-2)
-    sumSoilCompress      = 0._rkind  ! total soil compression
-    allocate(sumLayerCompress(nSoil)); sumLayerCompress = 0._rkind ! soil compression by layer
+      ! initialize the total energy fluxes (modified in updateProg)
+      sumCanopyEvaporation = 0._rkind  ! canopy evaporation/condensation (kg m-2 s-1)
+      sumLatHeatCanopyEvap = 0._rkind  ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
+      sumSenHeatCanopy     = 0._rkind  ! sensible heat flux from the canopy to the canopy air space (W m-2)
+      sumSoilCompress      = 0._rkind  ! total soil compression
+      allocate(sumLayerCompress(nSoil)); sumLayerCompress = 0._rkind ! soil compression by layer
+    end associate
 
     ! initialize balances
     sumBalance = 0._rkind
@@ -313,6 +303,7 @@ subroutine varSubstep(&
     ! initialize subStep
     dtSum     = 0._rkind  ! keep track of the portion of the time step that is completed
     nSubsteps = 0
+
 
     ! loop through substeps
     ! NOTE: continuous do statement with exit clause
@@ -336,6 +327,9 @@ subroutine varSubstep(&
                       err,cmessage)       ! intent(out): error control
       if(err/=0)then; message=trim(message)//trim(cmessage); return; endif  ! (check for errors)
 
+      ! # of layers to be used as input to systemSolv
+      ! note: using a separate variable rather than an association to resolve conflicting intent attributes for indx_data
+      nLayers_in=indx_data%var(iLookINDEX%nLayers)%dat(1)
       ! -----
       ! * iterative solution...
       ! -----------------------
@@ -345,7 +339,7 @@ subroutine varSubstep(&
                       dtSubstep,         & ! intent(in):    time step (s)
                       whole_step,        & ! intent(in):    entire time step (s)
                       nState,            & ! intent(in):    total number of state variables
-                      nLayers,           & ! intent(in):    total number of layers
+                      nLayers_in,        & ! intent(in):    total number of layers
                       firstSubStep,      & ! intent(in):    flag to denote first sub-step
                       firstFluxCall,     & ! intent(inout): flag to indicate if we are processing the first flux call
                       firstSplitOper,    & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
@@ -383,6 +377,16 @@ subroutine varSubstep(&
                       reduceCoupledStep, & ! intent(out):   flag to reduce the length of the coupled step
                       tooMuchMelt,       & ! intent(out):   flag to denote that ice is insufficient to support melt
                       err,cmessage)        ! intent(out):   error code and error message
+      if (nested_Newton_test) then
+       print *, "varSubstep Test A: after systemSolv call"
+       print *, "err=",err
+       print *, "reduceCoupledStep=",reduceCoupledStep
+       print *, "tooMuchMelt=",tooMuchMelt
+       print *, "indx_data nSoil=",indx_data%var(iLookINDEX%nSoil)%dat(1)
+       print *, "indx_data nLayers=",indx_data%var(iLookINDEX%nLayers)%dat(1)
+       print *, ""
+      end if
+
       if(err/=0)then ! (check for errors, but do not fail yet)
         message=trim(message)//trim(cmessage)
         if(err>0) return
@@ -445,11 +449,34 @@ subroutine varSubstep(&
         return
       endif
 
-      ! update prognostic variables, update balances, and check them for possible step reduction if homegrown or kinsol solver
-      call updateProg(dtSubstep,nSnow,nSoil,nLayers,untappedMelt,stateVecTrial,stateVecPrime,                                    & ! input: states
-                      doAdjustTemp,computeVegFlux,computMassBalance,computNrgBalance,computeEnthTemp,enthalpyStateVec,use_lookup,& ! input: model control
-                      model_decisions,lookup_data,mpar_data,indx_data,flux_temp,prog_data,diag_data,deriv_data,                  & ! input-output: data structures
-                      fluxVec,resVec,balance,waterBalanceError,nrgFluxModified,err,message)                                        ! input-output: balances, flags, and error control
+      ! associate block for indx_data components
+      associate(&
+       nSnow                   => indx_data%var(iLookINDEX%nSnow)%dat(1)                 ,& ! intent(in):    [i4b]    number of snow layers
+       nSoil                   => indx_data%var(iLookINDEX%nSoil)%dat(1)                 ,& ! intent(in):    [i4b]    number of soil layers
+       nLayers                 => indx_data%var(iLookINDEX%nLayers)%dat(1)                & ! intent(in):    [i4b]    total number of layers
+      &)
+        if (nested_Newton_test) then
+         print *, "varSubstep Test B: before updateProg call"
+         print *, "nSnow=",nSnow
+         print *, "nSoil=",nSoil
+         print *, "indx_data nSoil=",indx_data%var(iLookINDEX%nSoil)%dat(1)
+         print *, "nLayers=",nLayers
+         print *, ""
+        end if
+        ! update prognostic variables, update balances, and check them for possible step reduction if homegrown or kinsol solver
+        call updateProg(dtSubstep,nSnow,nSoil,nLayers,untappedMelt,stateVecTrial,stateVecPrime,                                    & ! input: states
+                        doAdjustTemp,computeVegFlux,computMassBalance,computNrgBalance,computeEnthTemp,enthalpyStateVec,use_lookup,& ! input: model control
+                        model_decisions,lookup_data,mpar_data,indx_data,flux_temp,prog_data,diag_data,deriv_data,                  & ! input-output: data structures
+                        fluxVec,resVec,balance,waterBalanceError,nrgFluxModified,err,message)                                        ! input-output: balances, flags, and error control
+        if (nested_Newton_test) then
+         print *, "varSubstep Test C: after updateProg call"
+         print *, "err=",err
+         print *, "waterBalanceError=",waterBalanceError
+         print *, ""
+        end if
+      end associate
+
+      ! check for errors -- return if non-recoverable
       if(err/=0)then
         message=trim(message)//trim(cmessage)
         if(err>0) return
@@ -483,80 +510,100 @@ subroutine varSubstep(&
         endif
 
       endif  ! if errors in prognostic update
+
+      ! associate block for indx_data components
+      associate(&
+       nSoil                   => indx_data%var(iLookINDEX%nSoil)%dat(1)                 ,& ! intent(in):    [i4b]    number of soil layers
+       nLayers                 => indx_data%var(iLookINDEX%nLayers)%dat(1)               ,& ! intent(in):    [i4b]    total number of layers
+       ! get indices for balances
+       ixCasNrg                => indx_data%var(iLookINDEX%ixCasNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy air space energy state variable
+       ixVegNrg                => indx_data%var(iLookINDEX%ixVegNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy energy state variable
+       ixVegHyd                => indx_data%var(iLookINDEX%ixVegHyd)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy hydrology state variable (mass)
+       ixAqWat                 => indx_data%var(iLookINDEX%ixAqWat)%dat(1)               ,& ! intent(in):    [i4b]    index of water storage in the aquifer
+       ixSoilOnlyHyd           => indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for hydrology state variables in the soil domain
+       ixSnowSoilHyd           => indx_data%var(iLookINDEX%ixSnowSoilHyd)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for hydrology state variables in the snow+soil domain
+       ixSnowSoilNrg           => indx_data%var(iLookINDEX%ixSnowSoilNrg)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for energy state variables in the snow+soil domain
+       nSnowSoilNrg            => indx_data%var(iLookINDEX%nSnowSoilNrg)%dat(1)          ,& ! intent(in):    [i4b]    number of energy state variables in the snow+soil domain
+       nSnowSoilHyd            => indx_data%var(iLookINDEX%nSnowSoilHyd)%dat(1)          ,& ! intent(in):    [i4b]    number of hydrology state variables in the snow+soil domain
+       ! mapping between state vectors and control volumes
+       ixLayerActive           => indx_data%var(iLookINDEX%ixLayerActive)%dat             & ! intent(in):    [i4b(:)] list of indices for all active layers (inactive=integerMissing)
+      &)
       
-      ! add balances to the total balances
-      if(ixCasNrg/=integerMissing) sumBalance(ixCasNrg) = sumBalance(ixCasNrg) + dtSubstep*balance(ixCasNrg)
-      if(ixVegNrg/=integerMissing) sumBalance(ixVegNrg) = sumBalance(ixVegNrg) + dtSubstep*balance(ixVegNrg)
-      if(nSnowSoilNrg>0) then
-        do concurrent (ixLayer=1:nLayers,ixSnowSoilNrg(ixLayer)/=integerMissing)
-          if(ixSnowSoilNrg(ixLayer)/=integerMissing) sumBalance(ixSnowSoilNrg(ixLayer)) = sumBalance(ixSnowSoilNrg(ixLayer)) + dtSubstep*balance(ixSnowSoilNrg(ixLayer))
-        end do
-      endif
-      if(ixVegHyd/=integerMissing) sumBalance(ixVegHyd) = sumBalance(ixVegHyd) + dtSubstep*balance(ixVegHyd)
-      if(nSnowSoilHyd>0) then
-        do concurrent (ixLayer=1:nLayers,ixSnowSoilHyd(ixLayer)/=integerMissing)
-          if(ixSnowSoilHyd(ixLayer)/=integerMissing) sumBalance(ixSnowSoilHyd(ixLayer)) = sumBalance(ixSnowSoilHyd(ixLayer)) + dtSubstep*balance(ixSnowSoilHyd(ixLayer))
-        end do
-      endif
-      if(ixAqWat/=integerMissing) sumBalance(ixAqWat) = sumBalance(ixAqWat) + dtSubstep*balance(ixAqWat)
+        ! add balances to the total balances
+        if(ixCasNrg/=integerMissing) sumBalance(ixCasNrg) = sumBalance(ixCasNrg) + dtSubstep*balance(ixCasNrg)
+        if(ixVegNrg/=integerMissing) sumBalance(ixVegNrg) = sumBalance(ixVegNrg) + dtSubstep*balance(ixVegNrg)
+        if(nSnowSoilNrg>0) then
+          do concurrent (ixLayer=1:nLayers,ixSnowSoilNrg(ixLayer)/=integerMissing)
+            if(ixSnowSoilNrg(ixLayer)/=integerMissing) sumBalance(ixSnowSoilNrg(ixLayer)) = sumBalance(ixSnowSoilNrg(ixLayer)) + dtSubstep*balance(ixSnowSoilNrg(ixLayer))
+          end do
+        endif
+        if(ixVegHyd/=integerMissing) sumBalance(ixVegHyd) = sumBalance(ixVegHyd) + dtSubstep*balance(ixVegHyd)
+        if(nSnowSoilHyd>0) then
+          do concurrent (ixLayer=1:nLayers,ixSnowSoilHyd(ixLayer)/=integerMissing)
+            if(ixSnowSoilHyd(ixLayer)/=integerMissing) sumBalance(ixSnowSoilHyd(ixLayer)) = sumBalance(ixSnowSoilHyd(ixLayer)) + dtSubstep*balance(ixSnowSoilHyd(ixLayer))
+          end do
+        endif
+        if(ixAqWat/=integerMissing) sumBalance(ixAqWat) = sumBalance(ixAqWat) + dtSubstep*balance(ixAqWat)
 
-      ! get the total energy fluxes (modified in updateProg), have to do differently
-      if(nrgFluxModified .or. ixVegNrg/=integerMissing)then
-        sumCanopyEvaporation  = sumCanopyEvaporation  + dtSubstep*flux_temp%var(iLookFLUX%scalarCanopyEvaporation)%dat(1)  ! canopy evaporation/condensation (kg m-2 s-1)
-        sumLatHeatCanopyEvap  = sumLatHeatCanopyEvap  + dtSubstep*flux_temp%var(iLookFLUX%scalarLatHeatCanopyEvap)%dat(1)  ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
-        sumSenHeatCanopy      = sumSenHeatCanopy      + dtSubstep*flux_temp%var(iLookFLUX%scalarSenHeatCanopy)%dat(1)      ! sensible heat flux from the canopy to the canopy air space (W m-2)
-      else
-        sumCanopyEvaporation  = sumCanopyEvaporation  + dtSubstep*flux_data%var(iLookFLUX%scalarCanopyEvaporation)%dat(1)  ! canopy evaporation/condensation (kg m-2 s-1)
-        sumLatHeatCanopyEvap  = sumLatHeatCanopyEvap  + dtSubstep*flux_data%var(iLookFLUX%scalarLatHeatCanopyEvap)%dat(1)  ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
-        sumSenHeatCanopy      = sumSenHeatCanopy      + dtSubstep*flux_data%var(iLookFLUX%scalarSenHeatCanopy)%dat(1)      ! sensible heat flux from the canopy to the canopy air space (W m-2)
-      endif  ! if energy fluxes were modified
+        ! get the total energy fluxes (modified in updateProg), have to do differently
+        if(nrgFluxModified .or. ixVegNrg/=integerMissing)then
+          sumCanopyEvaporation  = sumCanopyEvaporation  + dtSubstep*flux_temp%var(iLookFLUX%scalarCanopyEvaporation)%dat(1)  ! canopy evaporation/condensation (kg m-2 s-1)
+          sumLatHeatCanopyEvap  = sumLatHeatCanopyEvap  + dtSubstep*flux_temp%var(iLookFLUX%scalarLatHeatCanopyEvap)%dat(1)  ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
+          sumSenHeatCanopy      = sumSenHeatCanopy      + dtSubstep*flux_temp%var(iLookFLUX%scalarSenHeatCanopy)%dat(1)      ! sensible heat flux from the canopy to the canopy air space (W m-2)
+        else
+          sumCanopyEvaporation  = sumCanopyEvaporation  + dtSubstep*flux_data%var(iLookFLUX%scalarCanopyEvaporation)%dat(1)  ! canopy evaporation/condensation (kg m-2 s-1)
+          sumLatHeatCanopyEvap  = sumLatHeatCanopyEvap  + dtSubstep*flux_data%var(iLookFLUX%scalarLatHeatCanopyEvap)%dat(1)  ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
+          sumSenHeatCanopy      = sumSenHeatCanopy      + dtSubstep*flux_data%var(iLookFLUX%scalarSenHeatCanopy)%dat(1)      ! sensible heat flux from the canopy to the canopy air space (W m-2)
+        endif  ! if energy fluxes were modified
 
-      ! get the total soil compression
-      if (count(ixSoilOnlyHyd/=integerMissing)>0) then
-        ! scalar compression
-        if(.not.scalarSolution .or. iStateSplit==nSoil)&
-        sumSoilCompress = sumSoilCompress + dtSubstep*diag_data%var(iLookDIAG%scalarSoilCompress)%dat(1) ! total soil compression
-        ! vector compression
-        do iSoil=1,nSoil
-          if(ixSoilOnlyHyd(iSoil)/=integerMissing)&
-          sumLayerCompress(iSoil) = sumLayerCompress(iSoil) + dtSubstep*diag_data%var(iLookDIAG%mLayerCompress)%dat(iSoil) ! soil compression in layers
-        end do
-      endif
+        ! get the total soil compression
+        if (count(ixSoilOnlyHyd/=integerMissing)>0) then
+          ! scalar compression
+          if(.not.scalarSolution .or. iStateSplit==nSoil)&
+          sumSoilCompress = sumSoilCompress + dtSubstep*diag_data%var(iLookDIAG%scalarSoilCompress)%dat(1) ! total soil compression
+          ! vector compression
+          do iSoil=1,nSoil
+            if(ixSoilOnlyHyd(iSoil)/=integerMissing)&
+            sumLayerCompress(iSoil) = sumLayerCompress(iSoil) + dtSubstep*diag_data%var(iLookDIAG%mLayerCompress)%dat(iSoil) ! soil compression in layers
+          end do
+        endif
 
-      ! print progress
-      if(globalPrintFlag)&
-      write(*,'(a,1x,3(f13.2,1x))') 'updating: dtSubstep, dtSum, dt = ', dtSubstep, dtSum, dt
+        ! print progress
+        if(globalPrintFlag)&
+        write(*,'(a,1x,3(f13.2,1x))') 'updating: dtSubstep, dtSum, dt = ', dtSubstep, dtSum, dt
 
-     ! increment fluxes
-      dt_wght = dtSubstep/dt ! define weight applied to each sub-step
-      do iVar=1,size(flux_meta)
-        if(count(fluxMask%var(iVar)%dat)>0) then
+       ! increment fluxes
+        dt_wght = dtSubstep/dt ! define weight applied to each sub-step
+        do iVar=1,size(flux_meta)
+          if(count(fluxMask%var(iVar)%dat)>0) then
 
-          ! ** no domain splitting
-          if(count(ixLayerActive/=integerMissing)==nLayers)then
-            flux_mean%var(iVar)%dat(:) = flux_mean%var(iVar)%dat(:) + flux_temp%var(iVar)%dat(:)*dt_wght
-            fluxCount%var(iVar)%dat(:) = fluxCount%var(iVar)%dat(:) + 1
+            ! ** no domain splitting
+            if(count(ixLayerActive/=integerMissing)==nLayers)then
+              flux_mean%var(iVar)%dat(:) = flux_mean%var(iVar)%dat(:) + flux_temp%var(iVar)%dat(:)*dt_wght
+              fluxCount%var(iVar)%dat(:) = fluxCount%var(iVar)%dat(:) + 1
 
-          ! ** domain splitting
-          else
-            ixMin=lbound(flux_data%var(iVar)%dat)
-            ixMax=ubound(flux_data%var(iVar)%dat)
-            do ixLayer=ixMin(1),ixMax(1)
-              if(fluxMask%var(iVar)%dat(ixLayer)) then
-                ! special case of the transpiration sink from soil layers: only computed for the top soil layer
-                if(iVar==iLookFLUX%mLayerTranspire)then
-                  if(ixLayer==1) flux_mean%var(iVar)%dat(:) = flux_mean%var(iVar)%dat(:) + flux_temp%var(iVar)%dat(:)*dt_wght
-                ! standard case
-                else
-                  flux_mean%var(iVar)%dat(ixLayer) = flux_mean%var(iVar)%dat(ixLayer) + flux_temp%var(iVar)%dat(ixLayer)*dt_wght
+            ! ** domain splitting
+            else
+              ixMin=lbound(flux_data%var(iVar)%dat)
+              ixMax=ubound(flux_data%var(iVar)%dat)
+              do ixLayer=ixMin(1),ixMax(1)
+                if(fluxMask%var(iVar)%dat(ixLayer)) then
+                  ! special case of the transpiration sink from soil layers: only computed for the top soil layer
+                  if(iVar==iLookFLUX%mLayerTranspire)then
+                    if(ixLayer==1) flux_mean%var(iVar)%dat(:) = flux_mean%var(iVar)%dat(:) + flux_temp%var(iVar)%dat(:)*dt_wght
+                  ! standard case
+                  else
+                    flux_mean%var(iVar)%dat(ixLayer) = flux_mean%var(iVar)%dat(ixLayer) + flux_temp%var(iVar)%dat(ixLayer)*dt_wght
+                  endif
+                  fluxCount%var(iVar)%dat(ixLayer) = fluxCount%var(iVar)%dat(ixLayer) + 1
                 endif
-                fluxCount%var(iVar)%dat(ixLayer) = fluxCount%var(iVar)%dat(ixLayer) + 1
-              endif
-            end do
-          endif  ! (domain splitting)
+              end do
+            endif  ! (domain splitting)
 
-        endif   ! (if the flux is desired)
-      end do  ! (loop through fluxes)
+          endif   ! (if the flux is desired)
+        end do  ! (loop through fluxes)
+
+      end associate
 
       ! increment the number of substeps
       nSubsteps = nSubsteps + nSteps
@@ -586,29 +633,47 @@ subroutine varSubstep(&
     flux_data%var(iLookFLUX%scalarLatHeatCanopyEvap)%dat(1) = sumLatHeatCanopyEvap /dt      ! latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
     flux_data%var(iLookFLUX%scalarSenHeatCanopy)%dat(1)     = sumSenHeatCanopy     /dt      ! sensible heat flux from the canopy to the canopy air space (W m-2)
 
-    ! save the soil compression diagnostics as averages
-    diag_data%var(iLookDIAG%scalarSoilCompress)%dat(1) = sumSoilCompress/dt
-    do iSoil=1,nSoil
-      if(ixSoilOnlyHyd(iSoil)/=integerMissing)&
-      diag_data%var(iLookDIAG%mLayerCompress)%dat(iSoil) = sumLayerCompress(iSoil)/dt
-    end do
-    deallocate(sumLayerCompress)
+    ! associate block for indx_data components
+    associate(&
+     nSoil                   => indx_data%var(iLookINDEX%nSoil)%dat(1)                 ,& ! intent(in):    [i4b]    number of soil layers
+     nLayers                 => indx_data%var(iLookINDEX%nLayers)%dat(1)               ,& ! intent(in):    [i4b]    total number of layers
+     ! get indices for balances
+     ixCasNrg                => indx_data%var(iLookINDEX%ixCasNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy air space energy state variable
+     ixVegNrg                => indx_data%var(iLookINDEX%ixVegNrg)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy energy state variable
+     ixVegHyd                => indx_data%var(iLookINDEX%ixVegHyd)%dat(1)              ,& ! intent(in):    [i4b]    index of canopy hydrology state variable (mass)
+     ixAqWat                 => indx_data%var(iLookINDEX%ixAqWat)%dat(1)               ,& ! intent(in):    [i4b]    index of water storage in the aquifer
+     ixSoilOnlyHyd           => indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for hydrology state variables in the soil domain
+     ixSnowSoilHyd           => indx_data%var(iLookINDEX%ixSnowSoilHyd)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for hydrology state variables in the snow+soil domain
+     ixSnowSoilNrg           => indx_data%var(iLookINDEX%ixSnowSoilNrg)%dat            ,& ! intent(in):    [i4b(:)] index in the state subset for energy state variables in the snow+soil domain
+     nSnowSoilNrg            => indx_data%var(iLookINDEX%nSnowSoilNrg)%dat(1)          ,& ! intent(in):    [i4b]    number of energy state variables in the snow+soil domain
+     nSnowSoilHyd            => indx_data%var(iLookINDEX%nSnowSoilHyd)%dat(1)           & ! intent(in):    [i4b]    number of hydrology state variables in the snow+soil domain
+    &)
 
-    ! save the balance diagnostics as averages
-    if(ixCasNrg/=integerMissing) diag_data%var(iLookDIAG%balanceCasNrg)%dat(1) = sumBalance(ixCasNrg)/dt
-    if(ixVegNrg/=integerMissing) diag_data%var(iLookDIAG%balanceVegNrg)%dat(1) = sumBalance(ixVegNrg)/dt
-    if(nSnowSoilNrg>0) then
-      do concurrent (ixLayer=1:nLayers,ixSnowSoilNrg(ixLayer)/=integerMissing)
-        diag_data%var(iLookDIAG%balanceLayerNrg)%dat(ixLayer) = sumBalance(ixSnowSoilNrg(ixLayer))/dt
+      ! save the soil compression diagnostics as averages
+      diag_data%var(iLookDIAG%scalarSoilCompress)%dat(1) = sumSoilCompress/dt
+      do iSoil=1,nSoil
+        if(ixSoilOnlyHyd(iSoil)/=integerMissing)&
+        diag_data%var(iLookDIAG%mLayerCompress)%dat(iSoil) = sumLayerCompress(iSoil)/dt
       end do
-    endif
-    if(ixVegHyd/=integerMissing) diag_data%var(iLookDIAG%balanceVegMass)%dat(1) = sumBalance(ixVegHyd)/dt
-    if(nSnowSoilHyd>0) then
-      do concurrent (ixLayer=1:nLayers,ixSnowSoilHyd(ixLayer)/=integerMissing)
-        diag_data%var(iLookDIAG%balanceLayerMass)%dat(ixLayer) = sumBalance(ixSnowSoilHyd(ixLayer))/dt
-      end do
-    endif 
-    if(ixAqWat/=integerMissing) diag_data%var(iLookDIAG%balanceAqMass)%dat(1) = sumBalance(ixAqWat)/dt
+      deallocate(sumLayerCompress)
+
+      ! save the balance diagnostics as averages
+      if(ixCasNrg/=integerMissing) diag_data%var(iLookDIAG%balanceCasNrg)%dat(1) = sumBalance(ixCasNrg)/dt
+      if(ixVegNrg/=integerMissing) diag_data%var(iLookDIAG%balanceVegNrg)%dat(1) = sumBalance(ixVegNrg)/dt
+      if(nSnowSoilNrg>0) then
+        do concurrent (ixLayer=1:nLayers,ixSnowSoilNrg(ixLayer)/=integerMissing)
+          diag_data%var(iLookDIAG%balanceLayerNrg)%dat(ixLayer) = sumBalance(ixSnowSoilNrg(ixLayer))/dt
+        end do
+      endif
+      if(ixVegHyd/=integerMissing) diag_data%var(iLookDIAG%balanceVegMass)%dat(1) = sumBalance(ixVegHyd)/dt
+      if(nSnowSoilHyd>0) then
+        do concurrent (ixLayer=1:nLayers,ixSnowSoilHyd(ixLayer)/=integerMissing)
+          diag_data%var(iLookDIAG%balanceLayerMass)%dat(ixLayer) = sumBalance(ixSnowSoilHyd(ixLayer))/dt
+        end do
+      endif 
+      if(ixAqWat/=integerMissing) diag_data%var(iLookDIAG%balanceAqMass)%dat(1) = sumBalance(ixAqWat)/dt
+
+    end associate
 
     ! update error codes
     if (failedMinimumStep) then
@@ -741,8 +806,8 @@ USE getVectorz_module,only:varExtract                              ! extract var
     ixCasNrg                  => indx_data%var(iLookINDEX%ixCasNrg)%dat(1)                  ,& ! intent(in)   : [i4b]    index of canopy air space energy state variable
     ixVegNrg                  => indx_data%var(iLookINDEX%ixVegNrg)%dat(1)                  ,& ! intent(in)   : [i4b]    index of canopy energy state variable
     ixVegHyd                  => indx_data%var(iLookINDEX%ixVegHyd)%dat(1)                  ,& ! intent(in)   : [i4b]    index of canopy hydrology state variable (mass)
-    ixTopNrg                  => indx_data%var(iLookINDEX%ixTopNrg)%dat(1)                  ,& ! intent(in)   : [i4b]    index of upper-most energy state in the snow+soil subdomain
-    ixTopHyd                  => indx_data%var(iLookINDEX%ixTopHyd)%dat(1)                  ,& ! intent(in)   : [i4b]    index of upper-most hydrology state in the snow+soil subdomain
+    !ixTopNrg                  => indx_data%var(iLookINDEX%ixTopNrg)%dat(1)                  ,& ! intent(in)   : [i4b]    index of upper-most energy state in the snow+soil subdomain
+    !ixTopHyd                  => indx_data%var(iLookINDEX%ixTopHyd)%dat(1)                  ,& ! intent(in)   : [i4b]    index of upper-most hydrology state in the snow+soil subdomain
     ixAqWat                   => indx_data%var(iLookINDEX%ixAqWat)%dat(1)                   ,& ! intent(in)   : [i4b]    index of water storage in the aquifer
     ixSoilOnlyHyd             => indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat                ,& ! intent(in)   : [i4b(:)] index in the state subset for hydrology state variables in the soil domain
     ixSnowSoilNrg             => indx_data%var(iLookINDEX%ixSnowSoilNrg)%dat                ,& ! intent(in)   : [i4b(:)] index in the state subset for energy state variables in the snow+soil domain
