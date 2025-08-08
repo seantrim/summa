@@ -23,8 +23,8 @@ module summaSolve4arkode_module
  !======= Inclusions ===========
  USE, intrinsic :: iso_c_binding
  USE nrtype
- USE type4kinsol ! reusing KINSOL data type due to overlap with ARKODE
- !USE type4ida
+ !USE type4kinsol ! reusing KINSOL data type due to overlap with ARKODE
+ USE type4ida ! reusing KINSOL data type due to overlap with ARKODE (prime variables not used)
  
 ! ! access the global print flag
 ! USE globalData,only: globalPrintFlag
@@ -90,8 +90,8 @@ contains
  subroutine summaSolve4arkode(&
                       dt_cur,                  & ! intent(in):    current stepsize
                       dt,                      & ! intent(in):    data time step
-                     ! atol,                    & ! intent(in):    absolute tolerance
-                     ! rtol,                    & ! intent(in):    relative tolerance
+                      atol,                    & ! intent(in):    absolute tolerance
+                      rtol,                    & ! intent(in):    relative tolerance
                       fScale,                  & ! intent(inout): characteristic scale of the function evaluations (mixed units)
                       nSnow,                   & ! intent(in):    number of snow layers
                       nSoil,                   & ! intent(in):    number of soil layers
@@ -143,8 +143,9 @@ contains
 !  use fsunmatrix_dense_mod       ! Fortran interface to dense SUNMatrix
 !  use fsunlinsol_dense_mod       ! Fortran interface to dense SUNLinearSolver
 !  use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
-  use eval8summa_module,only: eval8summa4arkode ! RHS function evaluations
-  use summaSolve4kinsol_module,only: setInitialCondition ! subroutine for setting initial condition
+  use eval8summa_module,only: eval8summa4arkode          ! RHS function evaluations
+  use summaSolve4kinsol_module,only: setInitialCondition ! subroutine for setting initial condition (borrowed from KINSOL routines)
+  USE tol4ida_module,only:computWeight4ida               ! weight required for tolerances (borrowed from IDA routines)
 
   !======= Declarations =========
   implicit none
@@ -153,8 +154,8 @@ contains
   ! input: model control
   real(rkind),intent(in)          :: dt_cur                 ! current stepsize
   real(qp),intent(in)             :: dt                     ! data time step
-  !real(qp),intent(inout)          :: atol(:)                ! vector of absolute tolerances
-  !real(qp),intent(inout)          :: rtol(:)                ! vector of relative tolerances
+  real(qp),intent(inout)          :: atol(:)                ! vector of absolute tolerances
+  real(qp),intent(inout)          :: rtol(:)                ! vector of relative tolerances
   real(rkind),intent(inout)       :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
   integer(i4b),intent(in)         :: nSnow                  ! number of snow layers
   integer(i4b),intent(in)         :: nSoil                  ! number of soil layers
@@ -204,23 +205,24 @@ contains
   type(c_ptr)    :: ctx                      ! SUNDIALS context for the simulation
   real(c_double) :: tstart                   ! initial time
   real(c_double) :: tend                     ! final time
-  real(c_double) :: rtol, atol               ! relative and absolute tolerance
+  !real(c_double) :: rtol, atol               ! relative and absolute tolerance
   real(c_double) :: dtout                    ! output time interval
   real(c_double) :: tout                     ! output time
   real(c_double) :: tcur(1)                  ! current time
-  integer(c_int) :: ierr                     ! error flag from C functions
+  !integer(c_int) :: ierr                     ! error flag from C functions
   integer(c_int) :: nout                     ! number of outputs
   integer(c_int) :: outstep                  ! output loop counter
+  integer(i4b)   :: retval                   ! return value
 
   type(N_Vector), pointer                 :: sunvec_y   ! sundials vector
-  type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix
-  type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
-  type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
+  !type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix
+  !type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
+  !type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
   type(c_ptr)                             :: arkode_mem ! ARKODE memory
   integer(c_long)                         :: neq        ! # of equations 
   real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
-  type(data4kinsol), target  :: eqns_data    ! SUNDIALS user data - reusing KINSOL data type due to overlap
+  type(data4ida), target  :: eqns_data    ! SUNDIALS user data - reusing KINSOL data type due to overlap
 
   !======= Internals ============
 
@@ -228,7 +230,8 @@ contains
   err=0; message="summaSolve4arkode/"
 
   ! create the SUNDIALS context
-  ierr = FSUNContext_Create(SUN_COMM_NULL, ctx)
+  retval = FSUNContext_Create(SUN_COMM_NULL, ctx)
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FSUNContext_Create'; return; endif
 
   ! initialize ODE -- SJT: update these with SUMMA values (using dummy variables)
   tstart = 0.0d0
@@ -280,12 +283,12 @@ contains
   ! allocate space and fill
   eqns_data%fScale          = fScale          ! allocate on assignment
   eqns_data%model_decisions = model_decisions ! allocate on assignment
-  !allocate( eqns_data%atol(nState) ); eqns_data%atol = atol ! not in KINSOL data type
-  !allocate( eqns_data%rtol(nState) ); eqns_data%rtol = rtol ! not in KINSOL data type
+  eqns_data%atol = atol ! allocate on assignment
+  eqns_data%rtol = rtol ! allocate on assignment
   eqns_data%sMul = sMul ! allocate on assignment
   eqns_data%dMat = dMat ! allocate on assignment
 
-  ! allocate space for other variables
+  ! allocate space for other variables -- SJT: commented out lines not required for eval8summa4arkode
   if(model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel)then
     allocate(eqns_data%dBaseflow_dMatric(nSoil,nSoil),stat=err)
   else
@@ -306,9 +309,20 @@ contains
   !allocate( resVecPrev(nState) )
 
 
-  ! create ARKStep memory
+  ! create ARKStep memory - args: (explicit RHS, implicit RHS, start time, sunvec_y, SUNDIALS context)
   arkode_mem = FARKStepCreate(c_null_funptr, c_funloc(eval8summa4arkode), tstart, sunvec_y, ctx)
   if (.not. c_associated(arkode_mem)) print *, 'ERROR: arkode_mem = NULL'
+
+  ! Attach user data to memory
+  retval = FARKodeSetUserData(arkode_mem, c_loc(eqns_data))
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetUserData'; return; endif
+
+  ! SJT: insert matrix setup operations here ---------
+
+  ! set relative and absolute tolerance vectors (using components from eqns_data)
+  ! note: reusing the tolerance formula from IDA routines
+  retval = FARKodeWFtolerances(arkode_mem, c_funloc(computWeight4ida))
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeWFtolerances'; return; endif
  
  end subroutine summaSolve4arkode
 
