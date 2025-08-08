@@ -64,6 +64,9 @@ type data4ida
   real(rkind), allocatable        :: mLayerTempPrime(:)              ! prime vector of temperature of each snow and soil layer (K s-1)
   real(rkind), allocatable        :: mLayerMatricHeadPrime(:)        ! prime vector of matric head of each snow and soil layer (m s-1)
   real(rkind), allocatable        :: mLayerVolFracWatPrime(:)        ! prime vector of volumetric total water content of each snow and soil layer (s-1)
+  ! note: the following components were added for compatibility with ARKODE
+  real(rkind)                     :: dt_cur                          ! current stepsize
+  real(rkind),allocatable         :: fScale(:)                       ! characteristic scale of the function evaluations
  end type data4ida
 
 
