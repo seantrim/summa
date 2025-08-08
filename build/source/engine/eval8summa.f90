@@ -771,7 +771,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   !======= Inclusions ===========
   use, intrinsic :: iso_c_binding
   use fsundials_core_mod
-  use type4kinsol
+  use type4ida ! reusing IDA derived type due to overlap (prime variables not used)
 
   !======= Declarations =========
   implicit none
@@ -783,7 +783,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   type(c_ptr), value          :: user_data   ! user-defined data
 
   ! pointers to data in SUNDIALS vectors
-  type(data4kinsol), pointer  :: eqns_data   ! equations data
+  type(data4ida), pointer     :: eqns_data   ! equations data
   real(rkind), pointer        :: stateVec(:) ! solution vector
   real(rkind), allocatable    :: rVec(:)     ! residual vector
   logical(lgt)                :: feasible    ! feasibility of state vector
