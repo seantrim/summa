@@ -187,9 +187,9 @@ subroutine vegNrgFlux(&
   real(rkind)                        :: scaleLAI                        ! scaled LAI (computing diffuse transmissivity)
   real(rkind)                        :: diffuseTrans                    ! diffuse transmissivity (-)
   real(rkind)                        :: groundEmissivity                ! emissivity of the ground surface (-)
-  real(rkind),parameter              :: vegEmissivity=0.98_rkind        ! emissivity of vegetation (0.9665 in JULES) (-)
-  real(rkind),parameter              :: soilEmissivity=0.98_rkind       ! emmisivity of the soil (0.9665 in JULES) (-)
-  real(rkind),parameter              :: snowEmissivity=0.99_rkind       ! emissivity of snow (-)
+  real(rkind),parameter              :: leafEmissivity=0.98_rkind       ! emissivity of the canopy if 0 diffuse transmissivity (-) in line with Ma et al. 2019
+  real(rkind),parameter              :: soilEmissivity=0.96_rkind       ! emmisivity of the soil (-) as in Jin and Liang 2006
+  real(rkind),parameter              :: snowEmissivity=0.98_rkind       ! emissivity of snow (-) as in Hori et al. 2006, Jin and Liang 2006
   real(rkind)                        :: dLWNetCanopy_dTCanopy           ! derivative in net canopy radiation w.r.t. canopy temperature (W m-2 K-1)
   real(rkind)                        :: dLWNetGround_dTGround           ! derivative in net ground radiation w.r.t. ground temperature (W m-2 K-1)
   real(rkind)                        :: dLWNetCanopy_dTGround           ! derivative in net canopy radiation w.r.t. ground temperature (W m-2 K-1)
@@ -318,8 +318,6 @@ subroutine vegNrgFlux(&
     critSoilTranspire               => mpar_data%var(iLookPARAM%critSoilTranspire)%dat(1),             & ! intent(in): [dp] critical vol. liq. water content when transpiration is limited (-)
     critAquiferTranspire            => mpar_data%var(iLookPARAM%critAquiferTranspire)%dat(1),          & ! intent(in): [dp] critical aquifer storage value when transpiration is limited (m)
     minStomatalResistance           => mpar_data%var(iLookPARAM%minStomatalResistance)%dat(1),         & ! intent(in): [dp] mimimum stomatal resistance (s m-1)
-    ! snow parameters
-    snowfrz_scale                   => mpar_data%var(iLookPARAM%snowfrz_scale)%dat(1),                 & ! intent(in): [dp] scaling parameter for the snow freezing curve (K-1)
     ! input: forcing at the upper boundary
     mHeight                         => diag_data%var(iLookDIAG%scalarAdjMeasHeight)%dat(1),            & ! intent(in): [dp] measurement height, adjusted to be above vegetation canopy and snow (m)
     airtemp                         => forc_data%var(iLookFORCE%airtemp),                              & ! intent(in): [dp] air temperature at adjusted measurement height (K)
@@ -513,14 +511,11 @@ subroutine vegNrgFlux(&
         dCanopyTrans_dTGround= 0._rkind         ! derivative in canopy transpiration w.r.t. ground temperature (kg m-2 s-1 K-1)
 
         ! compute fluxes and derivatives -- separate approach for prescribed temperature and zero flux,
+        !   derivative in net ground flux w.r.t. ground temperature (W m-2 K-1) computed inside snow lake soil ice (snLaSoGl) energy flux routine
         if (ix_bcUpprTdyn == prescribedTemp) then
-          ! compute ground net flux (W m-2)
           groundNetFlux = -diag_data%var(iLookDIAG%iLayerThermalC)%dat(0)*(groundTempTrial - upperBoundTemp)/(prog_data%var(iLookPROG%mLayerDepth)%dat(1)*0.5_rkind)
-          ! compute derivative in net ground flux w.r.t. ground temperature (W m-2 K-1) inside soil and snow (ssd) energy flux routine
-          ! dGroundNetFlux_dGroundTemp = realMissing
         elseif (ix_bcUpprTdyn == zeroFlux) then
-          groundNetFlux              = 0._rkind
-          ! dGroundNetFlux_dGroundTemp = realMissing
+          groundNetFlux = 0._rkind
         else
           err=20; message=trim(message)//'unable to identify upper boundary condition for thermodynamics: expect the case to be prescribedTemp or zeroFlux'; return
         end if
@@ -581,7 +576,7 @@ subroutine vegNrgFlux(&
               scaleLAI = 0.5_rkind*exposedVAI
               expi     = expInt(scaleLAI)     ! compute the exponential integral
               diffuseTrans = (1._rkind - scaleLAI)*exp(-scaleLAI) + (scaleLAI**2_i4b)*expi ! compute diffuse transmissivity (-)
-              scalarCanopyEmissivity = (1._rkind - diffuseTrans)*vegEmissivity ! compute the canopy emissivity
+              scalarCanopyEmissivity = (1._rkind - diffuseTrans)*leafEmissivity ! compute the canopy emissivity
             case default
               err=20; message=trim(message)//'unable to identify option for canopy emissivity'; return
           end select
@@ -599,7 +594,7 @@ subroutine vegNrgFlux(&
           ! compute the fraction of liquid water in the canopy (-)
           totalCanopyWater = canopyLiqTrial + canopyIceTrial
           if (totalCanopyWater > tiny(1.0_rkind)) then
-            fracLiquidCanopy = canopyLiqTrial / (canopyLiqTrial + canopyIceTrial)
+            fracLiquidCanopy = canopyLiqTrial / totalCanopyWater
           else
             fracLiquidCanopy = 0._rkind
           end if
@@ -696,10 +691,6 @@ subroutine vegNrgFlux(&
         !         (2) derivative calculations are rather complex (iterations within the Ball-Berry routine); and
         !         (3) stomatal resistance does not change rapidly
         if (firstFluxCall) then
-          ! compute the saturation vapor pressure for vegetation temperature
-          TV_celcius = canopyTempTrial - Tfreeze
-          call satVapPress(TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
-
           ! compute soil moisture factor controlling stomatal resistance
           call soilResist(&
                           ! input (model decisions)
@@ -724,7 +715,10 @@ subroutine vegNrgFlux(&
                           scalarTranspireLimAqfr,            & ! intent(out): transpiration limiting factor for the aquifer (-)
                           err,cmessage                       ) ! intent(out): error control
           if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-
+          
+          ! compute the saturation vapor pressure for vegetation temperature
+          TV_celcius = canopyTempTrial - Tfreeze
+          call satVapPress(TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
           ! compute stomatal resistance
           call stomResist(&
                           ! input (state and diagnostic variables)

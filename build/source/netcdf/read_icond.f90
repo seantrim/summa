@@ -24,6 +24,8 @@ USE netcdf
 USE globalData,only: ixHRUfile_min,ixHRUfile_max
 USE globalData,only: nTimeDelay   ! number of hours in the time delay histogram
 USE globalData,only: nSpecBand    ! number of spectral bands
+USE globalData,only:verySmaller   ! a smaller number used as an additive constant to check if substantial difference among real numbers
+
 implicit none
 private
 public::read_icond
@@ -315,13 +317,15 @@ contains
 
     if(err==20)then; message=trim(message)//"data set to the fill value (name='"//trim(prog_meta(iVar)%varName)//"')"; return; endif
 
-    ! make sure snow albedo is not negative
-    if(progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1) < 0._rkind)then
-     progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1) = mparData%gru(iGRU)%hru(iHRU)%var(iLookPARAM%albedoMax)%dat(1)
-    endif
+    if(prog_meta(iVar)%varName=='iLayerHeight')then ! last variable in the loop, so we can correct prognostic variables if had legacy starting values
+     ! make sure snow albedo is not negative
+     if(progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1) < 0._rkind)then
+      progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1) = mparData%gru(iGRU)%hru(iHRU)%var(iLookPARAM%albedoMax)%dat(1)
+     endif
 
-    ! initialize the spectral albedo
-    progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%spectralSnowAlbedoDiffuse)%dat(1:nSpecBand) = progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1)
+     ! initialize the spectral albedo
+     progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%spectralSnowAlbedoDiffuse)%dat(1:nSpecBand) = progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSnowAlbedo)%dat(1)
+    endif ! (if last variable in the loop)
 
    end do ! iHRU
   end do ! iGRU
