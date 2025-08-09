@@ -24,24 +24,31 @@ module Newton_functions
    ! ** Default data components used by the Newton solvers ** !
    logical      :: banded    ! flag for banded Jacobians
    logical      :: nested    ! flag for nested algorithm
-   logical      :: verbose   ! flag for full output
    logical      :: inner     ! flag to indicate the execution of inner iterations
    logical      :: converged ! flag to indicate that the obtained solution meets the convergence criterion
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
-   integer(i4b) :: unit              ! file unit number for solver output
    real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
    character(:),allocatable :: convergence   ! string for convergence control option
+   ! solver output
+   character(:),allocatable :: output ! string for solver output control option
+   integer(i4b) :: unit        ! file unit number for solver output
+   logical      :: out_debug   ! output flag for debugging
+   logical      :: out_detail  ! output flag for details
+   logical      :: out_basic   ! output flag for basic information
+   logical      :: out_warning ! output flag for warnings
+   logical      :: out_error   ! output flag for errors
   contains
    ! procedures used prior to calling the solver
    procedure :: allocate_memory => f_allocate_memory ! allocate array data components 
    procedure :: initial_guess   => f_initial_guess   ! apply initial guess strategy
    procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
+   procedure :: solver_output   => f_solver_output   ! set tolerances and iteration count maximums
  end type f_obj_base
 
  type,extends(f_obj_base),public :: f_obj_inputs
@@ -139,6 +146,58 @@ contains
   end associate
  end subroutine f_allocate_memory
 
+ subroutine f_solver_output(f_obj,method,unit)
+  ! ** set output control for solver **
+  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
+  class(f_obj_base),intent(inout)  :: f_obj
+  character(*),intent(in)          :: method
+  integer(i4b),optional,intent(in) :: unit
+
+  ! set file unit for solver output - default is standard output
+  if (present(unit)) then
+   f_obj % unit = unit 
+  else
+   f_obj % unit = stdout 
+  end if  
+ 
+  if (method.eq.'debug') then
+   f_obj % out_debug   = .true. ! output flag for debugging
+   f_obj % out_detail  = .true. ! output flag for details
+   f_obj % out_basic   = .true. ! output flag for basic information
+   f_obj % out_warning = .true. ! output flag for warnings
+   f_obj % out_error   = .true. ! output flag for errors
+  else if (method.eq.'verbose') then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .true.  ! output flag for details
+   f_obj % out_basic   = .true.  ! output flag for basic information
+   f_obj % out_warning = .true.  ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.'production') then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .false. ! output flag for details
+   f_obj % out_basic   = .true.  ! output flag for basic information
+   f_obj % out_warning = .true.  ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.'minimal') then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .false. ! output flag for details
+   f_obj % out_basic   = .true.  ! output flag for basic information
+   f_obj % out_warning = .false. ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.'silent') then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .false. ! output flag for details
+   f_obj % out_basic   = .false. ! output flag for basic information
+   f_obj % out_warning = .false. ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else
+   if (f_obj % out_error) then
+    write(f_obj % unit,'(a65)') "Error in f_solver_output: method argument not currently supported"
+   end if
+   stop
+  end if
+ end subroutine f_solver_output
+
  ! **** Numerics **** !
 
  subroutine f_set_tolerance(f_obj,method,tol,kmax)
@@ -167,7 +226,9 @@ contains
     f_obj % tol_inner = 10._r8b
     f_obj % lmax      = 1_i4b
    else
-    write(f_obj % unit,'(a65)') "Error in f_set_tolerance: method argument not currently supported"
+    if (f_obj % out_error) then
+     write(f_obj % unit,'(a65)') "Error in f_set_tolerance: method argument not currently supported"
+    end if
     stop
    end if
   else ! default values for classical iterations
@@ -186,7 +247,10 @@ contains
   if (method.eq.'previous') then 
    f_obj % x0 = f_obj % x1 ! initial guess -- solution from previous time step
   else
-   write(f_obj % unit,'(a66)') "Error in f_initial_guess: method argument not currently supported."
+   if (f_obj % out_error) then
+    write(f_obj % unit,'(a66)') "Error in f_initial_guess: method argument not currently supported."
+   end if
+   stop
   end if
  end subroutine f_initial_guess
 
@@ -515,7 +579,9 @@ contains
   ! note: "message" used for out_SS4HG data component but "cmessage" used within summaSolve4homegrown subroutine
   associate(err => f_obj % out_SS4HG % err, cmessage => f_obj % out_SS4HG % message) 
    if (err /= 0) then
-    write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(cmessage); stop
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(cmessage); stop
+    end if
    end if
   end associate
  end subroutine SUMMA_eval8summa
@@ -581,7 +647,9 @@ contains
   associate(err => f_obj % out_SS4HG % err, cmessage => f_obj % out_SS4HG % message) 
    call out_computJacob % finalize(err,cmessage)
    if (err /= 0) then
-    write(f_obj % unit,*) "Error in Jacobian_f_SUMMA_vec: computJacob message="//trim(cmessage); stop
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in Jacobian_f_SUMMA_vec: computJacob message="//trim(cmessage); stop
+    end if
    end if
   end associate
 

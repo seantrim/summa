@@ -442,7 +442,7 @@ subroutine coupled_em(&
     end associate
 
     ! short-cut to the algorithmic control parameters
-    ! NOTE - temporary assignment of minstep to foce something reasonable
+    ! NOTE - temporary assignment of minstep to force something reasonable
     ! changing the maxstep parameter will make the outer and inner loop computations here in coupled_em happen more frequently
     ! changing the be_steps parameter will make the inner loop computations in opSplittin happen more frequently (e.g. be_steps = 32.0 give BE32)
     minstep = mpar_data%var(iLookPARAM%minstep)%dat(1)  ! minimum time step (s)

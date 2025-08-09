@@ -19,7 +19,10 @@ contains
     call Newton_vector(f_obj)
    end if
   else
-   write(f_obj % unit,*) "Error in Newton_solve: problem size is not valid."
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in Newton_solve: problem size is not valid."
+   end if
+   stop
   end if
  end subroutine Newton_solve
 
@@ -68,7 +71,7 @@ contains
    xkp1=xk+B ! update guess
 
    call check_residual_vector(f_obj,k,xkp1,xk,f_obj % tol,R_est,exit_flag)
-   if (f_obj % verbose) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
+   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
     exit
@@ -79,20 +82,22 @@ contains
   ! final output
   final_mean=sum(xkp1)/f_obj % n 
   if (exit_flag.eqv..true.) then
-   if (f_obj % verbose) write(f_obj % unit,'(i4,3(g23.15))') k+1,final_mean,f_obj % R(1)
+   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k+1,final_mean,f_obj % R(1)
    f_obj % kcount=k+1
   else
    f_obj % kcount=k
   end if
 
   if (k.gt.f_obj % kmax) then
-   write(f_obj % unit,*) "Warning - classical Newton solver has reached the maximum number of iterations&
-                         & - accuracy may not be sufficient."
+   if (f_obj % out_warning) then
+    write(f_obj % unit,*) "Warning - classical Newton solver has reached the maximum number of iterations&
+                          & - accuracy may not be sufficient."
+   end if
   end if
 
   f_obj % x1=xkp1
-  write(f_obj % unit,*) "Mean Solution=",final_mean
-  write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
+  !write(f_obj % unit,*) "Mean Solution=",final_mean
+  if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
 
  end subroutine Newton_vector
 
@@ -153,18 +158,20 @@ contains
 
     call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,f_obj % tol_inner,R_est,exit_inner)
     ! print exact convergence error
-    if (f_obj % verbose) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
     xkp1l=xkp1lp1 ! set up next inner iteration
    end do inner
    if (l.gt.f_obj % lmax) then
-    write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of inner iterations&
-                          & - accuracy may not be sufficient."
+    if (f_obj % out_warning) then
+     write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of inner iterations&
+                           & - accuracy may not be sufficient."
+    end if
    end if
    ! inner iteration counts 
    if (exit_inner) then
     ! final output for inner iterations
-    if (f_obj % verbose) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l+1,sum(xkp1lp1)/f_obj % n,f_obj % R_inner(1) 
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l+1,sum(xkp1lp1)/f_obj % n,f_obj % R_inner(1) 
     l_total=l_total+(l+1)
    else
     l_total=l_total+l
@@ -172,7 +179,7 @@ contains
 
    f_obj % inner=.false.
    call check_residual_vector(f_obj,k,xkp1lp1,xk0,f_obj % tol,R_est,exit_outer)
-   if (f_obj % verbose) then ! convergence error info for iteration k
+   if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
    if (exit_outer) then ! exit loop if convergence criterion is met
@@ -187,7 +194,7 @@ contains
   final_mean=sum(xkp1lp1)/f_obj % n
   if (exit_outer) then
    ! final convergence error for outer iterations (if early loop exit occurred)
-   if (f_obj % verbose) then
+   if (f_obj % out_detail) then
     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean,f_obj % R(1) ! mean of final solution 
    end if
    f_obj % kcount = k+1
@@ -196,16 +203,20 @@ contains
   end if
 
   if (k.gt.f_obj % kmax) then
-   write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of outer iterations&
-                         & - accuracy may not be sufficient."
+   if (f_obj % out_warning) then
+    write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of outer iterations&
+                          & - accuracy may not be sufficient."
+   end if
   end if
 
   f_obj % x1=xkp1lp1
-  write(f_obj % unit,*) "Mean Solution=",final_mean
-  write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
+  !write(f_obj % unit,*) "Mean Solution=",final_mean
+  if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
-  write(f_obj % unit,*) "# of outer iterations=",f_obj % kcount
-  write(f_obj % unit,*) "# of inner iterations=",l_total
+  if (f_obj % out_detail) then
+   write(f_obj % unit,*) "# of outer iterations=",f_obj % kcount
+   write(f_obj % unit,*) "# of inner iterations=",l_total
+  end if
  end subroutine nested_Newton_vector
 
  subroutine check_residual_vector(f_obj,iteration,xkp1,xk,tol,R_est,exit_flag)
@@ -257,7 +268,9 @@ contains
     R(1)=R(0)*10**b     ! power function -- estimated residual for iteration+1
    end if
   else ! method not valid
-   print *, "Error in check_residual_vector: method argument not currently supported."
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
+   end if
    stop
   end if
 
@@ -372,15 +385,21 @@ contains
 
   if (INFO.ne.0) then
    if (INFO.eq.(N+1_i4b)) then
-    write(f_obj % unit,*) "LAPACK Warning: RCOND=",RCOND,"may be too low for an accurate solution."
+    if (f_obj % out_warning) then
+     write(f_obj % unit,*) "LAPACK Warning: RCOND=",RCOND,"may be too low for an accurate solution."
+    end if
    else
-    write(f_obj % unit,*) "LAPACK Error: DGESVX exited with an error code of",info,"."; stop
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "LAPACK Error: DGESVX exited with an error code of",info,"."; stop
+    end if
    end if
   end if
   if (test) then
    write(f_obj % unit,*) "LAPACK Test:",RCOND,FERR,BERR ! print error information for testing
-  elseif ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then
-   write(f_obj % unit,*) "LAPACK Warning -- tolerance not met:",RCOND,FERR,BERR ! print error information if tolerance is not met
+  else if ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then
+   if (f_obj % out_warning) then
+    write(f_obj % unit,*) "LAPACK Warning -- tolerance not met:",RCOND,FERR,BERR ! print error information if tolerance is not met
+   end if
   end if
   B=X ! put solution in output vector
 

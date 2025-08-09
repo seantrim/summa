@@ -837,7 +837,6 @@ contains
  subroutine nested_Newton_iterations
   ! ** Compute the backward Euler solution using the nested Newton library **
   ! SJT: testing in progress
-  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for nested Newton solver output messages
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
   use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
@@ -905,15 +904,14 @@ contains
   
   ! * Nested Newton solver options *
   nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
-  nested_Newton % verbose = .false. ! verbose output=true, summarized output=false
   ! set method for computing relative convergence error
    ! 'strict' uses two consecutive iterations and is extremely conservative
    !     |--> (actually computes the convergence error of the previous iteration)
    ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
   nested_Newton % convergence = 'strict' ! 'strict' or 'predictive' 
+
   ! solver output
-  nested_Newton % unit = stdout ! file unit number for solver output
-  !open(unit=f_obj % unit,file="Newton_driver.dat")
+  call nested_Newton % solver_output('minimal') ! standard output used by default 
 
   ! set tolerance values
   call nested_Newton % set_tolerance('strict',1.0e-10_r8b,100_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)

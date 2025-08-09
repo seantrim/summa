@@ -400,6 +400,7 @@ subroutine opSplittin(&
    ! *** Final operations for solving the selected split ***
    integer(i4b),parameter          :: maxSplit=500       ! >= max number of splitting methods (controls upper limit of split_select loop)               
    call finalize_split_stateTypeSplitting; if (exit_split_select.or.return_flag) return
+   if (nested_Newton_test) print *, "opSplittin: iSplit=",split_select % iSplit ! SJT --------------- take out
    if (split_select % iSplit.ge.maxSplit) then ! check for errors - execute fail-safe if needed
     err=20; message=trim(message)//'split_select loop exceeded max number of iterations'; return_flag=.true.; return 
    end if
