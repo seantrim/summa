@@ -23,8 +23,7 @@ module summaSolve4arkode_module
  !======= Inclusions ===========
  USE, intrinsic :: iso_c_binding
  USE nrtype
- !USE type4kinsol ! reusing KINSOL data type due to overlap with ARKODE
- USE type4ida ! reusing KINSOL data type due to overlap with ARKODE (prime variables not used)
+ USE type4ida ! reusing IDA data type due to overlap with ARKODE (prime variables not used)
  
 ! ! access the global print flag
 ! USE globalData,only: globalPrintFlag
@@ -33,11 +32,11 @@ module summaSolve4arkode_module
 ! USE globalData,only: integerMissing ! missing integer
 ! USE globalData,only: realMissing    ! missing real number
  
-! ! access matrix information
-! USE globalData,only: ixFullMatrix   ! named variable for the full Jacobian matrix
-! USE globalData,only: ixBandMatrix   ! named variable for the band diagonal matrix
-! USE globalData,only: ku             ! number of super-diagonal bands
-! USE globalData,only: kl             ! number of sub-diagonal bands
+ ! access matrix information
+ USE globalData,only: ixFullMatrix   ! named variable for the full Jacobian matrix
+ USE globalData,only: ixBandMatrix   ! named variable for the band diagonal matrix
+ USE globalData,only: ku             ! number of super-diagonal bands
+ USE globalData,only: kl             ! number of sub-diagonal bands
  
  !! global metadata
  !USE globalData,only:flux_meta       ! metadata on the model fluxes
@@ -71,10 +70,10 @@ module summaSolve4arkode_module
 !   enthalpyFormLU,                 & ! use enthalpy with soil temperature-enthalpy lookup tables
 !   enthalpyForm                      ! use enthalpy with soil temperature-enthalpy analytical solution
  
-! ! look-up values for method used to compute derivative
-! USE mDecisions_module,only:       &
-!   numerical,                      & ! numerical solution
-!   analytical                        ! analytical solution
+ ! look-up values for method used to compute derivative
+ USE mDecisions_module,only:       &
+   numerical,                      & ! numerical solution
+   analytical                        ! analytical solution
 
  ! privacy
  implicit none
@@ -140,12 +139,14 @@ contains
   use farkode_mod                ! Fortran interface to the ARKODE
   use farkode_arkstep_mod        ! Fortran interface to the ARKStep time-stepper module
   use fnvector_serial_mod        ! Fortran interface to serial N_Vector
-!  use fsunmatrix_dense_mod       ! Fortran interface to dense SUNMatrix
-!  use fsunlinsol_dense_mod       ! Fortran interface to dense SUNLinearSolver
+  use fsunmatrix_dense_mod       ! Fortran interface to dense SUNMatrix
+  use fsunlinsol_dense_mod       ! Fortran interface to dense SUNLinearSolver
+  use fsunmatrix_band_mod        ! Fortran interface to banded SUNMatrix
+  use fsunlinsol_band_mod        ! Fortran interface to dense SUNLinearSolver
 !  use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
   use eval8summa_module,only: eval8summa4arkode          ! RHS function evaluations
   use summaSolve4kinsol_module,only: setInitialCondition ! subroutine for setting initial condition (borrowed from KINSOL routines)
-  USE tol4ida_module,only:computWeight4ida               ! weight required for tolerances (borrowed from IDA routines)
+  use tol4ida_module,only:computWeight4ida               ! weight required for tolerances (borrowed from IDA routines)
 
   !======= Declarations =========
   implicit none
@@ -205,24 +206,25 @@ contains
   type(c_ptr)    :: ctx                      ! SUNDIALS context for the simulation
   real(c_double) :: tstart                   ! initial time
   real(c_double) :: tend                     ! final time
-  !real(c_double) :: rtol, atol               ! relative and absolute tolerance
   real(c_double) :: dtout                    ! output time interval
   real(c_double) :: tout                     ! output time
   real(c_double) :: tcur(1)                  ! current time
-  !integer(c_int) :: ierr                     ! error flag from C functions
   integer(c_int) :: nout                     ! number of outputs
   integer(c_int) :: outstep                  ! output loop counter
   integer(i4b)   :: retval                   ! return value
+  logical(lgt)   :: use_fdJac                ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
+
 
   type(N_Vector), pointer                 :: sunvec_y   ! sundials vector
-  !type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix
-  !type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
+  type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix
+  integer(c_long)                         :: mu, lu     ! in banded matrix mode in SUNDIALS type
+  type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
   !type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
   type(c_ptr)                             :: arkode_mem ! ARKODE memory
   integer(c_long)                         :: neq        ! # of equations 
   real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
-  type(data4ida), target  :: eqns_data    ! SUNDIALS user data - reusing KINSOL data type due to overlap
+  type(data4ida), target  :: eqns_data    ! SUNDIALS user data - reusing IDA data type due to overlap
 
   !======= Internals ============
 
@@ -231,7 +233,7 @@ contains
 
   ! create the SUNDIALS context
   retval = FSUNContext_Create(SUN_COMM_NULL, ctx)
-  if (retval /= 0) then; err=20; message=trim(message)//'error in FSUNContext_Create'; return; endif
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FSUNContext_Create'; return; end if
 
   ! initialize ODE -- SJT: update these with SUMMA values (using dummy variables)
   tstart = 0.0d0
@@ -254,7 +256,7 @@ contains
 
   ! * load SUNDIALS user data *
 
-  ! fill eqns_data which will be required later to call eval8summa4ida
+  ! fill eqns_data which will be required later to call eval8summa4arkode
   eqns_data%dt_cur         = dt_cur
   eqns_data%dt             = dt
   eqns_data%nSnow          = nSnow
@@ -289,7 +291,7 @@ contains
   eqns_data%dMat = dMat ! allocate on assignment
 
   ! allocate space for other variables -- SJT: commented out lines not required for eval8summa4arkode
-  if(model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel)then
+  if (model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel) then
     allocate(eqns_data%dBaseflow_dMatric(nSoil,nSoil),stat=err)
   else
     allocate(eqns_data%dBaseflow_dMatric(0,0),stat=err)
@@ -315,14 +317,49 @@ contains
 
   ! Attach user data to memory
   retval = FARKodeSetUserData(arkode_mem, c_loc(eqns_data))
-  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetUserData'; return; endif
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetUserData'; return; end if
 
-  ! SJT: insert matrix setup operations here ---------
+  ! choose Jacobian type
+  select case(model_decisions(iLookDECISIONS%fDerivMeth)%iDecision)
+    case(numerical);  use_fdJac =.true.
+    case(analytical); use_fdJac =.false.
+    case default; err=20; message=trim(message)//'expect choice numericl or analytic to calculate derivatives for Jacobian'; return
+  end select
+
+  ! define the form of the matrix
+  select case(ixMatrix)
+    case(ixBandMatrix)
+      mu = ku; lu = kl;
+      ! Create banded SUNMatrix for use in linear solves
+      sunmat_A => FSUNBandMatrix(neq, mu, lu, ctx)
+      if (.not. associated(sunmat_A)) then; err=20; message=trim(message)//'sunmat = NULL'; return; end if
+
+      ! Create banded SUNLinearSolver object
+      sunls => FSUNLinSol_Band(sunvec_y, sunmat_A, ctx)
+      if (.not. associated(sunls)) then; err=20; message=trim(message)//'sunls = NULL'; return; end if
+
+    case(ixFullMatrix)
+      ! Create dense SUNMatrix for use in linear solves
+      sunmat_A => FSUNDenseMatrix(neq, neq, ctx)
+      if (.not. associated(sunmat_A)) then; err=20; message=trim(message)//'sunmat = NULL'; return; end if
+
+      ! Create dense SUNLinearSolver object
+      sunls => FSUNLinSol_Dense(sunvec_y, sunmat_A, ctx)
+      if (.not. associated(sunls)) then; err=20; message=trim(message)//'sunls = NULL'; return; end if
+
+      ! check
+    case default;  err=20; message=trim(message)//'error in type of matrix'; return
+  end select
+
+  ! Attach the matrix and linear solver
+  ! For the nonlinear solver, ARKODE uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it ** SJT: verify this **
+  retval = FARKodeSetLinearSolver(arkode_mem, sunls, sunmat_A)
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetLinearSolver'; return; end if
 
   ! set relative and absolute tolerance vectors (using components from eqns_data)
   ! note: reusing the tolerance formula from IDA routines
   retval = FARKodeWFtolerances(arkode_mem, c_funloc(computWeight4ida))
-  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeWFtolerances'; return; endif
+  if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeWFtolerances'; return; end if
  
  end subroutine summaSolve4arkode
 
