@@ -89,9 +89,6 @@ integer(i4b),parameter,public :: liquidFlux           = 161    ! liquid water fl
 integer(i4b),parameter,public :: prescribedHead       = 162    ! prescribed head (volumetric liquid water content for mixed form of Richards' eqn)
 integer(i4b),parameter,public :: funcBottomHead       = 163    ! function of matric head in the lower-most layer
 integer(i4b),parameter,public :: freeDrainage         = 164    ! free drainage
-integer(i4b),parameter,public :: FUSEPRMS             = 165    ! FUSE PRMS surface runoff
-integer(i4b),parameter,public :: FUSEAVIC             = 166    ! FUSE ARNO/VIC surface runoff
-integer(i4b),parameter,public :: FUSETOPM             = 167    ! FUSE TOPMODEL surface runoff
 ! look-up values for the choice of parameterization for vegetation roughness length and displacement height
 integer(i4b),parameter,public :: Raupach_BLM1994      = 171    ! Raupach (BLM 1994) "Simplified expressions..."
 integer(i4b),parameter,public :: CM_QJRMS1988         = 172    ! Choudhury and Monteith (QJRMS 1988) "A four layer model for the heat budget..."
@@ -161,6 +158,16 @@ integer(i4b),parameter,public :: emptyStart           = 327    ! empty aquifer a
 integer(i4b),parameter,public :: GreenAmpt            = 331    ! Green-Ampt
 integer(i4b),parameter,public :: topmodel_GA          = 332    ! Green-Ampt-ish for use with qbaseTopmodel hydraulic conductivity
 integer(i4b),parameter,public :: noInfiltrationExcess = 333    ! No infiltration excess runoff
+! look-up values for the infiltration excess surface runoff method
+integer(i4b),parameter,public :: zero_IE              = 341    ! zero infiltration excess surface runoff
+integer(i4b),parameter,public :: homegrown_IE         = 342    ! homegrown infiltration excess surface runoff
+! look-up values for the saturation excess surface runoff method
+integer(i4b),parameter,public :: zero_SE              = 351    ! zero saturation excess surface runoff
+integer(i4b),parameter,public :: homegrown_SE         = 352    ! homegrown saturation excess surface runoff
+integer(i4b),parameter,public :: FUSEPRMS             = 353    ! FUSE PRMS surface runoff
+integer(i4b),parameter,public :: FUSEAVIC             = 354    ! FUSE ARNO/VIC surface runoff
+integer(i4b),parameter,public :: FUSETOPM             = 355    ! FUSE TOPMODEL surface runoff
+
 ! ----------------------------------------------------------------------------------------------------------- 
 
 contains
@@ -517,9 +524,6 @@ subroutine mDecisions(err,message)
   select case(trim(model_decisions(iLookDECISIONS%bcUpprSoiH)%cDecision))
     case('presHead'); model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision = prescribedHead      ! prescribed head (volumetric liquid water content for mixed form of Richards' eqn)
     case('liq_flux'); model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision = liquidFlux          ! liquid water flux
-    case('FUSEPRMS'); model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision = FUSEPRMS            ! FUSE PRMS surface runoff
-    case('FUSEAVIC'); model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision = FUSEAVIC            ! FUSE ARNO/VIC surface runoff
-    case('FUSETOPM'); model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision = FUSETOPM            ! FUSE TOPMODEL surface runoff
     case default
       err=10; message=trim(message)//"unknown upper boundary conditions for soil hydrology [option="//trim(model_decisions(iLookDECISIONS%bcUpprSoiH)%cDecision)//"]"; return
   end select
@@ -674,7 +678,7 @@ subroutine mDecisions(err,message)
       err=10; message=trim(message)//"unknown option for snow unloading [option="//trim(model_decisions(iLookDECISIONS%snowUnload)%cDecision)//"]"; return
   end select
 
-  ! choice of maximum infiltration rate method
+  ! choice of maximum infiltration rate method (for liq_flux soil hydrology upper boundary condition only, all others go by the behavior of noInfExc)
   ! NOTE: use topmodel_GA as the default, where infiltration method is undefined (not populated yet)
   select case(trim(model_decisions(iLookDECISIONS%infRateMax)%cDecision))
     case('GreenAmpt'); model_decisions(iLookDECISIONS%infRateMax)%iDecision = GreenAmpt     ! Green-Ampt
@@ -688,6 +692,27 @@ subroutine mDecisions(err,message)
       endif
   end select
 
+  ! choice of method for infiltration excess surface runoff
+  ! NOTE: use homegrown surface runoff procedure as the default
+  select case(trim(model_decisions(iLookDECISIONS%surfRun_IE)%cDecision))
+    case('zero_IE'); model_decisions(iLookDECISIONS%surfRun_IE)%iDecision = zero_IE           ! infiltration excess surface runoff is zero
+    case('homegrown_IE','notPopulatedYet'); model_decisions(iLookDECISIONS%surfRun_IE)%iDecision = homegrown_IE ! use SUMMA's homegrown surface runoff procedure for infiltration excess runoff
+    case default
+      err=10; message=trim(message)//"unknown option for infiltration excess surface runoff method [option="//trim(model_decisions(iLookDECISIONS%surfRun_IE)%cDecision)//"]"; return
+  end select
+
+  ! choice of method for saturation excess surface runoff
+  ! NOTE: use homegrown surface runoff procedure as the default
+  select case(trim(model_decisions(iLookDECISIONS%surfRun_SE)%cDecision))
+    case('zero_SE'); model_decisions(iLookDECISIONS%surfRun_SE)%iDecision = zero_SE           ! saturation excess surface runoff is zero
+    case('homegrown_SE','notPopulatedYet'); model_decisions(iLookDECISIONS%surfRun_SE)%iDecision = homegrown_SE ! use SUMMA's homegrown surface runoff procedure for saturation excess runoff
+    case('FUSEPRMS'); model_decisions(iLookDECISIONS%surfRun_SE)%iDecision = FUSEPRMS ! use FUSE PRMS for saturation excess surface runoff
+    case('FUSEAVIC'); model_decisions(iLookDECISIONS%surfRun_SE)%iDecision = FUSEAVIC ! use FUSE ARNO/VIC for saturation excess surface runoff
+    case('FUSETOPM'); model_decisions(iLookDECISIONS%surfRun_SE)%iDecision = FUSETOPM ! use FUSE TOPMODEL for saturation excess surface runoff
+    case default
+      err=10; message=trim(message)//"unknown option for saturation excess surface runoff method [option="//trim(model_decisions(iLookDECISIONS%surfRun_SE)%cDecision)//"]"; return
+  end select
+
   ! -----------------------------------------------------------------------------------------------------------------------------------------------
   ! check for consistency among options
   ! -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -695,7 +720,7 @@ subroutine mDecisions(err,message)
   select case(model_decisions(iLookDECISIONS%groundwatr)%iDecision)
     case(qbaseTopmodel)
       if(model_decisions(iLookDECISIONS%bcLowrSoiH)%iDecision /= zeroFlux)then
-        message=trim(message)//'lower boundary condition for soil hydology must be zeroFlux with qbaseTopmodel option for groundwater'
+        message=trim(message)//'lower boundary condition for soil hydology must be zeroFlux with qbaseTopmodel option for groundwater (set "bcLowrSoiH" to "zeroFlux" in model decisions input file)'
         err=20; return
       end if
   end select
@@ -704,7 +729,7 @@ subroutine mDecisions(err,message)
   select case(model_decisions(iLookDECISIONS%groundwatr)%iDecision)
     case(qbaseTopmodel)
       if(model_decisions(iLookDECISIONS%hc_profile)%iDecision /= powerLaw_profile)then
-        message=trim(message)//'power-law hydraulic conductivity profile must be selected when using topmodel baseflow option'
+        message=trim(message)//'power-law hydraulic conductivity profile must be selected when using topmodel baseflow option (set "hc_profile" to "pow_prof" in model decisions input file)'
         err=20; return
       end if
   end select
@@ -712,15 +737,7 @@ subroutine mDecisions(err,message)
   ! check bigBucket groundwater option is used when for spatial groundwater is singleBasin
   if(model_decisions(iLookDECISIONS%spatial_gw)%iDecision == singleBasin)then
     if(model_decisions(iLookDECISIONS%groundwatr)%iDecision /= bigBucket)then
-      message=trim(message)//'groundwater parameterization must be bigBucket when using singleBasin for spatial_gw'
-      err=20; return
-    end if
-  end if
-
-  ! check bigBucket groundwater option is used when FUSE TOPMODEL surface runoff is selected
-  if(model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision == FUSETOPM)then
-    if(model_decisions(iLookDECISIONS%groundwatr)%iDecision /= bigBucket)then
-      message=trim(message)//'groundwater parameterization must be bigBucket when using FUSE TOPMODEL surface runoff'
+      message=trim(message)//'groundwater parameterization must be bigBucket when using singleBasin for spatial_gw (set "groundwatr" to "bigBuckt" in model decisions input file)'
       err=20; return
     end if
   end if
@@ -731,12 +748,12 @@ subroutine mDecisions(err,message)
   select case(model_decisions(iLookDECISIONS%groundwatr)%iDecision)
     case(qbaseTopmodel)
       if(model_decisions(iLookDECISIONS%infRateMax)%iDecision /= topModel_GA)then
-        message=trim(message)//'maximum infiltration rate method must be topmodel_GA when using qbaseTopmodel for groundwater, not '//trim(model_decisions(iLookDECISIONS%infRateMax)%cDecision)
+        message=trim(message)//'maximum infiltration rate method must be topmodel_GA when using qTopmodl for groundwatr, not '//trim(model_decisions(iLookDECISIONS%infRateMax)%cDecision)//' (set "infRateMax" to "topmodel_GA" in model decisions input file)'
         err=20; return
       end if
     case(bigBucket)
       if(model_decisions(iLookDECISIONS%infRateMax)%iDecision == topModel_GA)then
-        write(*,*) 'DEPRECATION WARNING: Combining groundwater parametrization bigBucket with maximum infiltration rate method topModel_GA is not recommended. This was the default in SUMMA v3.x.x and below, but is not appropriate for this groundwater option. Please use Green-Ampt instead.'
+        write(*,*) 'DEPRECATION WARNING: Combining groundwater parametrization bigBucket with maximum infiltration rate method topModel_GA is not recommended. This was the default in SUMMA v3.x.x and below, but is not appropriate for this groundwater option. Please use Green-Ampt instead (set "infRateMax" to "GreenAmpt" in model decisions input file)'
         ! This preps us for when we want to remove this option in the future
         !message=trim(message)//'maximum infiltration rate method (infRateMax) cannot be topModel_GA when using BigBucket for groundwater, use GreenAmpt instead'
         !err=20; return

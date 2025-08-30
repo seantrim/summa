@@ -93,13 +93,8 @@ type, public :: summa1_type_dec
     type(gru_d)                      :: upArea                     ! area upslope of each HRU
 
     ! define miscellaneous variables
-    integer(i4b)                     :: summa1open                 ! flag to define if the summa file is open??
-    integer(i4b)                     :: numout                     ! number of output variables??
-    real(rkind)                         :: ts                         ! model time step ??
     integer(i4b)                     :: nGRU                       ! number of grouped response units
     integer(i4b)                     :: nHRU                       ! number of global hydrologic response units
-    integer(i4b)                     :: hruCount                   ! number of local hydrologic response units
-    real(rkind),dimension(12)           :: greenVegFrac_monthly       ! fraction of green vegetation in each month (0-1)
     character(len=256)               :: summaFileManagerFile       ! path/name of file defining directories and files
 
 end type summa1_type_dec

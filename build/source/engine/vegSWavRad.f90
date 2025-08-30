@@ -94,7 +94,6 @@ contains
  ! local variables
  character(LEN=256)                 :: cmessage                       ! error message of downwind routine
  real(rkind)                        :: snowmassPlusNewsnow            ! sum of snow mass and new snowfall (kg m-2 [mm])
- real(rkind)                        :: scalarGroundSnowFraction       ! snow cover fraction on the ground surface (-)
  real(rkind),parameter              :: scalarVegFraction=1._rkind        ! vegetation fraction (=1 forces no canopy gaps and open areas in radiation routine)
  real(rkind)                        :: scalarTotalReflectedSolar      ! total reflected solar radiation (W m-2)
  real(rkind)                        :: scalarTotalAbsorbedSolar       ! total absorbed solar radiation (W m-2)
@@ -118,6 +117,7 @@ contains
   mLayerVolFracLiq           => prog_data%var(iLookPROG%mLayerVolFracLiq)%dat(nSnow+1:nLayers),      & ! intent(in): volumetric fraction of liquid water in each soil layer (-)
   spectralSnowAlbedoDiffuse  => prog_data%var(iLookPROG%spectralSnowAlbedoDiffuse)%dat(1:nSpecBand), & ! intent(in): diffuse albedo of snow in each spectral band (-)
   scalarSnowAlbedo           => prog_data%var(iLookPROG%scalarSnowAlbedo)%dat(1),                    & ! intent(inout): snow albedo (-)
+  scalarGroundSnowFraction   => diag_data%var(iLookDIAG%scalarGroundSnowFraction)%dat(1),            & ! intent(in): fraction of ground covered with snow (-)
   ! input: ground and canopy temperature
   scalarGroundTemp           => prog_data%var(iLookPROG%mLayerTemp)%dat(1),                          & ! intent(in): ground temperature (K)
   scalarCanopyTemp           => prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1),                    & ! intent(in): vegetation temperature (K)
@@ -149,22 +149,11 @@ contains
  ! initialize error control
  err=0; message='vegSWavRad/'
 
- ! * preliminaries...
- ! ------------------
-
  ! compute the sum of snow mass and new snowfall (kg m-2 [mm])
  snowmassPlusNewsnow = scalarSWE + scalarSnowfall*dt
 
- ! compute the ground snow fraction
- if(nSnow > 0)then
-  scalarGroundSnowFraction  = 1._rkind
- else
-  scalarGroundSnowFraction  = 0._rkind
- end if  ! (if there is snow on the ground)
-
  ! * compute radiation fluxes...
  ! -----------------------------
-
  select case(ix_canopySrad)
 
   ! ***** unchanged Noah-MP routine

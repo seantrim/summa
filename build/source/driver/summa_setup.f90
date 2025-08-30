@@ -258,7 +258,7 @@ contains
  do iGRU=1,nGRU
   do iHRU=1,gru_struc(iGRU)%hruCount
 
-   ! set parmameters to their default value
+   ! set parameters to their default value
    dparStruct%gru(iGRU)%hru(iHRU)%var(:) = localParFallback(:)%default_val         ! x%hru(:)%var(:)
 
    ! overwrite default model parameters with information from the Noah-MP tables
