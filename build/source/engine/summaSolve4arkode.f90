@@ -135,15 +135,15 @@ contains
 
    !======= Inclusions ===========
    use, intrinsic :: iso_c_binding
-   use fsundials_core_mod         ! Fortran interface to SUNContext
-   use farkode_mod                ! Fortran interface to the ARKODE
-   use farkode_arkstep_mod        ! Fortran interface to the ARKStep time-stepper module
-   use fnvector_serial_mod        ! Fortran interface to serial N_Vector
-   use fsunmatrix_dense_mod       ! Fortran interface to dense SUNMatrix
-   use fsunlinsol_dense_mod       ! Fortran interface to dense SUNLinearSolver
-   use fsunmatrix_band_mod        ! Fortran interface to banded SUNMatrix
-   use fsunlinsol_band_mod        ! Fortran interface to dense SUNLinearSolver
-  !use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
+   use fsundials_core_mod                ! Fortran interface to SUNContext
+   use farkode_mod                       ! Fortran interface to the ARKODE
+   use farkode_arkstep_mod               ! Fortran interface to the ARKStep time-stepper module
+   use fnvector_serial_mod               ! Fortran interface to serial N_Vector
+   use fsunmatrix_dense_mod              ! Fortran interface to dense SUNMatrix
+   use fsunlinsol_dense_mod              ! Fortran interface to dense SUNLinearSolver
+   use fsunmatrix_band_mod               ! Fortran interface to banded SUNMatrix
+   use fsunlinsol_band_mod               ! Fortran interface to dense SUNLinearSolver
+   use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
    use eval8summa_module,only: eval8summa4arkode          ! RHS function evaluations
    use summaSolve4kinsol_module,only: setInitialCondition ! subroutine for setting initial condition (borrowed from KINSOL routines)
    use tol4ida_module,only:computWeight4ida               ! weight required for tolerances (borrowed from IDA routines)
@@ -207,10 +207,7 @@ contains
    integer(c_long) :: neq     ! # of equations 
    real(c_double)  :: tstart  ! initial time
    real(c_double)  :: tend    ! final time
-   real(c_double)  :: dtout   ! output time interval
-   real(c_double)  :: tout    ! output time
    real(c_double)  :: tcur(1) ! current time
-   integer(c_int)  :: nout    ! number of outputs
    !integer(c_int) :: outstep                  ! output loop counter
 
    ! SUNDIALS variables
@@ -219,7 +216,7 @@ contains
    type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix
    integer(c_long)                         :: mu, lu     ! in banded matrix mode in SUNDIALS type
    type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
-   !type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
+   type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
    type(c_ptr)                             :: arkode_mem ! ARKODE memory
    real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
@@ -262,6 +259,12 @@ contains
    ! initialize tolerance vectors for ARKODE
    call initialize_ARKODE_tolerance_vectors; if (return_flag) return
 
+   ! set controller for adaptive time step sizes
+   call initialize_time_step_adaptivity_controller; if (return_flag) return
+
+   ! set time integration scheme options
+   call initialize_solver_options
+
    ! main solver loop
    !call update_ARKODE_solver_loop
   contains
@@ -274,12 +277,9 @@ contains
 
    subroutine initialize_ODE_system_values
     ! *** initialize ODE system values *** -- SJT: update these with SUMMA values (using dummy variables)
-    tstart = 0.0d0
-    tend = 10.0d0
-    tcur = tstart
-    tout = tstart
-    dtout = 1.0d0
-    nout = ceiling(tend/dtout)
+    tstart = 0._rkind ! same as IDA
+    tend = dt_cur     ! end time for solver loop
+    tcur = tstart     ! tcur equivalent to tret in summaSolve4ida
 
     ! define # of equations
     neq = nState
@@ -426,8 +426,40 @@ contains
     if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeWFtolerances'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_tolerance_vectors
 
+   subroutine initialize_time_step_adaptivity_controller
+    ! *** initialize time step adaptivity controller for ARKODE ***
+    sunCtrl => FSUNAdaptController_ImpGus(ctx)
+    if (.not. associated(sunCtrl)) then
+      err=20; message=trim(message)//'error: sunCtrl = NULL'; return_flag=.true.; return
+    end if
+    retval = FARKodeSetAdaptController(arkode_mem, sunCtrl)
+    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetAdaptController'; return_flag=.true.; return; end if
+   end subroutine initialize_time_step_adaptivity_controller
+
+   subroutine initialize_solver_options
+    ! *** set ARKODE solver options ***
+    ! note: implicit methods are used due to NULL input for the explicit RHS function in FARKStepCreate call in initialize_ARKODE_memory
+    logical(lgt), parameter  :: use_Butcher_tableau = .true. ! flag controlling use of specified Butcher tableau (else use order parameter)
+    character(:),allocatable :: method          ! string for ARKODE Butcher tableau
+    integer(c_int),parameter :: order = 2_c_int ! order of time integration scheme if not using Butcher tableau (2 <= order <= 5)
+
+    if (use_Butcher_tableau) then ! specify a built-in ARKODE Butcher tableau
+      method = "ARKODE_SDIRK_2_1_2"
+      retval = FARKStepSetTableName(arkode_mem, method, "ARKODE_ERK_NONE")
+      if (retval /= 0) then; err=20; message=trim(message)//'error in FARKStepSetTableName'; return_flag=.true.; return; end if
+    else                          ! use default method with specified order
+      retval = FARKStepSetOrder(arkode_mem, order)
+      if (retval /= 0) then; err=20; message=trim(message)//'error in FARKStepSetOrder'; return_flag=.true.; return; end if
+    end if
+   end subroutine initialize_solver_options
+
    subroutine update_ARKODE_solver_loop
     ! *** main ARKODE solver loop ***
+
+    ! Enforce the solver to stop at end of the time step
+    retval = FARKodeSetStopTime(arkode_mem, dt_cur)
+    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetStopTime'; return; endif
+
    end subroutine update_ARKODE_solver_loop
 
  end subroutine summaSolve4arkode
