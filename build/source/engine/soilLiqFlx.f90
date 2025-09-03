@@ -1177,22 +1177,21 @@ contains
   ! note: this parameterization utilizes saturation excess surface runoff only
   use soil_utils_module,only:LogSumExp  ! smooth max/min
   use soil_utils_module,only:SoftArgMax ! smooth arg max/min (for derivatives of LogSumExp)
-  ! input
-  real(rkind) :: Ac_max   ! maximum saturated area (-)
-  real(rkind) :: phi_tens ! fraction of total storage as tension storage (m)
 
   ! local variables
-  real(rkind),parameter :: alpha_LSE=5.e5_rkind  ! smoothness parameter for LSE smoother function
-  real(rkind)           :: Ac                    ! saturated area (-)
-  real(rkind)           :: S1                    ! total water content in upper soil layer (m)
-  real(rkind)           :: S1_max                ! Maximum storage in the upper layer (m)
-  real(rkind)           :: S1_T                  ! tension water content in upper soil layer (m)
-  real(rkind)           :: S1_T_max              ! maximum tension water content in upper soil layer (m)
-  real(rkind)           :: dS1_dWat              ! derivative of S1 w.r.t. water content
-  real(rkind)           :: S1_T_derivatives(1:2) ! array of derivatives for S1_T
-  real(rkind)           :: dS1_T_dS1             ! derivative of S1_T w.r.t S1
-  real(rkind)           :: dS1_T_dWat            ! derivative of S1_T w.r.t water content
-  real(rkind)           :: dAc_dWat              ! derivative of Ac w.r.t water content 
+  real(rkind),parameter :: alpha_LSE=1.e3_rkind                ! smoothness parameter for LSE smoother function
+  real(rkind)           :: Ac_max                              ! maximum saturated area (-)
+  real(rkind)           :: phi_tens                            ! fraction of total storage as tension storage (m)
+  real(rkind)           :: Ac                                  ! saturated area (-)
+  real(rkind)           :: S1                                  ! total water content in upper soil layer (m)
+  real(rkind)           :: S1_max                              ! Maximum storage in the upper layer (m)
+  real(rkind)           :: S1_T                                ! tension water content in upper soil layer (m)
+  real(rkind)           :: S1_T_max                            ! maximum tension water content in upper soil layer (m)
+  real(rkind)           :: dS1_dWat(1:in_surfaceFlx % nSoil)   ! derivative of S1 w.r.t. water content
+  real(rkind)           :: S1_T_derivatives(1:2)               ! array of derivatives for S1_T
+  real(rkind)           :: dS1_T_dS1                           ! derivative of S1_T w.r.t S1
+  real(rkind)           :: dS1_T_dWat(1:in_surfaceFlx % nSoil) ! derivative of S1_T w.r.t water content
+  real(rkind)           :: dAc_dWat(1:in_surfaceFlx % nSoil)   ! derivative of Ac w.r.t water content 
 
   ! validation of parameters
   associate(&
@@ -1214,12 +1213,14 @@ contains
 
   ! compute water content in upper FUSE layer
   associate(&
+   nSoil            => in_surfaceFlx % nSoil,            & ! number of soil layers
    mLayerVolFracLiq => in_surfaceFlx % mLayerVolFracLiq, & ! volumetric liquid water content in each soil layer (-)
    mLayerDepth      => in_surfaceFlx % mLayerDepth,      & ! depth of soil layers (m) 
+   iLayerHeight     => in_surfaceFlx % iLayerHeight,     & ! height at the interface of each layer for soil layers only (m)
    theta_sat        => in_surfaceFlx % theta_sat         & ! soil porosity (-)
   &)
-   S1     = mLayerDepth(1) * mLayerVolFracLiq(1) ! total water content in upper FUSE layer (m)
-   S1_max = mLayerDepth(1) * theta_sat           ! max water storage for upper FUSE layer (m)
+   S1     = sum( mLayerDepth(:) * mLayerVolFracLiq(:) ) ! total water content in upper FUSE layer (m)
+   S1_max = iLayerHeight(nSoil) * theta_sat             ! max water storage for upper FUSE layer (m)
   end associate
 
   ! compute tension water content
@@ -1233,7 +1234,7 @@ contains
     err=10; message=trim(message)//"FUSE PRMS surface runoff: error in LogSumExp"; return_flag=.true.; return
    end if
    if (S1_T < 0._rkind) then ! check for errors
-    err=10; message=trim(message)//"FUSE PRMS surface runoff: S1_T is negative (may need to increase magnitude of alpha_LSE)"
+    err=10; message=trim(message)//"FUSE PRMS surface runoff: S1_T is negative (may need to adjust magnitude of alpha_LSE)"
     return_flag=.true.; return
    end if
   end associate
@@ -1261,7 +1262,8 @@ contains
    ! input: pre-computed derivatives in ...
    dTheta_dTk         => in_surfaceFlx % dTheta_dTk        , & ! ... volumetric liquid water content w.r.t. temperature (K-1)
    dTheta_dPsi        => in_surfaceFlx % dTheta_dPsi       , & ! ... the soil water characteristic w.r.t. psi (m-1)
-   ! input: depth of soil layers (m)
+   ! input: soil layers
+   nSoil              => in_surfaceFlx % nSoil             , & ! number of soil layers
    mLayerDepth        => in_surfaceFlx % mLayerDepth       , & ! depth of upper-most soil layer (m)
    ! output: error control
    err                => out_surfaceFlx % err              , & ! error code
@@ -1271,11 +1273,11 @@ contains
    if (updateInfil) then
 
     ! compute derivatives needed for infiltration derivative
-    dS1_dWat          = mLayerDepth(1)                       ! derivative of S1 w.r.t. water content
+    dS1_dWat          = mLayerDepth(:)                       ! derivative of S1 w.r.t. water content
     S1_T_derivatives  = SoftArgMax(-alpha_LSE,[S1,S1_T_max]) ! compute vector of derivatives for S1_T
     dS1_T_dS1         = S1_T_derivatives(1)                  ! extract S1_T derivative w.r.t S1
-    dS1_T_dWat        = dS1_T_dS1 * dS1_dWat                 ! derivative of S1_T w.r.t water content
-    dAc_dWat          = (dS1_T_dWat/S1_T_max)*Ac_max         ! derivative of Ac w.r.t water content 
+    dS1_T_dWat        = dS1_T_dS1 * dS1_dWat(:)              ! derivative of S1_T w.r.t water content
+    dAc_dWat          = (dS1_T_dWat(:)/S1_T_max)*Ac_max      ! derivative of Ac w.r.t water content 
 
     ! process liquid derivatives
     dVolFracLiq_dWat(:) = 0._rkind ! w.r.t hydrology state variable (depends on form of Richards' equation)
@@ -1284,12 +1286,14 @@ contains
      case(moisture) ! water content state variable
        dVolFracLiq_dWat(:) = 1._rkind
      case(mixdform) ! pressure head state variable (also take freezing into account)
-       Tcrit = crit_soilT( mLayerMatricHead(1) )
-       if (mLayerTemp(1) < Tcrit) then ! water is frozen in the soil layer
-         dVolFracLiq_dWat(1) = 0._rkind
-       else                            ! water is unfrozen -- use water retention curve
-         dVolFracLiq_dWat(1) = dTheta_dPsi(1)
-       end if
+       do iLayer = 1,nSoil
+         Tcrit = crit_soilT( mLayerMatricHead(iLayer) )
+         if (mLayerTemp(iLayer) < Tcrit) then ! water is frozen in the soil layer
+           dVolFracLiq_dWat(iLayer) = 0._rkind
+         else                                 ! water is unfrozen -- use water retention curve
+           dVolFracLiq_dWat(iLayer) = dTheta_dPsi(iLayer)
+         end if
+       end do
      case default; err=10; message=trim(message)//"unknown form of Richards' equation"; return_flag=.true.; return
     end select 
     dVolFracLiq_dTk(:) = dTheta_dTk(:) ! already zeroed out if not below critical temperature
@@ -1297,11 +1301,11 @@ contains
     ! * compute the hydrology derivatives (only saturation excess components for FUSE) *
     ! scalarSurfaceInfiltration = scalarRainPlusMelt - scalarRainPlusMelt*Ac
     ! note: rain plus melt derivatives are zero in soil layers
-    dq_dHydStateVec_SE(1) = -scalarRainPlusMelt * dAc_dWat * dVolFracLiq_dWat(1) 
+    dq_dHydStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dWat(:) 
 
     ! * compute the energy derivatives (only saturation excess components for FUSE) *
     ! energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
-    dq_dNrgStateVec_SE(1) = -scalarRainPlusMelt * dAc_dWat * dVolFracLiq_dTk(1) 
+    dq_dNrgStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dTk(:) 
 
    else ! zero derivatives if not first split operation
 
@@ -1319,23 +1323,22 @@ contains
   ! note: this parameterization utilizes saturation excess surface runoff only
   use soil_utils_module,only:LogSumExp  ! smooth max/min
   use soil_utils_module,only:SoftArgMax ! smooth arg max/min (for derivatives of LogSumExp)
-  ! input
-  real(rkind) :: b ! ARNO/VIC exponent (-) 
 
   ! local variables
-  logical(lgt),parameter :: smoother = .false.       ! control for optional smoothing in base variable  
-  real(rkind) ,parameter :: alpha_LSE=5.e5_rkind     ! smoothness parameter for LSE smoother function
-  real(rkind)            :: S1                       ! total water content in upper FUSE layer (m)
-  real(rkind)            :: dS1_dWat                 ! derivative of S1 w.r.t. water content
-  real(rkind)            :: S1_max                   ! Maximum storage in the FUSE layer (m)
-  real(rkind)            :: S1_star                  ! total water content in upper FUSE layer computed with a smoothed min (m)
-  real(rkind)            :: dS1_star_dS1             ! derivative in S1_star w.r.t S1
-  real(rkind)            :: base                     ! base used in saturated area formula
-  real(rkind)            :: dbase_dS1                ! derivative of base w.r.t S1
-  real(rkind)            :: Ac                       ! saturated area (-)
-  real(rkind)            :: dAc_dWat                 ! derivative of Ac w.r.t water content 
-  real(rkind)            :: S1_star_derivatives(1:2) ! array of derivatives for S1_star from SoftArgMax function
-  real(rkind)            :: roundoff_tolerance       ! tolerance for round-off error
+  logical(lgt),parameter :: smoother = .false.                ! control for optional smoothing in base variable  
+  real(rkind) ,parameter :: alpha_LSE=1.e3_rkind              ! smoothness parameter for LSE smoother function
+  real(rkind)            :: b                                 ! ARNO/VIC exponent (-) 
+  real(rkind)            :: S1                                ! total water content in upper FUSE layer (m)
+  real(rkind)            :: dS1_dWat(1:in_surfaceFlx % nSoil) ! derivative of S1 w.r.t. water content
+  real(rkind)            :: S1_max                            ! Maximum storage in the FUSE layer (m)
+  real(rkind)            :: S1_star                           ! total water content in upper FUSE layer computed with a smoothed min (m)
+  real(rkind)            :: dS1_star_dS1                      ! derivative in S1_star w.r.t S1
+  real(rkind)            :: base                              ! base used in saturated area formula
+  real(rkind)            :: dbase_dS1                         ! derivative of base w.r.t S1
+  real(rkind)            :: Ac                                ! saturated area (-)
+  real(rkind)            :: dAc_dWat(1:in_surfaceFlx % nSoil) ! derivative of Ac w.r.t water content 
+  real(rkind)            :: S1_star_derivatives(1:2)          ! array of derivatives for S1_star from SoftArgMax function
+  real(rkind)            :: roundoff_tolerance                ! tolerance for round-off error
 
   ! validation of input parameters
   b = in_surfaceFlx % FUSE_b ! interface ARNO/VIC exponent
@@ -1350,12 +1353,14 @@ contains
 
   ! compute water content in upper FUSE layer
   associate(&
+   nSoil            => in_surfaceFlx % nSoil,            & ! number of soil layers
    mLayerVolFracLiq => in_surfaceFlx % mLayerVolFracLiq, & ! volumetric liquid water content in each soil layer (-)
    mLayerDepth      => in_surfaceFlx % mLayerDepth,      & ! depth of soil layers (m) 
+   iLayerHeight     => in_surfaceFlx % iLayerHeight,     & ! height at the interface of each layer for soil layers only (m)
    theta_sat        => in_surfaceFlx % theta_sat         & ! soil porosity (-)
   &)
-   S1     = mLayerDepth(1) * mLayerVolFracLiq(1) ! total water content in upper FUSE layer (m)
-   S1_max = mLayerDepth(1) * theta_sat           ! max water storage for upper FUSE layer (m)
+   S1     = sum( mLayerDepth(:) * mLayerVolFracLiq(:) ) ! total water content in upper FUSE layer (m)
+   S1_max = iLayerHeight(nSoil) * theta_sat             ! max water storage for upper FUSE layer (m)
   end associate
 
   ! compute saturated area
@@ -1417,10 +1422,11 @@ contains
    ! input: pre-computed derivatives in ...
    dTheta_dTk         => in_surfaceFlx % dTheta_dTk        , & ! ... volumetric liquid water content w.r.t. temperature (K-1)
    dTheta_dPsi        => in_surfaceFlx % dTheta_dPsi       , & ! ... the soil water characteristic w.r.t. psi (m-1)
-   ! input: depth of soil layers (m)
+   ! input: soil layers
+   nSoil              => in_surfaceFlx % nSoil             , & ! number of soil layers
    mLayerDepth        => in_surfaceFlx % mLayerDepth       , & ! depth of upper-most soil layer (m)
    ! output: error control
-   err                => out_surfaceFlx % err,               & ! error code
+   err                => out_surfaceFlx % err              , & ! error code
    message            => out_surfaceFlx % message            & ! error message
   &)
 
@@ -1428,7 +1434,7 @@ contains
 
     ! compute derivatives needed for infiltration derivative
     ! Ac   = 1._rkind - base**b 
-    dS1_dWat  = mLayerDepth(1)                                 ! derivative of S1 w.r.t. water content
+    dS1_dWat  = mLayerDepth(:)                                 ! derivative of S1 w.r.t. water content
     if (smoother) then ! with smooth approximation of min(S1,S1_max)
      S1_star_derivatives  = SoftArgMax(-alpha_LSE,[S1,S1_max]) ! compute vector of derivatives for S1_star
      dS1_star_dS1 = S1_star_derivatives(1)                     ! extract S1_star derivative w.r.t S1
@@ -1436,7 +1442,7 @@ contains
      dS1_star_dS1 = 1._rkind                                   ! S1_star = S1 if no smoothing
     end if
     dbase_dS1 = -1._rkind/S1_max * dS1_star_dS1                ! derivative of base w.r.t S1
-    dAc_dWat  = -b*base**(b-1._rkind)*dbase_dS1*dS1_dWat       ! derivative of Ac w.r.t water content 
+    dAc_dWat  = -b*base**(b-1._rkind)*dbase_dS1*dS1_dWat(:)    ! derivative of Ac w.r.t water content 
 
     ! process liquid derivatives
     dVolFracLiq_dWat(:) = 0._rkind
@@ -1445,12 +1451,14 @@ contains
      case(moisture) ! state variable is water content
        dVolFracLiq_dWat(:) = 1._rkind
      case(mixdform) ! state variable is pressure head
-       Tcrit = crit_soilT( mLayerMatricHead(1) )
-       if (mLayerTemp(1) < Tcrit) then ! frozen layer
-         dVolFracLiq_dWat(1) = 0._rkind
-       else                            ! unfrozen layer
-         dVolFracLiq_dWat(1) = dTheta_dPsi(1)
-       end if
+       do iLayer = 1,nSoil
+         Tcrit = crit_soilT( mLayerMatricHead(iLayer) )
+         if (mLayerTemp(iLayer) < Tcrit) then ! frozen layer
+           dVolFracLiq_dWat(iLayer) = 0._rkind
+         else                                 ! unfrozen layer
+           dVolFracLiq_dWat(iLayer) = dTheta_dPsi(iLayer)
+         end if
+       end do
      case default; err=10; message=trim(message)//"unknown form of Richards' equation"; return_flag=.true.; return
     end select 
     dVolFracLiq_dTk(:) = dTheta_dTk(:) ! already zeroed out if not below critical temperature
@@ -1458,11 +1466,11 @@ contains
     ! * compute the hydrology derivatives (only saturation excess components for FUSE) *
     ! scalarSurfaceInfiltration = scalarRainPlusMelt - scalarRainPlusMelt*Ac
     ! note: rain plus melt derivatives are zero in soil layers
-    dq_dHydStateVec_SE(1) = -scalarRainPlusMelt * dAc_dWat * dVolFracLiq_dWat(1)
+    dq_dHydStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dWat(:)
 
     ! * compute the energy derivatives components (only saturation excess components for FUSE) *
     ! note: energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
-    dq_dNrgStateVec_SE(1) = -scalarRainPlusMelt * dAc_dWat * dVolFracLiq_dTk(1)
+    dq_dNrgStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dTk(:)
 
    else ! zero derivatives if not first split operation
 
@@ -1501,13 +1509,15 @@ contains
   real(rkind) :: S2     ! total water content in lower FUSE layer (m)
   real(rkind) :: n      ! TOPMODEL exponent exponent (must be sufficiently large to avoid divergence of lambda_n -- n>=3.5 or so)
   ! derivative variables
-  real(rkind) :: dS2_dWat                ! derivative in S2 w.r.t water content 
-  real(rkind) :: dAc_dWat                ! derivative of Ac w.r.t water content 
-  real(rkind) :: dzeta_crit_n_dS2        ! derivative of zeta_crit_n w.r.t S2
-  real(rkind) :: dzeta_crit_dzeta_crit_n ! derivative of zeta_crit w.r.t zeta_crit_n
-  real(rkind) :: dx_crit_dzeta_crit      ! derivative of x_crit w.r.t zeta_crit
-  real(rkind) :: dx_crit_dS2             ! derivative of x_crit w.r.t S2
-  real(rkind) :: dgammp_dx_crit          ! derivative of gammp function in Ac w.r.t x_crit
+  real(rkind) :: dS2_dWat(1:in_surfaceFlx % nSoil) ! derivative in S2 w.r.t water content 
+  real(rkind) :: dAc_dWat(1:in_surfaceFlx % nSoil) ! derivative of Ac w.r.t water content 
+  real(rkind) :: dzeta_crit_n_dS2                  ! derivative of zeta_crit_n w.r.t S2
+  real(rkind) :: dzeta_crit_dzeta_crit_n           ! derivative of zeta_crit w.r.t zeta_crit_n
+  real(rkind) :: dx_crit_dzeta_crit                ! derivative of x_crit w.r.t zeta_crit
+  real(rkind) :: dx_crit_dS2                       ! derivative of x_crit w.r.t S2
+  real(rkind) :: dgammp_dx_crit                    ! derivative of gammp function in Ac w.r.t x_crit
+  ! tolerance variables
+  real(rkind) :: roundoff_tolerance                ! tolerance for round-off error
 
   ! interface FUSE input parameters
   lambda = in_surfaceFlx % FUSE_lambda
@@ -1516,13 +1526,16 @@ contains
   n      = in_surfaceFlx % FUSE_n
 
   ! compute water content in lower FUSE layer
+  ! note: the entire soil column is used
   associate(&
+   nSoil            => in_surfaceFlx % nSoil,            & ! number of soil layers
    mLayerVolFracLiq => in_surfaceFlx % mLayerVolFracLiq, & ! volumetric liquid water content in each soil layer (-)
    mLayerDepth      => in_surfaceFlx % mLayerDepth,      & ! depth of soil layers (m) 
+   iLayerHeight     => in_surfaceFlx % iLayerHeight,     & ! height at the interface of each layer for soil layers only (m)
    theta_sat        => in_surfaceFlx % theta_sat         & ! soil porosity (-)
   &)
-   S2     = mLayerDepth(2) * mLayerVolFracLiq(2) ! total water content in lower FUSE layer (m)
-   S2_max = mLayerDepth(2) * theta_sat           ! max water storage for lower FUSE layer (m)
+   S2     = sum( mLayerDepth(:) * mLayerVolFracLiq(:) ) ! total water content in upper FUSE layer (m)
+   S2_max = iLayerHeight(nSoil) * theta_sat             ! max water storage for upper FUSE layer (m)
   end associate
 
   ! validation of parameters
@@ -1585,25 +1598,28 @@ contains
      err     => out_surfaceFlx % err    , & ! error code
      message => out_surfaceFlx % message  & ! error message
     &)
-     err=10; message=trim(message)//"FUSE TOPMODEL zeta_crit_n is negative"
+     err=10; message=trim(message)//"FUSE TOPMODEL zeta_crit_n <= 0"
      return_flag=.true.; return
     end associate
    end if
 
-   zeta_crit=log(zeta_crit_n**n) ! critical topographic index in log space
+   zeta_crit=n*log(zeta_crit_n) ! critical topographic index in log space
 
    ! transform to x random variable and validate result
    x_crit=zeta_crit-mu
-   if (x_crit <= 0._rkind) then
+   roundoff_tolerance = 1.e2_rkind * epsilon(1._rkind) ! tolerance for round-off error is near machine epsilon 
+   if (x_crit < -roundoff_tolerance) then ! less than zero outside tolerance
     associate(&
      ! output: error control
      err     => out_surfaceFlx % err    , & ! error code
      message => out_surfaceFlx % message  & ! error message
     &)
-     err=10; message=trim(message)//"FUSE TOPMODEL zeta_crit value must be greater than mu value -- &
+     err=10; message=trim(message)//"FUSE TOPMODEL zeta_crit must be greater or equal to mu -- &
                     &try increasing lambda or decreasing mu";
      return_flag=.true.; return
     end associate
+   else if (x_crit < 0._rkind) then       ! less than zero but within tolerance
+    x_crit = 0._rkind
    end if
 
    ! compute saturated area
@@ -1633,10 +1649,11 @@ contains
    ! input: pre-computed derivatives in ...
    dTheta_dTk         => in_surfaceFlx % dTheta_dTk        , & ! ... volumetric liquid water content w.r.t. temperature (K-1)
    dTheta_dPsi        => in_surfaceFlx % dTheta_dPsi       , & ! ... the soil water characteristic w.r.t. psi (m-1)
-   ! input: depth of soil layers (m)
+   ! input: soil layers
+   nSoil              => in_surfaceFlx % nSoil             , & ! number of soil layers
    mLayerDepth        => in_surfaceFlx % mLayerDepth       , & ! depth of upper-most soil layer (m)
    ! output: error control
-   err                => out_surfaceFlx % err,               & ! error code
+   err                => out_surfaceFlx % err              , & ! error code
    message            => out_surfaceFlx % message            & ! error message
   &)
 
@@ -1644,15 +1661,15 @@ contains
 
     ! compute derivatives needed for infiltration derivative
     if (S2 > 0._rkind) then ! for S2 > 0: Ac = 1._rkind-gammp(alpha,x_crit/theta)
-     dS2_dWat  = mLayerDepth(2)                       ! derivative of S2 w.r.t. water content      
+     dS2_dWat  = mLayerDepth(:)                       ! derivative of S2 w.r.t. water content      
      dzeta_crit_n_dS2 = -lambda_n%re*S2_max/S2**2_i4b ! derivative of zeta_crit_n=lambda_n%re*S2_max/S2 w.r.t S2     
      dzeta_crit_dzeta_crit_n = ( n*zeta_crit_n**(n-1._rkind) ) / zeta_crit_n**n    ! derivative of zeta_crit=log(zeta_crit_n**n) w.r.t zeta_crit_n
      dx_crit_dzeta_crit = 1._rkind                                                 ! derivative of x_crit=zeta_crit-mu w.r.t zeta_crit
      dx_crit_dS2 = dx_crit_dzeta_crit * dzeta_crit_dzeta_crit_n * dzeta_crit_n_dS2 ! derivative of x_crit w.r.t S2 via chain rule
      dgammp_dx_crit = ( (x_crit/theta)**(alpha-1._rkind) * exp(-x_crit/theta) )/theta/gamma(alpha) ! derivative of gammp function in Ac w.r.t x_crit 
-     dAc_dWat = -dgammp_dx_crit * dx_crit_dS2 * dS2_dWat ! derivative of Ac w.r.t water content via chain rule 
+     dAc_dWat = -dgammp_dx_crit * dx_crit_dS2 * dS2_dWat(:) ! derivative of Ac w.r.t water content via chain rule 
     else ! for S2 = 0: Ac = 0
-     dAc_dWat = 0._rkind
+     dAc_dWat(:) = 0._rkind
     end if
 
     ! process liquid derivatives
@@ -1662,12 +1679,14 @@ contains
      case(moisture) ! state variable is water content
        dVolFracLiq_dWat(:) = 1._rkind
      case(mixdform) ! state variable is pressure head
-       Tcrit = crit_soilT( mLayerMatricHead(2) )
-       if (mLayerTemp(2) < Tcrit) then ! frozen layer
-         dVolFracLiq_dWat(2) = 0._rkind
-       else                            ! unfrozen layer
-         dVolFracLiq_dWat(2) = dTheta_dPsi(2)
-       end if
+       do iLayer = 1,nSoil
+         Tcrit = crit_soilT( mLayerMatricHead(iLayer) )
+         if (mLayerTemp(iLayer) < Tcrit) then ! frozen layer
+           dVolFracLiq_dWat(iLayer) = 0._rkind
+         else                                 ! unfrozen layer
+           dVolFracLiq_dWat(iLayer) = dTheta_dPsi(iLayer)
+         end if
+       end do
      case default; err=10; message=trim(message)//"unknown form of Richards' equation"; return_flag=.true.; return
     end select 
     dVolFracLiq_dTk(:) = dTheta_dTk(:) ! already zeroed out if not below critical temperature
@@ -1675,11 +1694,11 @@ contains
     ! * compute the hydrology derivatives (only saturation excess components for FUSE) *
     ! scalarSurfaceInfiltration = scalarRainPlusMelt - scalarRainPlusMelt*Ac
     ! note: rain plus melt derivatives are zero in soil layers
-    dq_dHydStateVec_SE(2) = -scalarRainPlusMelt * dAc_dWat * dVolFracLiq_dWat(2)
+    dq_dHydStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dWat(:)
 
     ! * compute the energy derivatives components (only saturation excess components for FUSE) *
     ! note: energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
-    dq_dNrgStateVec_SE(2) = -scalarRainPlusMelt * dAc_dWat * dVolFracLiq_dTk(2)
+    dq_dNrgStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dTk(:)
 
    else ! zero derivatives if not first split operation
 
