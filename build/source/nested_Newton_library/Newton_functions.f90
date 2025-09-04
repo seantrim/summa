@@ -4,7 +4,7 @@ module Newton_functions
  use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
  use nrtype,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
- use eval8summa_module, only: eval8summa                       ! SUMMA's eval8summa routine
+ use eval8summa_module, only: eval8summa,imposeConstraints     ! SUMMA's eval8summa routine
  use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
  use data_types,only: in_type_summaSolve4homegrown,& ! objects for SUMMA's summaSolve4homegrown routine
@@ -76,6 +76,7 @@ module Newton_functions
    type(out_type_summaSolve4homegrown) :: out_SS4HG  ! summaSolve4homegrown output object: model control variables and previous function evaluation
 
    ! additional variables for eval8summa call
+   logical(lgt)            :: firstStateIteration    ! flag to indicate first state vector iteration
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
    real(rkind),allocatable :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
    real(qp),allocatable    :: sMul(:)    ! NOTE: qp  ! multiplier for state vector for the residual calculations
@@ -84,6 +85,7 @@ module Newton_functions
    real(rkind),allocatable :: fRHS(:)                ! RHS function for ARKODE
    real(rkind),allocatable :: rAdd(:)                ! additional terms in the residual vector
    real(qp),allocatable    :: resVec(:)  ! NOTE: qp  ! residual vector 
+   real(rkind),allocatable :: stateVecPrev(:)        ! state vector for previous iteration (for imposeConstraints)
   contains
    ! ** routines that point to external sources ** !
    ! note: - these procedures are not directly called in the solver
@@ -523,7 +525,29 @@ contains
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
   class(f_obj_inputs),intent(inout) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b),intent(inout)           :: xvec(1:f_obj % n) ! current guess
+
+  ! increment the proposed iteration for simple error control if needed
+  associate(&
+   stateVecTrial => xvec, & ! current guess for state vector
+   err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message & ! SUMMA error code and message 
+  &)
+   if (f_obj % firstStateiteration) then
+    f_obj % firstStateIteration = .false.
+    if (.not.allocated(f_obj % stateVecPrev)) allocate(f_obj % stateVecPrev(1:f_obj % n))
+   else
+     call imposeConstraints(f_obj % model_decisions,f_obj % indx_data,f_obj % prog_data,f_obj % mpar_data,& ! data structures
+                           &stateVecTrial(:),f_obj % stateVecPrev,&                                         ! state variables
+                           & f_obj % in_SS4HG % nState, f_obj % in_SS4HG % nSoil,f_obj % in_SS4HG % nSnow,& ! layer variables
+                           & message, err)                                                                  ! error control
+     if (err /= 0) then
+      if (f_obj % out_error) then
+       write(f_obj % unit,*) "Error in SUMMA_eval8summa: imposeConstraints message="//trim(message); stop
+      end if
+     end if
+   end if
+   f_obj % stateVecPrev = stateVecTrial(:)  ! save the state vector for the next iteration -- SJT: use f_obj % x0 ?
+  end associate
 
   ! update
   associate(&
@@ -531,18 +555,18 @@ contains
   &)
    call eval8summa(&
                     ! input: model control
-                    f_obj % in_SS4HG % dt_cur,                  & ! intent(in):    current stepsize
-                    f_obj % in_SS4HG % dt,                      & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
-                    f_obj % in_SS4HG % nSnow,                   & ! intent(in):    number of snow layers
-                    f_obj % in_SS4HG % nSoil,                   & ! intent(in):    number of soil layers
-                    f_obj % in_SS4HG % nLayers,                 & ! intent(in):    number of layers
-                    f_obj % in_SS4HG % nState,                  & ! intent(in):    number of state variables in the current subset
-                    .false.,                 & ! intent(in):    not inside Sundials solver
-                    f_obj % in_SS4HG % firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
-                    f_obj % io_SS4HG % firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
-                    f_obj % firstSplitOper,  & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
-                    f_obj % in_SS4HG % computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
-                    f_obj % in_SS4HG % scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                    f_obj % in_SS4HG % dt_cur,         & ! intent(in):    current stepsize
+                    f_obj % in_SS4HG % dt,             & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
+                    f_obj % in_SS4HG % nSnow,          & ! intent(in):    number of snow layers
+                    f_obj % in_SS4HG % nSoil,          & ! intent(in):    number of soil layers
+                    f_obj % in_SS4HG % nLayers,        & ! intent(in):    number of layers
+                    f_obj % in_SS4HG % nState,         & ! intent(in):    number of state variables in the current subset
+                    .false.,                           & ! intent(in):    not inside Sundials solver
+                    f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
+                    f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
+                    f_obj % firstSplitOper,            & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
+                    f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                     ! input: state vectors
                     stateVecTrial,                   & ! intent(in):    model state vector
                     f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -576,11 +600,10 @@ contains
   end associate
 
   ! finalize
-  ! note: "message" used for out_SS4HG data component but "cmessage" used within summaSolve4homegrown subroutine
-  associate(err => f_obj % out_SS4HG % err, cmessage => f_obj % out_SS4HG % message) 
+  associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
    if (err /= 0) then
     if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(cmessage); stop
+     write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(message); stop
     end if
    end if
   end associate
@@ -669,8 +692,8 @@ contains
  function f_SUMMA_vec(f_obj,xvec) result(f_vec)
   ! *** Compute SUMMA's vector non-linear function ***
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f_vec(1:f_obj % n) ! non-linear function vector
+  real(r8b),intent(inout)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b)                       :: f_vec(1:f_obj % n) ! non-linear function vector
 
   ! compute SUMMA residual (taken to be the non-linear function) based on current guess
   ! note: - eval8summa may contain extraneous computations not needed for the residual
@@ -684,8 +707,8 @@ contains
   ! ** Compute SUMMA's Jacobian **
   ! solver variables
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b),allocatable        :: J(:,:)
+  real(r8b),intent(inout)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b),allocatable           :: J(:,:)
 
   ! compute derivatives based on current guess
   call f_obj % SUMMA_eval8summa(xvec)
