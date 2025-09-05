@@ -22,10 +22,11 @@ module Newton_functions
  ! ***** Parent Type ***** !
  type, public :: f_obj_base
    ! ** Default data components used by the Newton solvers ** !
-   logical      :: banded    ! flag for banded Jacobians
-   logical      :: nested    ! flag for nested algorithm
-   logical      :: inner     ! flag to indicate the execution of inner iterations
-   logical      :: converged ! flag to indicate that the obtained solution meets the convergence criterion
+   logical      :: banded      ! flag for banded Jacobians
+   logical      :: nested      ! flag for nested algorithm
+   logical      :: inner       ! flag to indicate the execution of inner iterations
+   logical      :: converged   ! flag to indicate that the obtained solution meets the convergence criterion
+   logical      :: constraints ! flag to indicate that constraints are to be applied between outer/classical iterations
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
@@ -125,6 +126,7 @@ module Newton_functions
    !procedure :: J  => Jacobian_f_Rich_vec  ! solver
    procedure :: J1 => Jacobian_f1_Rich_vec ! solver
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
+   procedure :: apply_constraints => SUMMA_imposeConstraints
    
    ! scalar routines
    procedure :: f     => f_diff 
@@ -519,35 +521,57 @@ contains
 
  !! ******************************* SUMMA procedures below ******************************* !!
 
+ subroutine SUMMA_imposeConstraints(f_obj,xvec0,xvec1)
+  ! ** interface for SUMMA's imposeConstraints subroutine **
+  class(f_obj_type),intent(inout)   :: f_obj
+  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
+  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
+
+  ! increment the proposed iteration for simple error control if needed
+  associate(&
+   err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message & ! SUMMA error code and message 
+  &)
+     call imposeConstraints(f_obj % model_decisions,f_obj % indx_data,f_obj % prog_data,f_obj % mpar_data,& ! data structures
+                           &xvec1,xvec0,&                                                                   ! state variables
+                           & f_obj % in_SS4HG % nState, f_obj % in_SS4HG % nSoil,f_obj % in_SS4HG % nSnow,& ! layer variables
+                           & message, err)                                                                  ! error control
+     if (err /= 0) then
+      if (f_obj % out_error) then
+       write(f_obj % unit,*) "Error in SUMMA_imposeConstraints: imposeConstraints message="//trim(message); stop
+      end if
+     end if
+  end associate
+ end subroutine SUMMA_imposeConstraints
+
  subroutine SUMMA_eval8summa(f_obj,xvec)
   ! ** interface for SUMMA's eval8summa subroutine **
   ! compute SUMMA derivative values and residual vector
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
   class(f_obj_inputs),intent(inout) :: f_obj
-  real(r8b),intent(inout)           :: xvec(1:f_obj % n) ! current guess
+  real(r8b),intent(in)              :: xvec(1:f_obj % n) ! current guess
 
-  ! increment the proposed iteration for simple error control if needed
-  associate(&
-   stateVecTrial => xvec, & ! current guess for state vector
-   err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message & ! SUMMA error code and message 
-  &)
-   if (f_obj % firstStateiteration) then
-    f_obj % firstStateIteration = .false.
-    if (.not.allocated(f_obj % stateVecPrev)) allocate(f_obj % stateVecPrev(1:f_obj % n))
-   else
-     call imposeConstraints(f_obj % model_decisions,f_obj % indx_data,f_obj % prog_data,f_obj % mpar_data,& ! data structures
-                           &stateVecTrial(:),f_obj % stateVecPrev,&                                         ! state variables
-                           & f_obj % in_SS4HG % nState, f_obj % in_SS4HG % nSoil,f_obj % in_SS4HG % nSnow,& ! layer variables
-                           & message, err)                                                                  ! error control
-     if (err /= 0) then
-      if (f_obj % out_error) then
-       write(f_obj % unit,*) "Error in SUMMA_eval8summa: imposeConstraints message="//trim(message); stop
-      end if
-     end if
-   end if
-   f_obj % stateVecPrev = stateVecTrial(:)  ! save the state vector for the next iteration -- SJT: use f_obj % x0 ?
-  end associate
+!  ! increment the proposed iteration for simple error control if needed
+!  associate(&
+!   stateVecTrial => xvec, & ! current guess for state vector
+!   err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message & ! SUMMA error code and message 
+!  &)
+!   if (f_obj % firstStateiteration) then
+!    f_obj % firstStateIteration = .false.
+!    if (.not.allocated(f_obj % stateVecPrev)) allocate(f_obj % stateVecPrev(1:f_obj % n))
+!   else
+!     call imposeConstraints(f_obj % model_decisions,f_obj % indx_data,f_obj % prog_data,f_obj % mpar_data,& ! data structures
+!                           &stateVecTrial(:),f_obj % stateVecPrev,&                                         ! state variables
+!                           & f_obj % in_SS4HG % nState, f_obj % in_SS4HG % nSoil,f_obj % in_SS4HG % nSnow,& ! layer variables
+!                           & message, err)                                                                  ! error control
+!     if (err /= 0) then
+!      if (f_obj % out_error) then
+!       write(f_obj % unit,*) "Error in SUMMA_eval8summa: imposeConstraints message="//trim(message); stop
+!      end if
+!     end if
+!   end if
+!   f_obj % stateVecPrev = stateVecTrial(:)  ! save the state vector for the next iteration -- SJT: use f_obj % x0 ?
+!  end associate
 
   ! update
   associate(&
@@ -615,12 +639,12 @@ contains
   ! solver variables
   class(f_obj_inputs),intent(inout) :: f_obj
   real(r8b),allocatable,intent(out) :: J(:,:)
-  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
-  integer(i4b)                 :: nBands ! SUMMA's leading dimension for banded Jacobians
+  integer(i4b)                      :: nrow_banded     ! # of rows for LAPACK banded matrix storage
+  integer(i4b)                      :: nBands          ! SUMMA's leading dimension for banded Jacobians
   ! SUMMA variables
-  type(in_type_computJacob)    :: in_computJacob  ! computJacob input object
-  type(out_type_computJacob)   :: out_computJacob ! computJacob output object  
-  real(r8b),allocatable        :: aJac(:,:)       ! SUMMA Jacobian array with extra storage rows
+  type(in_type_computJacob)         :: in_computJacob  ! computJacob input object
+  type(out_type_computJacob)        :: out_computJacob ! computJacob output object  
+  real(r8b),allocatable             :: aJac(:,:)       ! SUMMA Jacobian array with extra storage rows
 
 
   ! memory allocation for Jacobian 
@@ -692,7 +716,7 @@ contains
  function f_SUMMA_vec(f_obj,xvec) result(f_vec)
   ! *** Compute SUMMA's vector non-linear function ***
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(inout)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
   real(r8b)                       :: f_vec(1:f_obj % n) ! non-linear function vector
 
   ! compute SUMMA residual (taken to be the non-linear function) based on current guess
@@ -707,7 +731,7 @@ contains
   ! ** Compute SUMMA's Jacobian **
   ! solver variables
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(inout)         :: xvec(1:f_obj % n) ! current guess
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
   real(r8b),allocatable           :: J(:,:)
 
   ! compute derivatives based on current guess

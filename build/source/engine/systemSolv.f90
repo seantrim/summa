@@ -92,7 +92,7 @@ USE mDecisions_module,only:  &
                     bigBucket,    & ! a big bucket (lumped aquifer model)
                     noExplicit      ! no explicit groundwater parameterization
 
- ! look-up values for the numerical method
+! look-up values for the numerical method
 USE mDecisions_module,only:&
                     homegrown    ,& ! homegrown backward Euler solution based on concepts from numerical recipes
                     kinsol       ,& ! SUNDIALS backward Euler solution using Kinsol
@@ -917,7 +917,7 @@ contains
   call nested_Newton % solver_output('minimal') ! standard output used by default 
 
   ! set tolerance values
-  call nested_Newton % set_tolerance('strict',1.0e-10_r8b,100_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  call nested_Newton % set_tolerance('strict',1.0e-6_r8b,50_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
@@ -937,7 +937,9 @@ contains
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
   ! call solver
+  nested_Newton % constraints = .true. ! apply imposeConstraints between outer/classical iterations
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
+
 
   ! finalize operations for SS4HG objects (not all variables are used)
   call nested_Newton % io_SS4HG &

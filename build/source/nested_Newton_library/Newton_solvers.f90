@@ -70,6 +70,7 @@ contains
 
    xkp1=xk+B ! update guess
 
+   !if (f_obj % constraints) call f_obj % apply_constraints(xk,xkp1) ! SJT: is this the best place for this?
    call check_residual_vector(f_obj,k,xkp1,xk,f_obj % tol,R_est,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
@@ -77,6 +78,7 @@ contains
     exit
    end if
 
+   if (f_obj % constraints) call f_obj % apply_constraints(xk,xkp1) ! SJT: is this the best place for this?
    xk=xkp1 ! prep for next iteration - can probably evaluate in place
   end do
   ! final output
