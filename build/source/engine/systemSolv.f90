@@ -918,7 +918,7 @@ contains
   call nested_Newton % solver_output('minimal') ! standard output used by default 
 
   ! set tolerance values
-  call nested_Newton % set_tolerance('strict',1.0e-6_r8b,50_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  call nested_Newton % set_tolerance('strict',1.0e-4_r8b,30_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
