@@ -843,9 +843,6 @@ contains
   type(f_obj_type) :: nested_Newton ! nested Newton solver object
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
-  ! flag to indicate first state iteration per Newton iteration loop
-  nested_Newton % firstStateIteration = .true.
-
   ! initialize SS4HG components within nested Newton object
   associate(&
    ! layer geometry

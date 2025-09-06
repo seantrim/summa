@@ -77,7 +77,6 @@ module Newton_functions
    type(out_type_summaSolve4homegrown) :: out_SS4HG  ! summaSolve4homegrown output object: model control variables and previous function evaluation
 
    ! additional variables for eval8summa call
-   logical(lgt)            :: firstStateIteration    ! flag to indicate first state vector iteration
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
    real(rkind),allocatable :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
    real(qp),allocatable    :: sMul(:)    ! NOTE: qp  ! multiplier for state vector for the residual calculations
@@ -86,7 +85,6 @@ module Newton_functions
    real(rkind),allocatable :: fRHS(:)                ! RHS function for ARKODE
    real(rkind),allocatable :: rAdd(:)                ! additional terms in the residual vector
    real(qp),allocatable    :: resVec(:)  ! NOTE: qp  ! residual vector 
-   real(rkind),allocatable :: stateVecPrev(:)        ! state vector for previous iteration (for imposeConstraints)
   contains
    ! ** routines that point to external sources ** !
    ! note: - these procedures are not directly called in the solver
@@ -550,28 +548,6 @@ contains
   !       - objects for summaSolve4homegrown were reused where possible
   class(f_obj_inputs),intent(inout) :: f_obj
   real(r8b),intent(in)              :: xvec(1:f_obj % n) ! current guess
-
-!  ! increment the proposed iteration for simple error control if needed
-!  associate(&
-!   stateVecTrial => xvec, & ! current guess for state vector
-!   err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message & ! SUMMA error code and message 
-!  &)
-!   if (f_obj % firstStateiteration) then
-!    f_obj % firstStateIteration = .false.
-!    if (.not.allocated(f_obj % stateVecPrev)) allocate(f_obj % stateVecPrev(1:f_obj % n))
-!   else
-!     call imposeConstraints(f_obj % model_decisions,f_obj % indx_data,f_obj % prog_data,f_obj % mpar_data,& ! data structures
-!                           &stateVecTrial(:),f_obj % stateVecPrev,&                                         ! state variables
-!                           & f_obj % in_SS4HG % nState, f_obj % in_SS4HG % nSoil,f_obj % in_SS4HG % nSnow,& ! layer variables
-!                           & message, err)                                                                  ! error control
-!     if (err /= 0) then
-!      if (f_obj % out_error) then
-!       write(f_obj % unit,*) "Error in SUMMA_eval8summa: imposeConstraints message="//trim(message); stop
-!      end if
-!     end if
-!   end if
-!   f_obj % stateVecPrev = stateVecTrial(:)  ! save the state vector for the next iteration -- SJT: use f_obj % x0 ?
-!  end associate
 
   ! update
   associate(&
