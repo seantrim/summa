@@ -843,6 +843,10 @@ contains
   type(f_obj_type) :: nested_Newton ! nested Newton solver object
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
+  ! initialize solver options
+  ! note: options set beyond this point will overwrite the defaults
+  call nested_Newton % set_defaults()
+
   ! initialize SS4HG components within nested Newton object
   associate(&
    ! layer geometry

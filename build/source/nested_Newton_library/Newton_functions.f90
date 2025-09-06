@@ -46,6 +46,7 @@ module Newton_functions
    logical      :: out_error   ! output flag for errors
   contains
    ! procedures used prior to calling the solver
+   procedure :: set_defaults    => f_set_defaults    ! set default options 
    procedure :: allocate_memory => f_allocate_memory ! allocate array data components 
    procedure :: initial_guess   => f_initial_guess   ! apply initial guess strategy
    procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
@@ -138,6 +139,27 @@ contains
 !!!!!!!!!! ******************* User defined functions below ******************* !!!!!!!!!!
 
  ! **** Utilities **** !
+
+ subroutine f_set_defaults(f_obj)
+  ! ** set default values for options in f_obj_base class **
+  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
+  class(f_obj_base),intent(inout) :: f_obj
+
+   f_obj % banded      = .false. ! flag for banded Jacobians
+   f_obj % nested      = .false. ! flag for nested algorithm
+   f_obj % constraints = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
+
+   f_obj % kmax        = 100_i4b ! max # of classical/outer iterations
+   f_obj % lmax        = 100_i4b ! max # inner iterations
+   
+   f_obj % tol         = 1.e-8   ! tolerance for classical/outer iterations
+   f_obj % tol_inner   = 1.e-8   ! tolerance for inner iterations
+
+   f_obj % convergence = "strict"     ! string for convergence criterion method for solver
+   f_obj % output      = "production" ! string for solver output control option
+   f_obj % unit        = stdout       ! file unit number for solver output
+
+ end subroutine f_set_defaults
  
  subroutine f_allocate_memory(f_obj)
   ! ** allocate array data components for f_obj_base class **
