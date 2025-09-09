@@ -881,7 +881,6 @@ subroutine surfaceFlx(io_soilLiqFlx,in_surfaceFlx,io_surfaceFlx,out_surfaceFlx)
   real(rkind)                      :: total_soil_depth                    ! total depth of soil (m)
   ! head boundary condition
   real(rkind)                      :: cFlux                               ! capillary flux (m s-1)
-  real(rkind)                      :: dNum                                ! numerical derivative
   ! simplified Green-Ampt infiltration
   real(rkind)                      :: rootZoneLiq                         ! depth of liquid water in the root zone (m)
   real(rkind)                      :: rootZoneIce                         ! depth of ice in the root zone (m)
@@ -1325,8 +1324,8 @@ contains
   use soil_utils_module,only:SoftArgMax ! smooth arg max/min (for derivatives of LogSumExp)
 
   ! local variables
-  logical(lgt),parameter :: smoother = .false.                ! control for optional smoothing in base variable  
-  real(rkind) ,parameter :: alpha_LSE=1.e3_rkind              ! smoothness parameter for LSE smoother function
+  logical(lgt),parameter :: smoother = .true.                 ! control for optional smoothing in base variable  
+  real(rkind) ,parameter :: alpha_LSE= 1.e3_rkind             ! smoothness parameter for LSE smoother function
   real(rkind)            :: b                                 ! ARNO/VIC exponent (-) 
   real(rkind)            :: S1                                ! total water content in upper FUSE layer (m)
   real(rkind)            :: dS1_dWat(1:in_surfaceFlx % nSoil) ! derivative of S1 w.r.t. water content
