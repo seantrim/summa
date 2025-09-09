@@ -805,6 +805,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
   f(1:eqns_data%nState)         => FN_VGetArrayPointer(sunvec_f)
 
+! note: KINSOL uses imposeConstraints, but not used for ARKODE (not designed for corrections over an entire data window)
 !  ! increment the proposed iteration for simple error control if needed
 !  if (eqns_data%firstStateiteration) then
 !    eqns_data%firstStateIteration = .false.

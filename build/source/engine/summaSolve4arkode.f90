@@ -124,9 +124,9 @@ contains
                      ! mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
                      ! ! output
                       ixSaturation,            & ! intent(inout)  index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                     ! idaSucceeds,             & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
+                      arkodeSucceeds,          & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
                      ! tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
-                     ! nSteps,                  & ! intent(out):   number of time steps taken in solver
+                      nSteps,                  & ! intent(out):   number of time steps taken in solver
                      ! stateVec,                & ! intent(out):   model state vector
                      ! stateVecPrime,           & ! intent(out):   derivative of model state vector
                      ! balance,                 & ! intent(inout): balance per state
@@ -190,10 +190,10 @@ contains
    !real(rkind),intent(inout)       :: mLayerCmpress_sum(:)   ! sum of soil compress
    !! output: state vectors
    integer(i4b),intent(inout)      :: ixSaturation           ! index of the lowest saturated layer
-   !integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
+   integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
    !real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
    !real(rkind),intent(inout)       :: stateVecPrime(:)       ! model state vector (y')
-   !logical(lgt),intent(out)        :: idaSucceeds            ! flag to indicate if IDA is successful
+   logical(lgt),intent(out)        :: arkodeSucceeds         ! flag to indicate if ARKODE is successful
    !logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
    !! output: residual terms and balances
    !real(rkind),intent(inout)       :: balance(:)             ! balance per state
@@ -204,10 +204,10 @@ contains
 
    ! * local variables *
    ! ODE system variables
-   integer(c_long) :: neq     ! # of equations 
-   real(c_double)  :: tstart  ! initial time
-   real(c_double)  :: tend    ! final time
-   real(c_double)  :: tcur(1) ! current time
+   integer(c_long) :: neq              ! # of equations 
+   real(c_double)  :: tstart           ! initial time
+   real(c_double)  :: tend             ! final time
+   real(c_double)  :: tret(1),tretPrev ! current and previous times in data window
    !integer(c_int) :: outstep                  ! output loop counter
 
    ! SUNDIALS variables
@@ -221,14 +221,17 @@ contains
    real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
    ! user data object
-   type(data4ida), target  :: eqns_data    ! SUNDIALS user data - reusing IDA data type due to overlap
+   type(data4ida), target  :: eqns_data ! SUNDIALS user data - reusing IDA data type due to overlap
 
    ! option variables
-   logical(lgt)   :: use_fdJac                ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
+   logical(lgt)   :: use_fdJac ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
+
+   ! logical flags
+   logical(lgt) :: tinystep    ! if step goes below small size
 
    ! return variables
-   logical(lgt) :: return_flag ! logical flag for control of return statements
-   integer(i4b) :: retval      ! return value for SUNDIALS procedures
+   logical(lgt) :: return_flag    ! logical flag for control of return statements
+   integer(i4b) :: retval,retvalr ! return values for SUNDIALS procedures
 
    !======= Internals ============
 
@@ -263,23 +266,24 @@ contains
    call initialize_time_step_adaptivity_controller; if (return_flag) return
 
    ! set time integration scheme options
-   call initialize_solver_options
+   call initialize_solver_options; if (return_flag) return
 
    ! main solver loop
-   !call update_ARKODE_solver_loop
+   call update_ARKODE_solver_loop; if (return_flag) return
   contains
 
    subroutine initialize_error_control
     ! *** initialize error control operations ***
-    err=0; message="summaSolve4arkode/" ! initialize error code and message
-    return_flag=.false.                 ! initialzie return flag
+    err=0; message = "summaSolve4arkode/" ! initialize error code and message
+    return_flag    = .false.              ! initialzie return flag
+    arkodeSucceeds = .true.               ! initialize ARKODE success flag
    end subroutine initialize_error_control
 
    subroutine initialize_ODE_system_values
     ! *** initialize ODE system values *** -- SJT: update these with SUMMA values (using dummy variables)
-    tstart = 0._rkind ! same as IDA
-    tend = dt_cur     ! end time for solver loop
-    tcur = tstart     ! tcur equivalent to tret in summaSolve4ida
+    tstart  = 0._rkind ! same as IDA
+    tend    = dt_cur   ! end time for solver loop
+    tret(1) = tstart   ! initialize time in data window
 
     ! define # of equations
     neq = nState
@@ -459,6 +463,40 @@ contains
     ! Enforce the solver to stop at end of the time step
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
     if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetStopTime'; return; endif
+
+    ! SJT: the following is based on the looping strategy from summaSolve4ida, but adaptive time steps must be taken into account 
+    tinystep = .false.
+    tret(1)  = tstart ! initial time
+    tretPrev = tret(1)
+    nSteps = 0 ! initialize number of time steps taken in solver
+
+    do while(tret(1) < dt_cur)
+
+     ! SJT: need to set up ARKODE root finding before implementing this block
+     ! ! call this at beginning of step to reduce root bouncing (only looking in one direction)
+     ! if(detect_events .and. .not.tinystep)then
+     !   call find_rootdir(eqns_data, rootdir)
+     !   retval = FIDASetRootDirection(ida_mem, rootdir)
+     !   if (retval /= 0) then; err=20; message=trim(message)//'error in FIDASetRootDirection'; return; endif
+     ! endif
+
+      eqns_data%firstFluxCall = .false. ! already called for initial data window
+      eqns_data%firstSplitOper = .false. ! already called for initial data window
+
+      ! call ARKodeEvolve, advance solver just one internal step
+      retvalr = FARKodeEvolve(arkode_mem, dt_cur, sunvec_y, tret, ARK_ONE_STEP)
+      ! early return if IDASolve failed
+      if( retvalr < 0 )then
+        arkodeSucceeds = .false.
+        if (eqns_data%err/=0) then; message=trim(message)//trim(eqns_data%message); return_flag=.true.; return; end if !fail from summa problem
+!        call getErrMessage(retvalr,cmessage) ! fail from solver problem ---------- SJT: continue here ----------
+!        message=trim(message)//trim(cmessage)
+!        !if(retvalr==-1) err = -20 ! max iterations failure, exit and reduce the data window time in varSubStep
+!        exit
+      end if
+
+
+    end do
 
    end subroutine update_ARKODE_solver_loop
 
