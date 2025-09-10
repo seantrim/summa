@@ -28,9 +28,12 @@ module summaSolve4arkode_module
 ! ! access the global print flag
 ! USE globalData,only: globalPrintFlag
  
-! ! access missing values
-! USE globalData,only: integerMissing ! missing integer
+ ! access missing values
+ USE globalData,only: integerMissing ! missing integer
 ! USE globalData,only: realMissing    ! missing real number
+
+ ! access numerical parameters
+ USE globalData,only: verySmaller    ! a smaller number used as an additive constant to check if substantial difference among real numbers
  
  ! access matrix information
  USE globalData,only: ixFullMatrix   ! named variable for the full Jacobian matrix
@@ -40,9 +43,9 @@ module summaSolve4arkode_module
  
  !! global metadata
  !USE globalData,only:flux_meta       ! metadata on the model fluxes
- !
- !! constants
- !USE multiconst,only: Tfreeze        ! temperature at freezing              (K)
+ 
+ ! constants
+ USE multiconst,only: Tfreeze        ! temperature at freezing              (K)
  
  ! provide access to indices that define elements of the data structures
  !USE var_lookup,only:iLookPROG       ! named variables for structure elements
@@ -51,7 +54,7 @@ module summaSolve4arkode_module
  !USE var_lookup,only:iLookDERIV     ! named variables for structure elements
  !USE var_lookup,only:iLookFLUX       ! named variables for structure elements
  !USE var_lookup,only:iLookPARAM      ! named variables for structure elements
- !USE var_lookup,only:iLookINDEX      ! named variables for structure elements
+ USE var_lookup,only:iLookINDEX      ! named variables for structure elements
  
  ! provide access to the derived types to define the data structures
  USE data_types,only:&
@@ -64,9 +67,9 @@ module summaSolve4arkode_module
  ! look-up values for the choice of groundwater parameterization
  USE mDecisions_module,only: qbaseTopmodel ! TOPMODEL-ish baseflow parameterization
 
-! ! look-up values for the choice of variable in energy equations (BE residual or IDA state variable)
-! USE mDecisions_module,only:       &
-!   closedForm,                     & ! use temperature with closed form heat capacity
+ ! look-up values for the choice of variable in energy equations (BE residual or IDA state variable)
+ USE mDecisions_module,only:       &
+   closedForm!,                     & ! use temperature with closed form heat capacity
 !   enthalpyFormLU,                 & ! use enthalpy with soil temperature-enthalpy lookup tables
 !   enthalpyForm                      ! use enthalpy with soil temperature-enthalpy analytical solution
  
@@ -77,7 +80,8 @@ module summaSolve4arkode_module
 
  ! privacy
  implicit none
- public::summaSolve4arkode
+ private
+ public  :: summaSolve4arkode
 
 contains
 
@@ -125,9 +129,9 @@ contains
                      ! ! output
                       ixSaturation,            & ! intent(inout)  index of the lowest saturated layer (NOTE: only computed on the first iteration)
                       arkodeSucceeds,          & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
-                     ! tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
+                      tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
-                     ! stateVec,                & ! intent(out):   model state vector
+                      stateVec,                & ! intent(out):   model state vector
                      ! stateVecPrime,           & ! intent(out):   derivative of model state vector
                      ! balance,                 & ! intent(inout): balance per state
                       err,message)               ! intent(out):   error control
@@ -191,10 +195,10 @@ contains
    !! output: state vectors
    integer(i4b),intent(inout)      :: ixSaturation           ! index of the lowest saturated layer
    integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
-   !real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
+   real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
    !real(rkind),intent(inout)       :: stateVecPrime(:)       ! model state vector (y')
    logical(lgt),intent(out)        :: arkodeSucceeds         ! flag to indicate if ARKODE is successful
-   !logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
+   logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
    !! output: residual terms and balances
    !real(rkind),intent(inout)       :: balance(:)             ! balance per state
    ! output: error control
@@ -208,7 +212,8 @@ contains
    real(c_double)  :: tstart           ! initial time
    real(c_double)  :: tend             ! final time
    real(c_double)  :: tret(1),tretPrev ! current and previous times in data window
-   !integer(c_int) :: outstep                  ! output loop counter
+   real(c_double)  :: dt_last(1)       ! last time step
+   real(rkind)     :: dt_diff          ! difference from previous timeste
 
    ! SUNDIALS variables
    type(c_ptr)                             :: ctx        ! SUNDIALS context for the simulation
@@ -230,8 +235,14 @@ contains
    logical(lgt) :: tinystep    ! if step goes below small size
 
    ! return variables
-   logical(lgt) :: return_flag    ! logical flag for control of return statements
-   integer(i4b) :: retval,retvalr ! return values for SUNDIALS procedures
+   logical(lgt)    :: return_flag    ! logical flag for control of return statements
+   integer(c_int)  :: retval,retvalr ! return values for SUNDIALS procedures
+
+   ! indices
+   integer(i4b) :: i ! loop index
+
+   ! error messages
+   character(:),allocatable :: cmessage ! error message
 
    !======= Internals ============
 
@@ -274,13 +285,13 @@ contains
 
    subroutine initialize_error_control
     ! *** initialize error control operations ***
-    err=0; message = "summaSolve4arkode/" ! initialize error code and message
-    return_flag    = .false.              ! initialzie return flag
-    arkodeSucceeds = .true.               ! initialize ARKODE success flag
+    err=0_i4b; message = "summaSolve4arkode/" ! initialize error code and message
+    return_flag        = .false.              ! initialzie return flag
+    arkodeSucceeds     = .true.               ! initialize ARKODE success flag
    end subroutine initialize_error_control
 
    subroutine initialize_ODE_system_values
-    ! *** initialize ODE system values *** -- SJT: update these with SUMMA values (using dummy variables)
+    ! *** initialize ODE system values ***
     tstart  = 0._rkind ! same as IDA
     tend    = dt_cur   ! end time for solver loop
     tret(1) = tstart   ! initialize time in data window
@@ -302,8 +313,8 @@ contains
     eqns_data%nState         = nState
     eqns_data%ixMatrix       = ixMatrix
     eqns_data%firstSubStep   = firstSubStep
-    eqns_data%firstFluxCall  = .false. ! already called for initial data window -- SJT: may need to be reset in ARKODE solver loop
-    eqns_data%firstSplitOper = .false. ! already called for initial data window -- SJT: may need to be reset in ARKODE solver loop
+    eqns_data%firstFluxCall  = .false. ! already called for initial data window
+    eqns_data%firstSplitOper = .false. ! already called for initial data window
     eqns_data%computeVegFlux = computeVegFlux
     eqns_data%scalarSolution = scalarSolution
     eqns_data%deriv_data     = deriv_data
@@ -352,14 +363,14 @@ contains
    subroutine initialize_SUNDIALS_context
     ! *** initialize SUNDIALS context variable ***
     retval = FSUNContext_Create(SUN_COMM_NULL, ctx)
-    if (retval /= 0) then; err=20; message=trim(message)//'error in FSUNContext_Create'; return_flag=.true.; return; end if
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FSUNContext_Create'; return_flag=.true.; return; end if
    end subroutine initialize_SUNDIALS_context
 
    subroutine initialize_SUNDIALS_solution_vector 
     ! *** initialize soultion vector for SUNDIALS ***
     ! create SUNDIALS N_Vector
     sunvec_y => FN_VNew_Serial(neq, ctx)
-    if (.not. associated(sunvec_y)) then; err=20; message=trim(message)//'sunvec = NULL'; return_flag=.true.; return; end if
+    if (.not. associated(sunvec_y)) then; err=20_i4b; message=trim(message)//'sunvec = NULL'; return_flag=.true.; return; end if
     yvec => FN_VGetArrayPointer(sunvec_y)
 
     ! initialize solution vector
@@ -373,7 +384,7 @@ contains
       case(numerical);  use_fdJac =.true.
       case(analytical); use_fdJac =.false.
       case default
-       err=20; message=trim(message)//'expect choice numericl or analytic to calculate derivatives for Jacobian'
+       err=20_i4b; message=trim(message)//'expect choice numericl or analytic to calculate derivatives for Jacobian'
        return_flag=.true.; return
     end select
    end subroutine initialize_Jacobian_type
@@ -386,23 +397,23 @@ contains
         mu = ku; lu = kl;
         ! Create banded SUNMatrix for use in linear solves
         sunmat_A => FSUNBandMatrix(neq, mu, lu, ctx)
-        if (.not. associated(sunmat_A)) then; err=20; message=trim(message)//'sunmat = NULL'; return_flag=.true.; return; end if
+        if (.not. associated(sunmat_A)) then; err=20_i4b; message=trim(message)//'sunmat = NULL'; return_flag=.true.; return; end if
 
         ! Create banded SUNLinearSolver object
         sunls => FSUNLinSol_Band(sunvec_y, sunmat_A, ctx)
-        if (.not. associated(sunls)) then; err=20; message=trim(message)//'sunls = NULL'; return_flag=.true.; return; end if
+        if (.not. associated(sunls)) then; err=20_i4b; message=trim(message)//'sunls = NULL'; return_flag=.true.; return; end if
 
       case(ixFullMatrix)
         ! Create dense SUNMatrix for use in linear solves
         sunmat_A => FSUNDenseMatrix(neq, neq, ctx)
-        if (.not. associated(sunmat_A)) then; err=20; message=trim(message)//'sunmat = NULL'; return_flag=.true.; return; end if
+        if (.not. associated(sunmat_A)) then; err=20_i4b; message=trim(message)//'sunmat = NULL'; return_flag=.true.; return; end if
 
         ! Create dense SUNLinearSolver object
         sunls => FSUNLinSol_Dense(sunvec_y, sunmat_A, ctx)
-        if (.not. associated(sunls)) then; err=20; message=trim(message)//'sunls = NULL'; return_flag=.true.; return; end if
+        if (.not. associated(sunls)) then; err=20_i4b; message=trim(message)//'sunls = NULL'; return_flag=.true.; return; end if
 
         ! check
-      case default; err=20; message=trim(message)//'error in type of matrix'; return_flag=.true.; return
+      case default; err=20_i4b; message=trim(message)//'error in type of matrix'; return_flag=.true.; return
     end select
    end subroutine initialize_SUNDIALS_matrix_objects
 
@@ -410,16 +421,16 @@ contains
     ! *** initialize ARKODE memory variable ***
     ! create ARKStep memory - args: (explicit RHS, implicit RHS, start time, sunvec_y, SUNDIALS context)
     arkode_mem = FARKStepCreate(c_null_funptr, c_funloc(eval8summa4arkode), tstart, sunvec_y, ctx)
-    if (.not. c_associated(arkode_mem)) then; err=20; message=trim(message)//'arkode_mem = NULL'; return_flag=.true.; return; end if
+    if (.not. c_associated(arkode_mem)) then; err=20_i4b; message=trim(message)//'arkode_mem = NULL'; return_flag=.true.; return; end if
 
     ! Attach user data to memory
     retval = FARKodeSetUserData(arkode_mem, c_loc(eqns_data))
-    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetUserData'; return_flag=.true.; return; end if
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetUserData'; return_flag=.true.; return; end if
 
     ! Attach the matrix and linear solver
     ! For the nonlinear solver, ARKODE uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it ** SJT: verify this **
     retval = FARKodeSetLinearSolver(arkode_mem, sunls, sunmat_A)
-    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetLinearSolver'; return_flag=.true.; return; end if
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetLinearSolver'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_memory
 
    subroutine initialize_ARKODE_tolerance_vectors
@@ -427,17 +438,17 @@ contains
     ! set relative and absolute tolerance vectors (using components from eqns_data)
     ! note: reusing the tolerance formula from IDA routines
     retval = FARKodeWFtolerances(arkode_mem, c_funloc(computWeight4ida))
-    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeWFtolerances'; return_flag=.true.; return; end if
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeWFtolerances'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_tolerance_vectors
 
    subroutine initialize_time_step_adaptivity_controller
     ! *** initialize time step adaptivity controller for ARKODE ***
     sunCtrl => FSUNAdaptController_ImpGus(ctx)
     if (.not. associated(sunCtrl)) then
-      err=20; message=trim(message)//'error: sunCtrl = NULL'; return_flag=.true.; return
+      err=20_i4b; message=trim(message)//'error: sunCtrl = NULL'; return_flag=.true.; return
     end if
     retval = FARKodeSetAdaptController(arkode_mem, sunCtrl)
-    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetAdaptController'; return_flag=.true.; return; end if
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetAdaptController'; return_flag=.true.; return; end if
    end subroutine initialize_time_step_adaptivity_controller
 
    subroutine initialize_solver_options
@@ -450,10 +461,10 @@ contains
     if (use_Butcher_tableau) then ! specify a built-in ARKODE Butcher tableau
       method = "ARKODE_SDIRK_2_1_2"
       retval = FARKStepSetTableName(arkode_mem, method, "ARKODE_ERK_NONE")
-      if (retval /= 0) then; err=20; message=trim(message)//'error in FARKStepSetTableName'; return_flag=.true.; return; end if
+      if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKStepSetTableName'; return_flag=.true.; return; end if
     else                          ! use default method with specified order
       retval = FARKStepSetOrder(arkode_mem, order)
-      if (retval /= 0) then; err=20; message=trim(message)//'error in FARKStepSetOrder'; return_flag=.true.; return; end if
+      if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKStepSetOrder'; return_flag=.true.; return; end if
     end if
    end subroutine initialize_solver_options
 
@@ -462,13 +473,13 @@ contains
 
     ! Enforce the solver to stop at end of the time step
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
-    if (retval /= 0) then; err=20; message=trim(message)//'error in FARKodeSetStopTime'; return; endif
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return; endif
 
     ! SJT: the following is based on the looping strategy from summaSolve4ida, but adaptive time steps must be taken into account 
     tinystep = .false.
-    tret(1)  = tstart ! initial time
+    tret(1)  = tstart  ! initial time
     tretPrev = tret(1)
-    nSteps = 0 ! initialize number of time steps taken in solver
+    nSteps   = 0_i4b   ! initialize number of time steps taken in solver
 
     do while(tret(1) < dt_cur)
 
@@ -477,30 +488,109 @@ contains
      ! if(detect_events .and. .not.tinystep)then
      !   call find_rootdir(eqns_data, rootdir)
      !   retval = FIDASetRootDirection(ida_mem, rootdir)
-     !   if (retval /= 0) then; err=20; message=trim(message)//'error in FIDASetRootDirection'; return; endif
+     !   if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FIDASetRootDirection'; return_flag=.true.; return; end if
      ! endif
 
-      eqns_data%firstFluxCall = .false. ! already called for initial data window
+      eqns_data%firstFluxCall  = .false. ! already called for initial data window
       eqns_data%firstSplitOper = .false. ! already called for initial data window
 
       ! call ARKodeEvolve, advance solver just one internal step
       retvalr = FARKodeEvolve(arkode_mem, dt_cur, sunvec_y, tret, ARK_ONE_STEP)
-      ! early return if IDASolve failed
-      if( retvalr < 0 )then
+      ! early return if ARKodeEvolve failed
+      if( retvalr < 0_c_int )then ! all failures are captured using negative return values
         arkodeSucceeds = .false.
-        if (eqns_data%err/=0) then; message=trim(message)//trim(eqns_data%message); return_flag=.true.; return; end if !fail from summa problem
-!        call getErrMessage(retvalr,cmessage) ! fail from solver problem ---------- SJT: continue here ----------
-!        message=trim(message)//trim(cmessage)
-!        !if(retvalr==-1) err = -20 ! max iterations failure, exit and reduce the data window time in varSubStep
-!        exit
+        ! fail from summa problem
+        if (eqns_data%err /= 0_i4b) then; message=trim(message)//trim(eqns_data%message); return_flag=.true.; return; end if
+        ! fail from solver problem                  
+        call getARKodeEvolveMessage
+        message=trim(message)//trim(cmessage)
+        ! note: the following step to handle exceeding the max # of steps may be implemented in the future
+        !if (retvalr == ARK_TOO_MUCH_WORK) err = -20_i4b ! exit and reduce the data window time in varSubStep (not implemented) 
+        exit
       end if
 
+      ! loop through non-missing energy state variables in the snow domain to see if need to merge
+      tooMuchMelt = .false.
+      associate(&
+        ixSnowOnlyNrg => eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat & ! intent(in): indices for energy states in the snow subdomain
+      &)
+        do concurrent (i=1:nSnow,ixSnowOnlyNrg(i) /= integerMissing)
+          if (model_decisions(iLookDECISIONS%nrgConserv)%iDecision /= closedForm) then ! using enthalpy as state variable
+            if (stateVec(ixSnowOnlyNrg(i)) > 0._rkind) tooMuchMelt = .true. !need to merge
+          else
+            if (stateVec(ixSnowOnlyNrg(i)) > Tfreeze)  tooMuchMelt = .true. !need to merge
+          end if
+        end do
+      end associate
+      if (tooMuchMelt) exit
+
+      ! get the last stepsize and difference from previous end time, not necessarily the same
+      retval = FARKodeGetLastStep(arkode_mem, dt_last)
+      dt_diff = tret(1) - tretPrev
+      nSteps = nSteps + 1_i4b ! number of time steps taken in solver
+
+      ! possible that vegetation water may go a bit negative because of discontinous canopy wetting derivatives, so check and correct
+      associate(&
+        ixVegHyd => eqns_data%indx_data%var(iLookINDEX%ixVegHyd)%dat(1) & ! intent(in): index of canopy hydrology state variable (mass)
+      &)
+        if (ixVegHyd /= integerMissing) then 
+          if (stateVec(ixVegHyd) < 0._rkind .and. stateVec(ixVegHyd)>= -verySmaller*1.e3_rkind) stateVec(ixVegHyd) = 0._rkind ! set to zero
+        end if
+      end associate
 
     end do
 
    end subroutine update_ARKODE_solver_loop
 
+   subroutine getARKodeEvolveMessage
+    ! *** Get FARKodeEvolve error message from return value *** 
+    ! note: https://sundials.readthedocs.io/en/latest/arkode/Usage/User_callable.html#arkode-solver-function 
+ 
+    if (retvalr == ARK_SUCCESS) then
+     cmessage = "ARKodeEvolve successful"
+    else if (retvalr == ARK_ROOT_RETURN) then
+     cmessage = "succeeded and found one or more roots"
+    else if (retvalr == ARK_TSTOP_RETURN) then
+     cmessage = "succeeded and returned at tstop"
+    else if (retvalr == ARK_MEM_NULL) then
+     cmessage = "arkode_mem was null"
+    else if (retvalr == ARK_NO_MALLOC) then
+     cmessage = "arkode_mem was not allocated"
+    else if (retvalr == ARK_ILL_INPUT) then
+     cmessage = "invalid input"
+    else if (retvalr == ARK_TOO_MUCH_WORK) then
+     cmessage = "the solver took mxstep internal steps but could not reach tout"
+    else if (retvalr == ARK_TOO_MUCH_ACC) then
+     cmessage = "the solver could not satisfy the accuracy demanded by the user for some internal step"
+    else if (retvalr == ARK_ERR_FAILURE) then
+     cmessage = "error test failures occurred either too many times (ark_maxnef) during one internal time step or occurred with |h|=hmin"
+    else if (retvalr == ARK_CONV_FAILURE) then
+     cmessage = "either convergence test failures occurred too many times (ark_maxncf) during one internal time step or occurred with |h|=hmin"
+    else if (retvalr == ARK_LINIT_FAIL) then
+     cmessage = "the linear solver’s initialization function failed"
+    else if (retvalr == ARK_LSETUP_FAIL) then
+     cmessage = "the linear solver’s setup routine failed in an unrecoverable manner"
+    else if (retvalr == ARK_LSOLVE_FAIL) then
+     cmessage = "the linear solver’s solve routine failed in an unrecoverable manner"
+    else if (retvalr == ARK_MASSINIT_FAIL) then
+     cmessage = "the mass matrix solver’s initialization function failed"
+    else if (retvalr == ARK_MASSSETUP_FAIL) then
+     cmessage = "the mass matrix solver’s setup routine failed"
+    else if (retvalr == ARK_MASSSOLVE_FAIL) then
+     cmessage = "the mass matrix solver’s solve routine failed"
+    else if (retvalr == ARK_VECTOROP_ERR) then
+     cmessage = "a vector operation error occurred"
+    else if (retvalr == ARK_DOMEIG_FAIL) then
+     cmessage = "the dominant eigenvalue function failed -- it is either not provided or returns an illegal value"
+    else if (retvalr == ARK_MAX_STAGE_LIMIT_FAIL) then
+     cmessage = "stepper failed to achieve stable results -- either reduce the step size or increase the stage_max_limit"
+    else
+     cmessage = "unknown return value from ARKodeEvolve"
+    end if
+   end subroutine getARKodeEvolveMessage
+
  end subroutine summaSolve4arkode
+
 
 end module summaSolve4arkode_module
 
