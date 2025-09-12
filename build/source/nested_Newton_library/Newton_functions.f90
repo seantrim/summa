@@ -544,7 +544,7 @@ contains
 
  !! ******************************* SUMMA procedures below ******************************* !!
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
-  ! ** interface for SUMMA's imposeConstraints subroutine **
+  ! ** interface for SUMMA's checkConv subroutine **
   ! input
   class(f_obj_type),intent(inout)   :: f_obj
   real(r8b),intent(in)              :: rVec(:) ! residual vector (mixed units)

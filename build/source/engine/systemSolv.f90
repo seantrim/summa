@@ -274,7 +274,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -912,7 +912,7 @@ contains
    ! 'strict' uses two consecutive iterations and is extremely conservative
    !     |--> (actually computes the convergence error of the previous iteration)
    ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
-  nested_Newton % convergence = 'strict' ! 'strict' or 'predictive' 
+  nested_Newton % convergence = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
   ! solver output
   call nested_Newton % solver_output('silent') ! standard output used by default 

@@ -70,7 +70,7 @@ contains
 
    xkp1=xk+B ! update guess
 
-   call check_residual_vector(f_obj,k,xkp1,xk,f_obj % tol,R_est,exit_flag)
+   call check_residual_vector(f_obj,k,xkp1,xk,R_est,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
@@ -157,7 +157,7 @@ contains
     call linear_solve(f_obj,M,A,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
     xkp1lp1=B ! update guess
 
-    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,f_obj % tol_inner,R_est,exit_inner)
+    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,R_est,exit_inner)
     ! print exact convergence error
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
@@ -179,7 +179,7 @@ contains
    end if
 
    f_obj % inner=.false.
-   call check_residual_vector(f_obj,k,xkp1lp1,xk0,f_obj % tol,R_est,exit_outer)
+   call check_residual_vector(f_obj,k,xkp1lp1,xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
@@ -221,23 +221,25 @@ contains
   end if
  end subroutine nested_Newton_vector
 
- subroutine check_residual_vector(f_obj,iteration,xkp1,xk,tol,R_est,exit_flag)
+ subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag)
   ! *** Check residual vector for potential loop exit ***
   type(f_obj_type),intent(inout) :: f_obj 
   integer(i4b),intent(in) :: iteration  ! interation count
   real(r8b),intent(in)    :: xkp1(1:f_obj % n)  ! current root estimate
   real(r8b),intent(in)    :: xk(1:f_obj % n)    ! previous root estimate
-  real(r8b),intent(in)    :: tol        ! tolerance
   logical,intent(inout)   :: exit_flag  ! exit flag
   real(r8b),intent(out)   :: R_est      ! estimated R for current iteration (computed in the previous call)
   ! local variables
+  real(r8b)               :: tol        ! tolerance
   real(r8b)               :: R(-1:1)    ! maximum residual array (two previous exact values and prediction for next iteration)
   integer(i4b)            :: i                  ! index for residual vector
   real(r8b)               :: R_vec(1:f_obj % n) ! residual vector
   real(r8b)               :: b                  ! exponent used for convergence error estimation 
 
   if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
-   ! call f_obj % custom_convergence
+   ! function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
+   exit_flag = f_obj % custom_convergence(f_obj % f_vec(xkp1),xkp1-xk,xkp1)
+   if (exit_flag)  return  ! set exit flag if criterion is satisfied
   else
 
    do i=1,f_obj % n
@@ -281,9 +283,11 @@ contains
    end if
 
    if (f_obj % inner) then ! inner iterations
+    tol = f_obj % tol_inner   ! set tolerance
     f_obj % R_inner(0) = R(0) ! store exact residual for current iteration
     f_obj % R_inner(1) = R(1) ! store estimated residual for iteration+1
    else                    ! outer/classical iterations
+    tol = f_obj % tol         ! set tolerance
     f_obj % R(0) = R(0)       ! store exact residual for current iteration
     f_obj % R(1) = R(1)       ! store estimated residual for iteration+1
    end if
