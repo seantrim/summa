@@ -1130,7 +1130,7 @@ contains
   real(rkind),intent(in)       :: rVec(:)                      ! residual vector (mixed units)
   real(rkind),intent(in)       :: xInc(:)                      ! iteration increment (mixed units)
   real(rkind),intent(in)       :: xVec(:)                      ! state vector (mixed units)
-  type(out_type_summaSolve4homegrown),intent(out) :: out_SS4HG ! new function evaluation, convergence flag, and error control
+  type(out_type_summaSolve4homegrown),intent(in) :: out_SS4HG  ! new function evaluation, convergence flag, and error control
   ! locals
   real(rkind),dimension(mSoil) :: psiScale                ! scaling factor for matric head
   real(rkind),parameter        :: xSmall=1.e-0_rkind      ! a small offset
@@ -1239,7 +1239,7 @@ contains
    ! print progress towards solution
    if (globalPrintFlag) then
     write(*,'(a,1x,i4,1x,7(e15.5,1x),7(L1,1x))') 'check convergence: ', iter, &
-     fNew, matric_max(1), liquid_max(1), energy_max(1), canopy_max, aquifer_max, soilWatBalErr, matricConv, liquidConv, energyConv, watbalConv, canopyConv, aquiferConv, watbalConv
+     fnew, matric_max(1), liquid_max(1), energy_max(1), canopy_max, aquifer_max, soilWatBalErr, matricConv, liquidConv, energyConv, watbalConv, canopyConv, aquiferConv, watbalConv
    end if
 
   end associate ! end associations with variables in the data structures
