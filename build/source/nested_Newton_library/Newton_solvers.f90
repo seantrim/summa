@@ -236,58 +236,64 @@ contains
   real(r8b)               :: R_vec(1:f_obj % n) ! residual vector
   real(r8b)               :: b                  ! exponent used for convergence error estimation 
 
-  do i=1,f_obj % n
-   if (xk(i).ne.0._r8b) then
-    R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
-   else if (xkp1(i).ne.0._r8b) then
-    R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
-   else
-    R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
-   end if
-  end do
+  if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
+   ! call f_obj % custom_convergence
+  else
 
-  ! store previous residuals
-  if (iteration.gt.0) then
-   if (f_obj % inner) then
-    R_est=f_obj % R_inner(1) ! store previous estimate for reference
-    f_obj % R_inner(-1)=f_obj % R_inner(0)
-    R(-1)=f_obj % R_inner(-1) ! exact residual for iteration-1
-   else
-    R_est=f_obj % R(1) ! store previous estimate for reference
-    f_obj % R(-1)=f_obj % R(0)
-    R(-1)=f_obj % R(-1)       ! exact residual for iteration-1
-   end if
-  end if
+   do i=1,f_obj % n
+    if (xk(i).ne.0._r8b) then
+     R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+    else if (xkp1(i).ne.0._r8b) then
+     R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+    else
+     R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+    end if
+   end do
 
-  R(0)=maxval(R_vec) ! actual worst case residual for input iteration
-  if (f_obj % convergence.eq.'strict') then ! strict estimate
-   R(1)=R(0) ! estimated residual for iteration+1
-  else if (f_obj % convergence.eq.'predictive') then
-   if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
-    R(1)=R(0) ! estimated residual for iteration+1   
-   else ! compute prediction based on power function
-    b=log10(R(0)/R(-1)) ! exponent
-    R(1)=R(0)*10**b     ! power function -- estimated residual for iteration+1
+   ! store previous residuals
+   if (iteration.gt.0) then
+    if (f_obj % inner) then
+     R_est=f_obj % R_inner(1) ! store previous estimate for reference
+     f_obj % R_inner(-1)=f_obj % R_inner(0)
+     R(-1)=f_obj % R_inner(-1) ! exact residual for iteration-1
+    else
+     R_est=f_obj % R(1) ! store previous estimate for reference
+     f_obj % R(-1)=f_obj % R(0)
+     R(-1)=f_obj % R(-1)       ! exact residual for iteration-1
+    end if
    end if
-  else ! method not valid
-   if (f_obj % out_error) then
-    write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
+
+   R(0)=maxval(R_vec) ! actual worst case residual for input iteration
+   if (f_obj % convergence.eq.'strict') then ! strict estimate
+    R(1)=R(0) ! estimated residual for iteration+1
+   else if (f_obj % convergence.eq.'predictive') then
+    if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
+     R(1)=R(0) ! estimated residual for iteration+1   
+    else ! compute prediction based on power function
+     b=log10(R(0)/R(-1)) ! exponent
+     R(1)=R(0)*10**b     ! power function -- estimated residual for iteration+1
+    end if
+   else ! method not valid
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
+    end if
+    stop
    end if
-   stop
-  end if
 
-  if (f_obj % inner) then ! inner iterations
-   f_obj % R_inner(0) = R(0) ! store exact residual for current iteration
-   f_obj % R_inner(1) = R(1) ! store estimated residual for iteration+1
-  else                    ! outer/classical iterations
-   f_obj % R(0) = R(0)       ! store exact residual for current iteration
-   f_obj % R(1) = R(1)       ! store estimated residual for iteration+1
-  end if
-  if (iteration.eq.0) R_est=R(1) ! initialize R_est for iteration zero
+   if (f_obj % inner) then ! inner iterations
+    f_obj % R_inner(0) = R(0) ! store exact residual for current iteration
+    f_obj % R_inner(1) = R(1) ! store estimated residual for iteration+1
+   else                    ! outer/classical iterations
+    f_obj % R(0) = R(0)       ! store exact residual for current iteration
+    f_obj % R(1) = R(1)       ! store estimated residual for iteration+1
+   end if
+   if (iteration.eq.0) R_est=R(1) ! initialize R_est for iteration zero
 
-  ! check exact error from current iteration and estimated error for next iteration
-  if ((R(0).lt.tol).or.(R(1).lt.tol)) then
-   exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+   ! check exact error from current iteration and estimated error for next iteration
+   if ((R(0).lt.tol).or.(R(1).lt.tol)) then
+    exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+   end if
+
   end if
  end subroutine check_residual_vector
 

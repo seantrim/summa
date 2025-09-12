@@ -4,8 +4,9 @@ module Newton_functions
  use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
  use nrtype,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
- use eval8summa_module, only: eval8summa,imposeConstraints     ! SUMMA's eval8summa routine
+ use eval8summa_module, only: eval8summa,imposeConstraints     ! SUMMA's eval8summa and imposeConstraints routines
  use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
+ use summaSolve4homegrown_module,only: checkConv               ! SUMMA's checkConv function
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
  use data_types,only: in_type_summaSolve4homegrown,& ! objects for SUMMA's summaSolve4homegrown routine
                      &io_type_summaSolve4homegrown,&
@@ -15,6 +16,7 @@ module Newton_functions
  use data_types,only: var_i,var_d             ! derived types for SUMMA data vectors
  use data_types,only: zLookup                 ! derived type for SUMMA lookup tables
  use var_lookup,only: iLookDECISIONS          ! named variables for elements of the SUMMA decision structure
+ use var_lookup,only: iLookINDEX              ! named variables for SUMMA structure elements
  use mDecisions_module,only:qbaseTopmodel     ! SUMMA groundwater parameterization model decision
  implicit none
  private
@@ -126,7 +128,8 @@ module Newton_functions
    procedure :: J1 => Jacobian_f1_Rich_vec ! solver
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
    procedure :: apply_constraints => SUMMA_imposeConstraints
-   
+   procedure :: custom_convergence => SUMMA_checkConv  
+ 
    ! scalar routines
    procedure :: f     => f_diff 
    procedure :: dfdx  => dfdx_diff 
@@ -540,6 +543,27 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
+ function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
+  ! ** interface for SUMMA's imposeConstraints subroutine **
+  ! input
+  class(f_obj_type),intent(inout)   :: f_obj
+  real(r8b),intent(in)              :: rVec(:) ! residual vector (mixed units)
+  real(r8b),intent(in)              :: xInc(:) ! iteration increment (mixed units)
+  real(r8b),intent(in)              :: xVec(:) ! state vector (mixed units)
+
+  ! output
+  logical :: converged
+
+  ! local variables
+  integer(i4b) :: mSoil
+
+  ! get the number of soil layers in the solution vector
+  mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
+
+  converged = checkConv(mSoil,f_obj % in_SS4HG,f_obj % mpar_data,f_obj % indx_data,f_obj % prog_data,&
+                       &rVec,xInc,xVec,f_obj % out_SS4HG)
+
+ end function SUMMA_checkConv
 
  subroutine SUMMA_imposeConstraints(f_obj,xvec0,xvec1)
   ! ** interface for SUMMA's imposeConstraints subroutine **
