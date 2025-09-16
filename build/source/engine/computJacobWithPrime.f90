@@ -487,17 +487,15 @@ subroutine computJacobWithPrime(&
             ! - diagonal elements
             aJac(ixDiag,watState) = (dt/mLayerDepth(iLayer))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot + dMat(watState) * cj
 
-            ! - lower-diagonal elements
-            if(iLayer>1)then
-              if(ixSnowOnlyHyd(iLayer-1)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer-1),watState),watState) = 0._rkind  ! sub-diagonal: no dependence on other layers
-            endif
-
-            ! - upper diagonal elements
-            if(iLayer<nSnow .and. mLayerVolFracIce(iLayer)<=maxVolIceContent)then
-              if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+1),watState),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot  ! dVol(below)/dLiq(above) -- (-)
-            endif
-            if(iLayer<nSnow-1 .and. mLayerVolFracIce(iLayer)>maxVolIceContent)then ! kl>= 4 so always included
-              if(ixSnowOnlyHyd(iLayer+2)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+2),watState),watState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot  ! dVol(below)/dLiq(above) -- (-)
+            ! - upper diagonal elements, sub-diagonal only (water does not move upwards in snow)
+            if(iLayer<nSnow)then
+              if(mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then ! layer below is not ice locked
+                if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+1),watState),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot ! dVol(below)/dLiq(above) -- (-)
+              elseif(mLayerVolFracIce(iLayer)>maxVolIceContent)then ! layer and layer below are ice locked
+                if(iLayer<nSnow-1)then ! kl>= 4 so always included
+                  if(ixSnowOnlyHyd(iLayer+2)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+2),watState),watState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot ! dVol(below)/dLiq(above) -- (-
+                endif
+              endif
             endif
 
           end do  ! (looping through liquid water states in the snow domain)
@@ -528,13 +526,14 @@ subroutine computJacobWithPrime(&
               ! - include derivatives of water fluxes w.r.t energy fluxes for current layer
               aJac(ixOffDiag(watState,nrgState),nrgState) = (dt/mLayerDepth(iLayer))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! (dVol/dT)
 
-              ! (cross-derivative terms for the layer below)
-              if(iLayer<nSnow .and. mLayerVolFracIce(iLayer)<=maxVolIceContent)then
-                if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+1),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
-              endif ! (if there is a water state in the layer below the current layer in the given state subset)
-              if(mLayerVolFracIce(iLayer)>maxVolIceContent .and. iLayer<nSnow-1)then
-                if(ixSnowOnlyHyd(iLayer+2)/=integerMissing)then ! only include banded terms
-                  if(ixSnowOnlyHyd(iLayer+2)-nrgState <= kl) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+2),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
+              ! - (cross-derivative terms for the layer below)
+              if(iLayer<nSnow)then
+                if(mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then ! layer below is not ice locked
+                  if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+1),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
+                elseif(mLayerVolFracIce(iLayer)>maxVolIceContent)then ! layer and layer below are ice locked
+                  if(iLayer<nSnow-1)then ! only include banded terms
+                    if(ixSnowOnlyHyd(iLayer+2)-nrgState <= kl) aJac(ixOffDiag(ixSnowOnlyHyd(iLayer+2),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! dVol(below)/dT(above) -- K-1
+                  endif
                 endif
               endif
 
@@ -876,17 +875,15 @@ subroutine computJacobWithPrime(&
             ! - diagonal elements
             aJac(watState,watState) = (dt/mLayerDepth(iLayer))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot + dMat(watState) * cj
 
-            ! - lower-diagonal elements
-            if(iLayer>1)then
-              if(ixSnowOnlyHyd(iLayer-1)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer-1),watState) = 0._rkind  ! sub-diagonal: no dependence on other layers
-            endif
-
-            ! - upper diagonal elements
-            if(iLayer<nSnow .and. mLayerVolFracIce(iLayer)<=maxVolIceContent)then
-              if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+1),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot ! dVol(below)/dLiq(above) -- (-)
-            endif
-            if(iLayer<nSnow-1 .and. mLayerVolFracIce(iLayer)>maxVolIceContent)then
-              if(ixSnowOnlyHyd(iLayer+2)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+2),watState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot ! dVol(below)/dLiq(above) -- (-)
+            ! - upper diagonal elements, sub-diagonal only (water does not move upwards in snow)
+            if(iLayer<nSnow)then
+              if(mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then ! layer below is not ice locked
+                if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+1),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot ! dVol(below)/dLiq(above) -- (-)
+              elseif(mLayerVolFracIce(iLayer)>maxVolIceContent)then ! layer and layer below are ice locked
+                if(iLayer<nSnow-1)then
+                  if(ixSnowOnlyHyd(iLayer+2)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+2),watState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot ! dVol(below)/dLiq(above) -- (-
+                endif
+              endif
             endif
 
           end do  ! (looping through liquid water states in the snow domain)
@@ -917,12 +914,15 @@ subroutine computJacobWithPrime(&
               ! - include derivatives of water fluxes w.r.t energy fluxes for current layer
               aJac(watState,nrgState) = (dt/mLayerDepth(iLayer))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! (dVol/dT)
 
-              ! (cross-derivative terms for the layer below)
-              if(iLayer<nSnow .and. mLayerVolFracIce(iLayer)<=maxVolIceContent)then
-                if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+1),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
-              endif ! (if there is a water state in the layer below the current layer in the given state subset)
-              if(iLayer<nSnow-1 .and. mLayerVolFracIce(iLayer)>maxVolIceContent)then
-                if(ixSnowOnlyHyd(iLayer+2)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+2),nrgState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
+              ! - (cross-derivative terms for the layer below)
+              if(iLayer<nSnow)then
+                if(mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then ! layer below is not ice locked
+                  if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+1),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
+                elseif(mLayerVolFracIce(iLayer)>maxVolIceContent)then ! layer and layer below are ice locked
+                  if(iLayer<nSnow-1)then
+                    if(ixSnowOnlyHyd(iLayer+2)/=integerMissing) aJac(ixSnowOnlyHyd(iLayer+2),nrgState) = -(dt/mLayerDepth(iLayer+2))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer) ! dVol(below)/dT(above) -- K-1
+                  endif
+                endif
               endif
 
               ! - include derivatives of heat capacity w.r.t water fluxes for surrounding layers starting with layer above
