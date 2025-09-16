@@ -42,14 +42,14 @@ module summaSolve4arkode_module
  USE globalData,only: kl             ! number of sub-diagonal bands
  
  !! global metadata
- !USE globalData,only:flux_meta       ! metadata on the model fluxes
+ USE globalData,only:flux_meta       ! metadata on the model fluxes
  
  ! constants
  USE multiconst,only: Tfreeze        ! temperature at freezing              (K)
  
  ! provide access to indices that define elements of the data structures
  !USE var_lookup,only:iLookPROG       ! named variables for structure elements
- !USE var_lookup,only:iLookDIAG       ! named variables for structure elements
+ USE var_lookup,only:iLookDIAG       ! named variables for structure elements
  USE var_lookup,only:iLookDECISIONS  ! named variables for elements of the decision structure
  !USE var_lookup,only:iLookDERIV     ! named variables for structure elements
  !USE var_lookup,only:iLookFLUX       ! named variables for structure elements
@@ -106,11 +106,11 @@ contains
                       scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                      ! computMassBalance,       & ! intent(in):    flag to compute mass balance
                      ! computNrgBalance,        & ! intent(in):    flag to compute energy balance
-                     ! ! input: state vectors
+                      ! input: state vectors
                       stateVecInit,            & ! intent(in):    initial state vector
                       sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
                       dMat,                    & ! intent(inout): diagonal of the Jacobian matrix (excludes fluxes)
-                     ! ! input: data structures
+                      ! input: data structures
                       model_decisions,         & ! intent(in):    model decisions
                       lookup_data,             & ! intent(in):    lookup data
                       type_data,               & ! intent(in):    type of vegetation and soil
@@ -119,14 +119,14 @@ contains
                       forc_data,               & ! intent(in):    model forcing data
                       bvar_data,               & ! intent(in):    average model variables for the entire basin
                       prog_data,               & ! intent(in):    model prognostic variables for a local HRU
-                     ! ! input-output: data structures
+                      ! input-output: data structures
                       indx_data,               & ! intent(inout): index data
                       diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
                       flux_data,               & ! intent(inout): model fluxes for a local HRU
-                     ! flux_sum,                & ! intent(inout): sum of fluxes model fluxes for a local HRU over a dt_cur
+                      flux_sum,                & ! intent(inout): sum of fluxes model fluxes for a local HRU over a dt_cur
                       deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
-                     ! mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
-                     ! ! output
+                      mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
+                      ! output
                       ixSaturation,            & ! intent(inout)  index of the lowest saturated layer (NOTE: only computed on the first iteration)
                       arkodeSucceeds,          & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
                       tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
@@ -148,9 +148,11 @@ contains
    use fsunmatrix_band_mod               ! Fortran interface to banded SUNMatrix
    use fsunlinsol_band_mod               ! Fortran interface to dense SUNLinearSolver
    use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
+   use allocspace_module,only:allocLocal                  ! allocate local data structures
    use eval8summa_module,only: eval8summa4arkode          ! RHS function evaluations
    use summaSolve4kinsol_module,only: setInitialCondition ! subroutine for setting initial condition (borrowed from KINSOL routines)
    use tol4ida_module,only:computWeight4ida               ! weight required for tolerances (borrowed from IDA routines)
+   use getVectorz_module,only:checkFeas                   ! check feasibility of state vector
 
    !======= Declarations =========
    implicit none
@@ -172,11 +174,11 @@ contains
    logical(lgt),intent(in)         :: scalarSolution         ! flag to denote if implementing the scalar solution
    !logical(lgt),intent(in)         :: computMassBalance      ! flag to compute mass balance
    !logical(lgt),intent(in)         :: computNrgBalance       ! flag to compute energy balance
-   !! input: state vectors
+   ! input: state vectors
    real(rkind),intent(in)          :: stateVecInit(:)        ! model state vector
    real(qp),intent(in)             :: sMul(:)                ! state vector multiplier (used in the residual calculations)
    real(rkind), intent(inout)      :: dMat(:)                ! diagonal of the Jacobian matrix (excludes fluxes)
-   !! input: data structures
+   ! input: data structures
    type(model_options),intent(in)  :: model_decisions(:)     ! model decisions
    type(zLookup),      intent(in)  :: lookup_data            ! lookup tables
    type(var_i),        intent(in)  :: type_data              ! type of vegetation and soil
@@ -185,14 +187,14 @@ contains
    type(var_d),        intent(in)  :: forc_data              ! model forcing data
    type(var_dlength),  intent(in)  :: bvar_data              ! model variables for the local basin
    type(var_dlength),  intent(in)  :: prog_data              ! prognostic variables for a local HRU
-   ! ! input-output: data structures
+   ! input-output: data structures
    type(var_ilength),intent(inout) :: indx_data              ! indices defining model states and layers
    type(var_dlength),intent(inout) :: diag_data              ! diagnostic variables for a local HRU
    type(var_dlength),intent(inout) :: flux_data              ! model fluxes for a local HRU
-   !type(var_dlength),intent(inout) :: flux_sum               ! sum of fluxes model fluxes for a local HRU over a dt_cur
+   type(var_dlength),intent(inout) :: flux_sum               ! sum of fluxes model fluxes for a local HRU over a dt_cur
    type(var_dlength),intent(inout) :: deriv_data             ! derivatives in model fluxes w.r.t. relevant state variables
-   !real(rkind),intent(inout)       :: mLayerCmpress_sum(:)   ! sum of soil compress
-   !! output: state vectors
+   real(rkind),intent(inout)       :: mLayerCmpress_sum(:)   ! sum of soil compress
+   ! output: state vectors
    integer(i4b),intent(inout)      :: ixSaturation           ! index of the lowest saturated layer
    integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
    real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
@@ -214,6 +216,7 @@ contains
    real(c_double)  :: tret(1),tretPrev ! current and previous times in data window
    real(c_double)  :: dt_last(1)       ! last time step
    real(rkind)     :: dt_diff          ! difference from previous timeste
+   real(rkind)     :: dt_mult          ! multiplier for time step average values
 
    ! SUNDIALS variables
    type(c_ptr)                             :: ctx        ! SUNDIALS context for the simulation
@@ -228,18 +231,25 @@ contains
    ! user data object
    type(data4ida), target  :: eqns_data ! SUNDIALS user data - reusing IDA data type due to overlap
 
+   ! arrays
+   type(var_dlength)       :: flux_prev             ! previous model fluxes for a local HRU
+   !real(rkind),allocatable :: dCompress_dPsiPrev(:) ! previous derivative value soil compression
+   real(rkind),allocatable :: mLayerCompressPrev(:) ! previous soil compressibility value
+
    ! option variables
    logical(lgt)   :: use_fdJac ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
 
    ! logical flags
    logical(lgt) :: tinystep    ! if step goes below small size
+   logical(lgt) :: feasible    ! feasibility flag
 
    ! return variables
    logical(lgt)    :: return_flag    ! logical flag for control of return statements
    integer(c_int)  :: retval,retvalr ! return values for SUNDIALS procedures
 
    ! indices
-   integer(i4b) :: i ! loop index
+   integer(i4b) :: i    ! loop index
+   integer(i4b) :: iVar ! loop index
 
    ! error messages
    character(:),allocatable :: cmessage ! error message
@@ -338,6 +348,10 @@ contains
     eqns_data%sMul = sMul ! allocate on assignment
     eqns_data%dMat = dMat ! allocate on assignment
 
+    ! allocate space for the to save previous fluxes
+    call allocLocal(flux_meta(:),flux_prev,nSnow,nSoil,err,cmessage)
+    if (err/=0) then; err=20; message=trim(message)//trim(cmessage); return; end if
+
     ! allocate space for other variables -- SJT: commented out lines not required for eval8summa4arkode
     if (model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel) then
       allocate(eqns_data%dBaseflow_dMatric(nSoil,nSoil),stat=err)
@@ -353,10 +367,26 @@ contains
     !allocate( eqns_data%mLayerVolFracWatPrime(nLayers) )
     !allocate( mLayerMatricHeadPrimePrev(nSoil) )
     !allocate( dCompress_dPsiPrev(nSoil) )
+    allocate( mLayerCompressPrev(nSoil) ) ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
     allocate( eqns_data%fluxVec(nState) )
     allocate( eqns_data%resVec(nState) )
     allocate( eqns_data%resSink(nState) )
     !allocate( resVecPrev(nState) )
+
+    ! need the following values for the first substep
+    do iVar=1,size(flux_meta)  ! loop through fluxes
+      flux_prev%var(iVar)%dat(:)      = 0._rkind
+    end do
+    !eqns_data%scalarCanopyTempPrev    = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1)
+    !eqns_data%mLayerTempPrev(:)       = prog_data%var(iLookPROG%mLayerTemp)%dat(:)
+    !eqns_data%scalarCanopyTempTrial   = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1)
+    !eqns_data%mLayerTempTrial(:)      = prog_data%var(iLookPROG%mLayerTemp)%dat(:)
+    !eqns_data%mLayerMatricHeadPrev(:) = prog_data%var(iLookPROG%mLayerMatricHead)%dat(:)
+    !mLayerMatricHeadPrimePrev         = 0._rkind
+    !dCompress_dPsiPrev(:)             = 0._rkind
+    mLayerCompressPrev(:)             = 0._rkind  ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
+    !resVecPrev(:)                     = 0._rkind
+    !balance(:)                        = 0._rkind
 
    end subroutine initialize_SUNDIALS_user_data
 
@@ -537,6 +567,67 @@ contains
           if (stateVec(ixVegHyd) < 0._rkind .and. stateVec(ixVegHyd)>= -verySmaller*1.e3_rkind) stateVec(ixVegHyd) = 0._rkind ! set to zero
         end if
       end associate
+
+      ! check the feasibility of the solution
+      feasible=.true.
+      call checkFeas(&
+                     ! input
+                     stateVec,                                             & ! intent(in):    model state vector (mixed units)
+                     eqns_data%mpar_data,                                  & ! intent(in):    model parameters
+                     eqns_data%prog_data,                                  & ! intent(in):    model prognostic variables for a local HRU
+                     eqns_data%indx_data,                                  & ! intent(in):    indices defining model states and layers
+                     model_decisions(iLookDECISIONS%nrgConserv)%iDecision.ne.closedForm, & ! intent(in): flag to indicate if we are using enthalpy as state variable
+                     ! output: feasibility
+                     feasible,                                             & ! intent(inout):   flag to denote the feasibility of the solution
+                     ! output: error control
+                     err,cmessage)                                           ! intent(out):   error control
+
+      ! early return for non-feasible solutions, right now will just fail if goes infeasible
+      if (.not.feasible) then
+        arkodeSucceeds = .false.
+        message=trim(message)//trim(cmessage)//'non-feasible' ! err=0 is already set, could make this a warning and reduce the data window time in varSubStep
+        exit
+      end if
+
+      ! sum of fluxes smoothed over the time step, average from instantaneous values
+      if (nSteps > 1_i4b) then
+        dt_mult = dt_diff/2._rkind
+      else ! first step no averaging
+        dt_mult = dt_diff
+      end if
+
+      do iVar=1,size(flux_meta)
+        flux_sum%var(iVar)%dat(:) = flux_sum%var(iVar)%dat(:) + ( eqns_data%flux_data%var(iVar)%dat(:) &
+                                  & + flux_prev%var(iVar)%dat(:) ) * dt_mult
+      end do
+      ! note: soil compressibility not computed using primed variables in ARKODE
+      ! here is the IDA version with primed variables
+      !mLayerCmpress_sum(:) = mLayerCmpress_sum(:) + ( eqns_data%deriv_data%var(iLookDERIV%dCompress_dPsi)%dat(:) * eqns_data%mLayerMatricHeadPrime(:) &
+      !                     & + dCompress_dPsiPrev(:) * mLayerMatricHeadPrimePrev(:) ) * dt_mult
+      ! here is the ARKODE version without primed variables --- SJT : verify this (is the mLayerCmpress_sum the integral of mLayerCompress?)
+      mLayerCmpress_sum(:) = mLayerCmpress_sum(:) + ( eqns_data%diag_data%var(iLookDIAG%mLayerCompress)%dat(:) &
+                           & - mLayerCompressPrev(:) )
+
+      ! **** Insert Mass and Energy Balance Checks Here ****
+      ! ...
+      ! ...
+      ! ...
+
+      ! save required quantities for next step
+      !eqns_data%scalarCanopyTempPrev    = eqns_data%scalarCanopyTempTrial
+      !eqns_data%mLayerTempPrev(:)       = eqns_data%mLayerTempTrial(:)
+      !eqns_data%mLayerMatricHeadPrev(:) = eqns_data%mLayerMatricHeadTrial(:)
+      !mLayerMatricHeadPrimePrev(:)      = eqns_data%mLayerMatricHeadPrime(:)
+      !dCompress_dPsiPrev(:)             = eqns_data%deriv_data%var(iLookDERIV%dCompress_dPsi)%dat(:)
+      mLayerCompressPrev(:)              = eqns_data%diag_data%var(iLookDIAG%mLayerCompress)%dat(:)
+      tretPrev                           = tret(1)
+      !resVecPrev(:)                     = eqns_data%resVec(:)
+      flux_prev                          = eqns_data%flux_data
+
+      ! Restart for where vegetation and layers cross freezing point
+      ! ...
+      ! ...
+      ! ...
 
     end do
 
