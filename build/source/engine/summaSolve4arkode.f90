@@ -48,7 +48,7 @@ module summaSolve4arkode_module
  USE multiconst,only: Tfreeze        ! temperature at freezing              (K)
  
  ! provide access to indices that define elements of the data structures
- !USE var_lookup,only:iLookPROG       ! named variables for structure elements
+ USE var_lookup,only:iLookPROG       ! named variables for structure elements
  USE var_lookup,only:iLookDIAG       ! named variables for structure elements
  USE var_lookup,only:iLookDECISIONS  ! named variables for elements of the decision structure
  !USE var_lookup,only:iLookDERIV     ! named variables for structure elements
@@ -104,8 +104,8 @@ contains
                       firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
                       computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                       scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
-                     ! computMassBalance,       & ! intent(in):    flag to compute mass balance
-                     ! computNrgBalance,        & ! intent(in):    flag to compute energy balance
+                      computMassBalance,       & ! intent(in):    flag to compute mass balance
+                      computNrgBalance,        & ! intent(in):    flag to compute energy balance
                       ! input: state vectors
                       stateVecInit,            & ! intent(in):    initial state vector
                       sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
@@ -133,7 +133,7 @@ contains
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
                       stateVec,                & ! intent(out):   model state vector
                      ! stateVecPrime,           & ! intent(out):   derivative of model state vector
-                     ! balance,                 & ! intent(inout): balance per state
+                      balance,                 & ! intent(inout): balance per state
                       err,message)               ! intent(out):   error control
 
 
@@ -172,8 +172,8 @@ contains
    logical(lgt),intent(in)         :: firstSubStep           ! flag to indicate if we are processing the first sub-step
    logical(lgt),intent(in)         :: computeVegFlux         ! flag to indicate if computing fluxes over vegetation
    logical(lgt),intent(in)         :: scalarSolution         ! flag to denote if implementing the scalar solution
-   !logical(lgt),intent(in)         :: computMassBalance      ! flag to compute mass balance
-   !logical(lgt),intent(in)         :: computNrgBalance       ! flag to compute energy balance
+   logical(lgt),intent(in)         :: computMassBalance      ! flag to compute mass balance
+   logical(lgt),intent(in)         :: computNrgBalance       ! flag to compute energy balance
    ! input: state vectors
    real(rkind),intent(in)          :: stateVecInit(:)        ! model state vector
    real(qp),intent(in)             :: sMul(:)                ! state vector multiplier (used in the residual calculations)
@@ -202,7 +202,7 @@ contains
    logical(lgt),intent(out)        :: arkodeSucceeds         ! flag to indicate if ARKODE is successful
    logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
    !! output: residual terms and balances
-   !real(rkind),intent(inout)       :: balance(:)             ! balance per state
+   real(rkind),intent(inout)       :: balance(:)             ! balance per state
    ! output: error control
    integer(i4b),intent(out)        :: err                    ! error code
    character(*),intent(out)        :: message                ! error message
@@ -231,10 +231,11 @@ contains
    ! user data object
    type(data4ida), target  :: eqns_data ! SUNDIALS user data - reusing IDA data type due to overlap
 
-   ! arrays
+   ! arrays for previous internal ARKODE steps
+   real(rkind),allocatable :: resVecPrev(:)         ! previous value for residuals
    type(var_dlength)       :: flux_prev             ! previous model fluxes for a local HRU
-   !real(rkind),allocatable :: dCompress_dPsiPrev(:) ! previous derivative value soil compression
    real(rkind),allocatable :: mLayerCompressPrev(:) ! previous soil compressibility value
+   !real(rkind),allocatable :: dCompress_dPsiPrev(:) ! previous derivative value soil compression
 
    ! option variables
    logical(lgt)   :: use_fdJac ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
@@ -358,9 +359,9 @@ contains
     else
       allocate(eqns_data%dBaseflow_dMatric(0,0),stat=err)
     end if
-    !allocate( eqns_data%mLayerTempPrev(nLayers) )
+    !allocate( eqns_data%mLayerTempPrev(nLayers) )     ! may be required for root finding problem
     !allocate( eqns_data%mLayerMatricHeadPrev(nSoil) )
-    !allocate( eqns_data%mLayerTempTrial(nLayers) )
+    !allocate( eqns_data%mLayerTempTrial(nLayers) )    ! may be required for root finding problem
     !allocate( eqns_data%mLayerMatricHeadTrial(nSoil) )
     !allocate( eqns_data%mLayerTempPrime(nLayers) )
     !allocate( eqns_data%mLayerMatricHeadPrime(nSoil) )
@@ -371,22 +372,22 @@ contains
     allocate( eqns_data%fluxVec(nState) )
     allocate( eqns_data%resVec(nState) )
     allocate( eqns_data%resSink(nState) )
-    !allocate( resVecPrev(nState) )
+    allocate( resVecPrev(nState) )
 
     ! need the following values for the first substep
     do iVar=1,size(flux_meta)  ! loop through fluxes
       flux_prev%var(iVar)%dat(:)      = 0._rkind
     end do
-    !eqns_data%scalarCanopyTempPrev    = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1)
-    !eqns_data%mLayerTempPrev(:)       = prog_data%var(iLookPROG%mLayerTemp)%dat(:)
-    !eqns_data%scalarCanopyTempTrial   = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1)
-    !eqns_data%mLayerTempTrial(:)      = prog_data%var(iLookPROG%mLayerTemp)%dat(:)
+    eqns_data%scalarCanopyTempPrev    = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1) ! required for ARKODE?
+    !eqns_data%mLayerTempPrev(:)       = prog_data%var(iLookPROG%mLayerTemp)%dat(:)      ! may be required for root finding problem
+    eqns_data%scalarCanopyTempTrial   = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1) ! required for ARKODE?
+    !eqns_data%mLayerTempTrial(:)      = prog_data%var(iLookPROG%mLayerTemp)%dat(:)      ! may be required for root finding problem
     !eqns_data%mLayerMatricHeadPrev(:) = prog_data%var(iLookPROG%mLayerMatricHead)%dat(:)
     !mLayerMatricHeadPrimePrev         = 0._rkind
     !dCompress_dPsiPrev(:)             = 0._rkind
     mLayerCompressPrev(:)             = 0._rkind  ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
-    !resVecPrev(:)                     = 0._rkind
-    !balance(:)                        = 0._rkind
+    resVecPrev(:)                     = 0._rkind
+    balance(:)                        = 0._rkind
 
    end subroutine initialize_SUNDIALS_user_data
 
@@ -513,13 +514,13 @@ contains
 
     do while(tret(1) < dt_cur)
 
-     ! SJT: need to set up ARKODE root finding before implementing this block
-     ! ! call this at beginning of step to reduce root bouncing (only looking in one direction)
-     ! if(detect_events .and. .not.tinystep)then
-     !   call find_rootdir(eqns_data, rootdir)
-     !   retval = FIDASetRootDirection(ida_mem, rootdir)
-     !   if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FIDASetRootDirection'; return_flag=.true.; return; end if
-     ! endif
+      ! SJT: need to set up ARKODE root finding before implementing this block
+      ! ! call this at beginning of step to reduce root bouncing (only looking in one direction)
+      ! if(detect_events .and. .not.tinystep)then
+      !   call find_rootdir(eqns_data, rootdir)
+      !   retval = FIDASetRootDirection(ida_mem, rootdir)
+      !   if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FIDASetRootDirection'; return_flag=.true.; return; end if
+      ! endif
 
       eqns_data%firstFluxCall  = .false. ! already called for initial data window
       eqns_data%firstSplitOper = .false. ! already called for initial data window
@@ -591,7 +592,7 @@ contains
 
       ! sum of fluxes smoothed over the time step, average from instantaneous values
       if (nSteps > 1_i4b) then
-        dt_mult = dt_diff/2._rkind
+        dt_mult = dt_diff/2._rkind ! results in trapezoidal integration rule
       else ! first step no averaging
         dt_mult = dt_diff
       end if
@@ -604,30 +605,86 @@ contains
       ! here is the IDA version with primed variables
       !mLayerCmpress_sum(:) = mLayerCmpress_sum(:) + ( eqns_data%deriv_data%var(iLookDERIV%dCompress_dPsi)%dat(:) * eqns_data%mLayerMatricHeadPrime(:) &
       !                     & + dCompress_dPsiPrev(:) * mLayerMatricHeadPrimePrev(:) ) * dt_mult
-      ! here is the ARKODE version without primed variables --- SJT : verify this (is the mLayerCmpress_sum the integral of mLayerCompress?)
+      ! here is the ARKODE version without primed variables (for the time integral of mLayerCompress)
       mLayerCmpress_sum(:) = mLayerCmpress_sum(:) + ( eqns_data%diag_data%var(iLookDIAG%mLayerCompress)%dat(:) &
-                           & - mLayerCompressPrev(:) )
+                           & + mLayerCompressPrev(:) ) * dt_mult
 
-      ! **** Insert Mass and Energy Balance Checks Here ****
-      ! ...
-      ! ...
-      ! ...
+      ! ----
+      ! * compute energy balance, from residuals *
+      !------------------------
+      associate(&
+        ixCasNrg      => indx_data%var(iLookINDEX%ixCasNrg)%dat(1)      ,& ! intent(in): index of canopy air space energy state variable
+        ixVegNrg      => indx_data%var(iLookINDEX%ixVegNrg)%dat(1)      ,& ! intent(in): index of canopy energy state variable
+        ixSnowSoilNrg => indx_data%var(iLookINDEX%ixSnowSoilNrg)%dat    ,& ! intent(in): indices for energy states in the snow+soil subdomain
+        nSnowSoilNrg  => indx_data%var(iLookINDEX%nSnowSoilNrg )%dat(1)  & ! intent(in): number of energy state variables in the snow+soil domain
+      &)
+        if (computNrgBalance) then
+          ! compute energy balance mean, resVec is the instantaneous residual vector from the solver
+          if (ixCasNrg/=integerMissing) balance(ixCasNrg) = balance(ixCasNrg) + ( eqns_data%resVec(ixCasNrg) + resVecPrev(ixCasNrg) )*dt_mult/dt
+          if (ixVegNrg/=integerMissing) balance(ixVegNrg) = balance(ixVegNrg) + ( eqns_data%resVec(ixVegNrg) + resVecPrev(ixVegNrg) )*dt_mult/dt
+          if (nSnowSoilNrg > 0) then
+            do concurrent (i=1:nLayers,ixSnowSoilNrg(i)/=integerMissing)
+              balance(ixSnowSoilNrg(i)) = balance(ixSnowSoilNrg(i)) + ( eqns_data%resVec(ixSnowSoilNrg(i)) + resVecPrev(ixSnowSoilNrg(i)) )*dt_mult/dt
+            end do
+          end if
+        end if
+      end associate
+
+      ! ----
+      ! * compute mass balance, from residuals *
+      !------------------------   
+      associate(&
+        ixAqWat       => indx_data%var(iLookINDEX%ixAqWat)%dat(1)       ,&      ! intent(in): index of water storage in the aquifer
+        ixVegHyd      => eqns_data%indx_data%var(iLookINDEX%ixVegHyd)%dat(1), & ! intent(in): index of canopy hydrology state variable (mass)
+        ixSnowSoilHyd => indx_data%var(iLookINDEX%ixSnowSoilHyd)%dat    ,&      ! intent(in): indices for hydrology states in the snow+soil subdomain
+        nSnowSoilHyd  => indx_data%var(iLookINDEX%nSnowSoilHyd )%dat(1)  &      ! intent(in): number of hydrology variables in the snow+soil domain
+      &)
+        if (computMassBalance) then   
+    
+          ! compute mass balance mean, resVec is the instantaneous residual vector from the solver
+          if (ixVegHyd/=integerMissing) balance(ixVegHyd) = balance(ixVegHyd) + ( eqns_data%resVec(ixVegHyd) + resVecPrev(ixVegHyd) )*dt_mult/dt
+          if (nSnowSoilHyd>0) then    
+            do concurrent (i=1:nLayers,ixSnowSoilHyd(i)/=integerMissing) 
+              balance(ixSnowSoilHyd(i)) = balance(ixSnowSoilHyd(i)) + ( eqns_data%resVec(ixSnowSoilHyd(i)) + resVecPrev(ixSnowSoilHyd(i)) )*dt_mult/dt
+            end do
+          end if
+          if (ixAqWat/=integerMissing) balance(ixAqWat) = balance(ixAqWat) + ( eqns_data%resVec(ixAqWat) + resVecPrev(ixAqWat) )*dt_mult/dt
+        end if
+      end associate
+
 
       ! save required quantities for next step
-      !eqns_data%scalarCanopyTempPrev    = eqns_data%scalarCanopyTempTrial
-      !eqns_data%mLayerTempPrev(:)       = eqns_data%mLayerTempTrial(:)
+      eqns_data%scalarCanopyTempPrev    = eqns_data%scalarCanopyTempTrial ! required for ARKODE?
+      !eqns_data%mLayerTempPrev(:)       = eqns_data%mLayerTempTrial(:)   ! may be required for root finding problem 
       !eqns_data%mLayerMatricHeadPrev(:) = eqns_data%mLayerMatricHeadTrial(:)
       !mLayerMatricHeadPrimePrev(:)      = eqns_data%mLayerMatricHeadPrime(:)
       !dCompress_dPsiPrev(:)             = eqns_data%deriv_data%var(iLookDERIV%dCompress_dPsi)%dat(:)
       mLayerCompressPrev(:)              = eqns_data%diag_data%var(iLookDIAG%mLayerCompress)%dat(:)
       tretPrev                           = tret(1)
-      !resVecPrev(:)                     = eqns_data%resVec(:)
+      resVecPrev(:)                      = eqns_data%resVec(:)
       flux_prev                          = eqns_data%flux_data
 
-      ! Restart for where vegetation and layers cross freezing point
-      ! ...
-      ! ...
-      ! ...
+      ! SJT: need to set up ARKODE root finding before implementing this block
+      !! Restart for where vegetation and layers cross freezing point
+      !if(detect_events)then
+      !  if (retvalr .eq. IDA_ROOT_RETURN) then ! IDASolve succeeded and found one or more roots at tret(1)
+      !    ! rootsfound[i]= +1 indicates that gi is increasing, -1 g[i] decreasing, 0 no root
+      !    !retval = FIDAGetRootInfo(ida_mem, rootsfound)
+      !    !if (retval < 0) then; err=20; message=trim(message)//'error in FIDAGetRootInfo'; return; endif
+      !    !print '(a,f15.7,2x,17(i2,2x))', "time, rootsfound[] = ", tret(1), rootsfound
+      !    ! Reininitialize solver for running after discontinuity and restart
+      !    retval = FIDAReInit(ida_mem, tret(1), sunvec_y, sunvec_yp)
+      !    if (retval /= 0) then; err=20; message=trim(message)//'error in FIDAReInit'; return; endif
+      !    if(dt_last(1) < 0.1_rkind)then ! don't keep calling if step is small (more accurate with this tiny but getting hung up)
+      !      retval = FIDARootInit(ida_mem, 0, c_funloc(layerDisCont4ida))
+      !      tinystep = .true.
+      !    else
+      !      retval = FIDARootInit(ida_mem, nRoot, c_funloc(layerDisCont4ida))
+      !      tinystep = .false.
+      !    endif
+      !    if (retval /= 0) then; err=20; message=trim(message)//'error in FIDARootInit'; return; endif
+      !  endif
+      !endif
 
     end do
 
