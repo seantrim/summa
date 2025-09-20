@@ -540,14 +540,14 @@ contains
 
  ! **** soilLiqFlx ****
  subroutine initialize_soilLiqFlx
-  call in_soilLiqFlx%initialize(nsnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
+  call in_soilLiqFlx%initialize(nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
                                 mLayerTempTrial,mLayerMatricHeadTrial,mLayerMatricHeadLiqTrial,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,&
                                 flux_data,deriv_data)
-  call io_soilLiqFlx%initialize(nsoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
+  call io_soilLiqFlx%initialize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
  end subroutine initialize_soilLiqFlx
 
  subroutine finalize_soilLiqFlx
-  call io_soilLiqFlx%finalize(nsoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
+  call io_soilLiqFlx%finalize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
   call out_soilLiqFlx%finalize(err,cmessage)
   ! error control
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if

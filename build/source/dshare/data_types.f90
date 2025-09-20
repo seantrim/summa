@@ -1260,7 +1260,7 @@ contains
  ! **** end snowLiqFlx ****
 
  ! **** soilLiqFlx ****
- subroutine initialize_in_soilLiqFlx(in_soilLiqFlx,nsnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
+ subroutine initialize_in_soilLiqFlx(in_soilLiqFlx,nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
                                      mLayerTempTrial,mLayerMatricHeadTrial,mLayerMatricHeadLiqTrial,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,&
                                      flux_data,deriv_data)
   class(in_type_soilLiqFlx),intent(out) :: in_soilLiqFlx               ! class object for intent(in) soilLiqFlx arguments
@@ -1325,7 +1325,7 @@ contains
   end associate
  end subroutine initialize_in_soilLiqFlx
 
- subroutine initialize_io_soilLiqFlx(io_soilLiqFlx,nsoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
+ subroutine initialize_io_soilLiqFlx(io_soilLiqFlx,nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
   class(io_type_soilLiqFlx),intent(out) :: io_soilLiqFlx               ! class object for intent(inout) soilLiqFlx arguments
   integer(i4b),intent(in)               :: nSoil                       ! number of soil layers
   real(rkind),intent(in)                :: dHydCond_dMatric(nSoil)     ! derivative in hydraulic conductivity w.r.t matric head (s-1)
@@ -1397,7 +1397,7 @@ contains
   end associate
  end subroutine initialize_io_soilLiqFlx
 
- subroutine finalize_io_soilLiqFlx(io_soilLiqFlx,nsoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
+ subroutine finalize_io_soilLiqFlx(io_soilLiqFlx,nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
   class(io_type_soilLiqFlx),intent(in)  :: io_soilLiqFlx               ! class object for intent(inout) soilLiqFlx arguments
   integer(i4b),intent(in)               :: nSoil                       ! number of soil layers
   real(rkind),intent(out)               :: dHydCond_dMatric(nSoil)     ! derivative in hydraulic conductivity w.r.t matric head (s-1)
