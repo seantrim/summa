@@ -34,6 +34,7 @@ module Newton_functions
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
+   real(r8b),allocatable    :: J_save(:,:)   ! stored value of total Jacobian
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
@@ -71,6 +72,7 @@ module Newton_functions
    type(var_ilength) :: indx_data                    ! indices defining model states and layers
    type(var_dlength) :: prog_data                    ! prognostic variables for a local HRU
    type(var_dlength) :: diag_data                    ! diagnostic variables for a local HRU
+   type(var_dlength) :: flux_data                    ! temporary flux variables for a local HRU
    type(var_dlength) :: deriv_data                   ! derivatives in model fluxes w.r.t. relevant state variables
    real(rkind),allocatable :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
    real(rkind),allocatable :: dMat(:)                ! diagonal matrix (excludes flux derivatives) 
@@ -82,6 +84,7 @@ module Newton_functions
    ! additional variables for eval8summa call
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
    real(rkind),allocatable :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
+   real(rkind),allocatable :: xScale(:)              ! characteristic scale of the state vector (mixed units)
    real(qp),allocatable    :: sMul(:)    ! NOTE: qp  ! multiplier for state vector for the residual calculations
    logical(lgt) :: feasible                          ! feasibility flag
    real(rkind),allocatable :: fluxVec0(:)            ! flux vector (mixed units)
@@ -543,15 +546,84 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
- subroutine SUMMA_refine_Newton_step(f_obj)
+ subroutine SUMMA_refine_Newton_step(f_obj,xvec0,xvec1)
   ! ** interface to SUMMA's refine_Newton_step subroutine **
+  use matrixOper_module,  only: scaleMatrices
+  ! object
   class(f_obj_type),intent(inout)   :: f_obj
+  ! input
+  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
+  ! input-output
+  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
+  ! local
+  integer(i4b) :: mSoil       ! number of soil layers in the solution vector
+  logical(lgt) :: return_flag
+  real(rkind),allocatable :: newtStepScaled(:),aJacScaled(:,:),rVecScaled(:) 
+  real(rkind),allocatable :: stateVecTrial(:),stateVecNew(:)
+  integer(i4b) :: err
+  character(:),allocatable :: cmessage
 
+  ! get the number of soil layers in the solution vector
+  mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
+
+  ! get scaled variables
+  stateVecTrial  = xvec1
+  newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step 
+  rVecScaled     = f_obj % resVec  * f_obj % fScale ! get scaled residual
+
+  associate(&
+   ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
+   nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
+   aJac     => f_obj % J_save              , &
+   fScale   => f_obj % fScale              , & 
+   xScale   => f_obj % xScale                & 
+  &)
+   call scaleMatrices(ixMatrix,nState,aJac,fScale,xScale,aJacScaled,err,cmessage)
+  end associate
+  if (err/=0) then
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
+   end if
+  end if
+
+  associate(&
+   ! input
+   in_SS4HG => f_obj % in_SS4HG , & 
+   fScale   => f_obj % fScale   , & 
+   xScale   => f_obj % xScale   , & 
+   ! input: SUMMA data structures
+   model_decisions => f_obj % model_decisions , &
+   lookup_data     => f_obj % lookup_data     , &
+   type_data       => f_obj % type_data       , &
+   attr_data       => f_obj % attr_data       , &
+   mpar_data       => f_obj % mpar_data       , &
+   forc_data       => f_obj % forc_data       , &
+   bvar_data       => f_obj % bvar_data       , &
+   prog_data       => f_obj % prog_data       , &
+   ! input-output
+   sMul              => f_obj % sMul              , &
+   io_SS4HG          => f_obj % io_SS4HG          , &
+   indx_data         => f_obj % indx_data         , & 
+   diag_data         => f_obj % diag_data         , &
+   flux_data         => f_obj % flux_data         , & 
+   deriv_data        => f_obj % deriv_data        , &
+   dBaseflow_dMatric => f_obj % dBaseflow_dMatric , &
+   ! output
+   out_SS4HG => f_obj % out_SS4HG &  
+  &)
+  ! SJT: ********* Continue here by interfacing the output arguments for refine_Newton_step *********
   !call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
   !                       &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
   !                       &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
-  !                       &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG)                                    ! output
+  !                       &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                    ! output
+  end associate
 
+
+  if (return_flag) then
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: refine_Newton_step message="//trim(f_obj % out_SS4HG % message); stop
+   end if
+  end if
  end subroutine SUMMA_refine_Newton_step
 
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
@@ -640,7 +712,7 @@ contains
                     ! input-output: data structures
                     f_obj % indx_data,               & ! intent(inout): index data
                     f_obj % diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
-                    f_obj % flux_init,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                    f_obj % flux_data,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
                     f_obj % deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                     ! input-output: baseflow
                     f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
@@ -773,6 +845,8 @@ contains
   ! assemble Jacobian using the computed derivatives
   call f_obj % SUMMA_computJacob(J)
 
+  ! store Jacobian to permit reuse
+  f_obj % J_save = J
  end function Jacobian_f_SUMMA_vec
 
 end module Newton_functions

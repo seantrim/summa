@@ -878,6 +878,7 @@ contains
   nested_Newton % dMat              = dMat              ! diagonal matrix (excludes flux derivatives)
 
   nested_Newton % fScale            = fScale            ! characteristic scale of the function evaluations (mixed units)
+  nested_Newton % xScale            = xScale            ! characteristic scale of the state vector (mixed units)
   nested_Newton % sMul              = sMul              ! multiplier for state vector for the residual calculation 
 
   nested_Newton % fluxVec0          = fluxVec0          ! flux vector (mixed units)
@@ -900,6 +901,7 @@ contains
   nested_Newton % indx_data  =  indx_data  ! indices defining model states and layers
   nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU
   nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
+  nested_Newton % flux_data  =  flux_temp  ! flux variables for a local HRU (flux_temp used for summaSolve4homegrown so used here)
   nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
 
   
@@ -909,7 +911,7 @@ contains
    ! 'strict' uses two consecutive iterations and is extremely conservative
    !     |--> (actually computes the convergence error of the previous iteration)
    ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
-  nested_Newton % convergence = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+  nested_Newton % convergence = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
   ! solver output
   call nested_Newton % solver_output('silent') ! standard output used by default 
@@ -949,7 +951,7 @@ contains
   ! interface additional output that summaSolve4homegrown provides
   indx_data  = nested_Newton % indx_data 
   diag_data  = nested_Newton % diag_data 
-  flux_temp  = nested_Newton % flux_init 
+  flux_temp  = nested_Newton % flux_data 
   deriv_data = nested_Newton % deriv_data
   dBaseflow_dMatric = nested_Newton % dBaseflow_dMatric(:,:) 
   fluxVec = nested_Newton % fluxVec0
