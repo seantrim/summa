@@ -4,11 +4,11 @@ module Newton_functions
  use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
  use nrtype,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
- use eval8summa_module, only: eval8summa,imposeConstraints     ! SUMMA's eval8summa and imposeConstraints routines
- use computJacob_module,only: computJacob                      ! SUMMA's computJacob routine 
- use summaSolve4homegrown_module,only: checkConv               ! SUMMA's checkConv function
+ use eval8summa_module, only: eval8summa,imposeConstraints           ! SUMMA's eval8summa and imposeConstraints routines
+ use computJacob_module,only: computJacob                            ! SUMMA's computJacob routine 
+ use summaSolve4homegrown_module,only: refine_Newton_step, checkConv ! SUMMA's refine_Newton_step and checkConv procedures
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
- use data_types,only: in_type_summaSolve4homegrown,& ! objects for SUMMA's summaSolve4homegrown routine
+ use data_types,only: in_type_summaSolve4homegrown,&           ! objects for SUMMA's summaSolve4homegrown routine
                      &io_type_summaSolve4homegrown,&
                      &out_type_summaSolve4homegrown 
  use data_types,only: model_options           ! type for SUMMA's model decision structure
@@ -543,6 +543,17 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
+ subroutine SUMMA_refine_Newton_step(f_obj)
+  ! ** interface to SUMMA's refine_Newton_step subroutine **
+  class(f_obj_type),intent(inout)   :: f_obj
+
+  !call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
+  !                       &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
+  !                       &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
+  !                       &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG)                                    ! output
+
+ end subroutine SUMMA_refine_Newton_step
+
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
   ! ** interface for SUMMA's checkConv subroutine **
   ! input
