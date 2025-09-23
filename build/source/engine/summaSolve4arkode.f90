@@ -228,6 +228,18 @@ contains
    type(c_ptr)                             :: arkode_mem ! ARKODE memory
    real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
+   ! ARKODE statistics
+   integer(c_long) :: nStepsSun(1)
+   integer(c_long) :: nREvals(1)
+   integer(c_long) :: nLinSetups(1)
+   integer(c_long) :: netFails(1)
+   integer(c_int)  :: qLast(1)
+   integer(c_int)  :: qCur(1)
+   real(c_double)  :: hInitUsed(1)
+   real(c_double)  :: hLast(1)
+   real(c_double)  :: hCur(1)
+   real(c_double)  :: tCur(1)
+
    ! user data object
    type(data4ida), target  :: eqns_data ! SUNDIALS user data - reusing IDA data type due to overlap
 
@@ -284,6 +296,9 @@ contains
    ! initialize tolerance vectors for ARKODE
    call initialize_ARKODE_tolerance_vectors; if (return_flag) return
 
+!   ! initialize root finding problem --- to be implemented (see draft routine below)
+!   call initialize_ARKODE_root_finding; if (return_flag) return
+
    ! set controller for adaptive time step sizes
    call initialize_time_step_adaptivity_controller; if (return_flag) return
 
@@ -292,6 +307,9 @@ contains
 
    ! main solver loop
    call update_ARKODE_solver_loop; if (return_flag) return
+
+   ! finalize
+   call finalize_ARKODE_solver; if (return_flag) return
   contains
 
    subroutine initialize_error_control
@@ -472,6 +490,37 @@ contains
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeWFtolerances'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_tolerance_vectors
 
+   !subroutine initialize_ARKODE_root_finding ! to be implemented
+   ! ! *** initialize ARKODE root finding problem ***
+
+   ! ! initialize rootfinding problem and allocate space, counting roots
+   ! if(detect_events)then
+   !   nRoot = 0
+   !   if(ixVegNrg/=integerMissing) nRoot = nRoot+1
+   !   if(nSnow>0)then
+   !     do i = 1,nSnow
+   !       if(ixSnowOnlyNrg(i)/=integerMissing) nRoot = nRoot+1
+   !     enddo
+   !   endif
+   !   if(nSoil>0)then
+   !     do i = 1,nSoil
+   !       if(ixSoilOnlyHyd(i)/=integerMissing) nRoot = nRoot+1
+   !       if(ixSoilOnlyNrg(i)/=integerMissing) nRoot = nRoot+1
+   !     enddo
+   !   endif
+   !   allocate( rootsfound(nRoot) )
+   !   allocate( rootdir(nRoot) )
+   !   rootdir = 0
+   !   retval = FIDARootInit(ida_mem, nRoot, c_funloc(layerDisCont4ida))
+   !   if (retval /= 0) then; err=20; message=trim(message)//'error in FIDARootInit'; return; endif
+   ! else ! will not use, allocate at something
+   !   nRoot = 1
+   !   allocate( rootsfound(nRoot) )
+   !   allocate( rootdir(nRoot) )
+   ! endif
+
+   !end subroutine initialize_ARKODE_root_finding 
+
    subroutine initialize_time_step_adaptivity_controller
     ! *** initialize time step adaptivity controller for ARKODE ***
     sunCtrl => FSUNAdaptController_ImpGus(ctx)
@@ -504,7 +553,7 @@ contains
 
     ! Enforce the solver to stop at end of the time step
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
-    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return; endif
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return_flag=.true.; return; end if
 
     ! SJT: the following is based on the looping strategy from summaSolve4ida, but adaptive time steps must be taken into account 
     tinystep = .false.
@@ -547,9 +596,9 @@ contains
       &)
         do concurrent (i=1:nSnow,ixSnowOnlyNrg(i) /= integerMissing)
           if (model_decisions(iLookDECISIONS%nrgConserv)%iDecision /= closedForm) then ! using enthalpy as state variable
-            if (stateVec(ixSnowOnlyNrg(i)) > 0._rkind) tooMuchMelt = .true. !need to merge
+            if (stateVec(ixSnowOnlyNrg(i)) > 0._rkind) tooMuchMelt = .true. ! need to merge
           else
-            if (stateVec(ixSnowOnlyNrg(i)) > Tfreeze)  tooMuchMelt = .true. !need to merge
+            if (stateVec(ixSnowOnlyNrg(i)) > Tfreeze)  tooMuchMelt = .true. ! need to merge
           end if
         end do
       end associate
@@ -557,6 +606,7 @@ contains
 
       ! get the last stepsize and difference from previous end time, not necessarily the same
       retval = FARKodeGetLastStep(arkode_mem, dt_last)
+      if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeGetLastStep'; return_flag=.true.; return; end if
       dt_diff = tret(1) - tretPrev
       nSteps = nSteps + 1_i4b ! number of time steps taken in solver
 
@@ -654,7 +704,7 @@ contains
 
 
       ! save required quantities for next step
-      eqns_data%scalarCanopyTempPrev    = eqns_data%scalarCanopyTempTrial ! required for ARKODE?
+      eqns_data%scalarCanopyTempPrev     = eqns_data%scalarCanopyTempTrial ! required for ARKODE?
       !eqns_data%mLayerTempPrev(:)       = eqns_data%mLayerTempTrial(:)   ! may be required for root finding problem 
       !eqns_data%mLayerMatricHeadPrev(:) = eqns_data%mLayerMatricHeadTrial(:)
       !mLayerMatricHeadPrimePrev(:)      = eqns_data%mLayerMatricHeadPrime(:)
@@ -689,6 +739,72 @@ contains
     end do
 
    end subroutine update_ARKODE_solver_loop
+
+   subroutine finalize_ARKODE_solver
+    ! *** Finalize operations for ARKODE solver ***
+
+    ! interface ARKODE user data object to summaSolve4arkode variables 
+    if (arkodeSucceeds) then
+      ! copy to output data
+      diag_data     = eqns_data%diag_data
+      flux_data     = eqns_data%flux_data
+      deriv_data    = eqns_data%deriv_data
+      ixSaturation  = eqns_data%ixSaturation
+      indx_data%var(iLookINDEX%numberFluxCalc)%dat(1) = eqns_data%indx_data%var(iLookINDEX%numberFluxCalc)%dat(1) ! only number of flux calculations changes in indx_data
+      err           = eqns_data%err
+      message       = eqns_data%message
+    end if
+
+    ! free memory
+    deallocate( eqns_data%model_decisions)
+    deallocate( eqns_data%sMul )
+    deallocate( eqns_data%dMat )
+    deallocate( eqns_data%dBaseflow_dMatric )
+    !deallocate( eqns_data%mLayerTempPrev )          ! may be required for root finding problem
+    !deallocate( eqns_data%mLayerMatricHeadPrev )
+    !deallocate( eqns_data%mLayerTempTrial )         ! may be required for root finding problem
+    !deallocate( eqns_data%mLayerMatricHeadTrial )
+    !deallocate( eqns_data%mLayerTempPrime )
+    !deallocate( eqns_data%mLayerMatricHeadPrime )
+    !deallocate( eqns_data%mLayerVolFracWatPrime )
+    !deallocate( mLayerMatricHeadPrimePrev )
+    !deallocate( dCompress_dPsiPrev )
+    deallocate( eqns_data%resVec )
+    deallocate( eqns_data%resSink )
+    !deallocate( rootsfound ) ! may be required for root finding problem
+    !deallocate( rootdir )    ! may be required for root finding problem
+
+    ! Get Stats from ARKODE
+    retval = FARKodeGetStepStats(arkode_mem, nStepsSun, hInitUsed, hLast, hCur, tCur)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeGetStepStats'; return_flag=.true.; return; end if
+    retval = FARKodeGetNumRhsEvals(arkode_mem, 1_c_int, nREvals) ! args = (arkode_mem,partition,nREvals) -- partition=1 for implicit RHS
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeGetNumRhsEvals'; return_flag=.true.; return; end if
+    retval = FARKodeGetNumErrTestFails(arkode_mem, netFails)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeGetNumErrTestFails'; return_flag=.true.; return; end if
+    retval = FARKodeGetNumLinSolvSetups(arkode_mem, nLinSetups)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeGetNumLinSolvSetups'; return_flag=.true.; return; end if
+
+    diag_data%var(iLookDIAG%numSteps)%dat(1) = nStepsSun(1)
+    diag_data%var(iLookDIAG%numResEvals)%dat(1) = nREvals(1)
+    diag_data%var(iLookDIAG%numLinSolvSetups)%dat(1) = nLinSetups(1)
+    diag_data%var(iLookDIAG%numErrTestFails)%dat(1) = netFails(1)
+    !diag_data%var(iLookDIAG%kLast)%dat(1) = qLast(1) ! IDA only -- for variable order
+    !diag_data%var(iLookDIAG%kCur)%dat(1) = qCur(1)   ! IDA only -- for variable order
+    diag_data%var(iLookDIAG%hInitUsed)%dat(1) = hInitUsed(1)
+    diag_data%var(iLookDIAG%hLast)%dat(1) = hLast(1)
+    diag_data%var(iLookDIAG%hCur)%dat(1) = hCur(1)
+    diag_data%var(iLookDIAG%tCur)%dat(1) = tCur(1)
+
+    call FARKodeFree(arkode_mem)
+    retval = FSUNLinSolFree(sunls)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'unable to free the linear solver'; return_flag=.true.; return; end if
+    call FSUNMatDestroy(sunmat_A)
+    call FN_VDestroy(sunvec_y)
+    !call FN_VDestroy(sunvec_yp) ! IDA only
+    retval = FSUNContext_Free(ctx)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'unable to free the SUNDIALS context'; return_flag=.true.; return; end if
+
+   end subroutine finalize_ARKODE_solver
 
    subroutine getARKodeEvolveMessage
     ! *** Get FARKodeEvolve error message from return value *** 
