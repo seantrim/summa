@@ -297,7 +297,9 @@ subroutine computResid(&
           rVec( ixSnowSoilNrg(iLayer) ) = ( mLayerEnthTempTrial(iLayer) - mLayerEnthTemp(iLayer) )&
                                       & - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
         else
-          fRHS( ixSnowSoilNrg(iLayer) ) = 0._rkind ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives
+          ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives
+          ! so temperature formulation will not be used for ARKODE
+          fRHS( ixSnowSoilNrg(iLayer) ) = 0._rkind ! set unused value to zero
           rVec( ixSnowSoilNrg(iLayer) ) = sMul( ixSnowSoilNrg(iLayer) )*( mLayerTempTrial(iLayer) - mLayerTemp(iLayer) )&
                                       & + mLayerCmTrial(iLayer)*( mLayerVolFracWatTrial(iLayer) - mLayerVolFracWat(iLayer) )&
                                         - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
