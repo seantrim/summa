@@ -69,9 +69,9 @@ module summaSolve4arkode_module
 
  ! look-up values for the choice of variable in energy equations (BE residual or IDA state variable)
  USE mDecisions_module,only:       &
-   closedForm!,                     & ! use temperature with closed form heat capacity
-!   enthalpyFormLU,                 & ! use enthalpy with soil temperature-enthalpy lookup tables
-!   enthalpyForm                      ! use enthalpy with soil temperature-enthalpy analytical solution
+   closedForm,                     & ! use temperature with closed form heat capacity
+   enthalpyFormLU,                 & ! use enthalpy with soil temperature-enthalpy lookup tables
+   enthalpyForm                      ! use enthalpy with soil temperature-enthalpy analytical solution
  
  ! look-up values for method used to compute derivative
  USE mDecisions_module,only:       &
@@ -315,8 +315,19 @@ contains
    subroutine initialize_error_control
     ! *** initialize error control operations ***
     err=0_i4b; message = "summaSolve4arkode/" ! initialize error code and message
-    return_flag        = .false.              ! initialzie return flag
-    arkodeSucceeds     = .true.               ! initialize ARKODE success flag
+
+    ! validate: must use enthalpy formulation for ARKODE
+    associate(&
+     ixNrgConserv => model_decisions(iLookDECISIONS%nrgConserv)%iDecision & ! choice of energy formulation
+    &)
+     if ((ixNrgConserv /= enthalpyFormLU).and.(ixNrgConserv /= enthalpyForm)) then
+      cmessage="enthalpy formulation required for ARKODE"
+      err=20; message=trim(message)//trim(cmessage); return_flag=.true.; return
+     end if
+    end associate
+
+    return_flag    = .false.              ! initialzie return flag
+    arkodeSucceeds = .true.               ! initialize ARKODE success flag
    end subroutine initialize_error_control
 
    subroutine initialize_ODE_system_values
@@ -369,7 +380,7 @@ contains
 
     ! allocate space for the to save previous fluxes
     call allocLocal(flux_meta(:),flux_prev,nSnow,nSoil,err,cmessage)
-    if (err/=0) then; err=20; message=trim(message)//trim(cmessage); return; end if
+    if (err/=0) then; err=20; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if
 
     ! allocate space for other variables -- SJT: commented out lines not required for eval8summa4arkode
     if (model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel) then
