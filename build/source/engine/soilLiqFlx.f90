@@ -1806,8 +1806,6 @@ contains
 
  subroutine update_surfaceFlx_liquidFlux 
   ! **** Update operations for surfaceFlx: flux condition ****
-  ! THIS WOULD BE A LOT CLEANER IF IT WAS ALL IN ONE SUBROUTINE JUST LIKE THE OTHERS, FIX
-  ! note: the routine may be too long if we combine - this routine is more complicated than all the others
   ! -- main computations
   call update_surfaceFlx_liquidFlux_computation_root_layers 
   call update_surfaceFlx_liquidFlux_computation_available_capacity; if (return_flag) return 

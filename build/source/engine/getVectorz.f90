@@ -259,7 +259,7 @@ subroutine getScaling(&
                       fScale,                  & ! intent(out):   characteristic scale of the function evaluations (mixed units)
                       xScale,                  & ! intent(out):   variable scaling vector (mixed units)
                       sMul,                    & ! intent(out):   multiplier for state vector (used in the residual calculations)
-                      dMat,                    & ! intent(out):   diagonal of the Jacobian matrix (excludes fluxes)
+                      dMat,                    & ! intent(out):   diagonal of the Jacobian matrix excluding fluxes, not depending on the state vector
                       err,message)               ! intent(out):   error control
   ! --------------------------------------------------------------------------------------------------------------------------------
   USE nr_utility_module,only:arth                   ! get a sequence of numbers arth(start, incr, count)
@@ -272,7 +272,7 @@ subroutine getScaling(&
   real(rkind),intent(out)         :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
   real(rkind),intent(out)         :: xScale(:)              ! variable scaling vector (mixed units)
   real(qp),intent(out)            :: sMul(:)    ! NOTE: qp  ! multiplier for state vector (used in the residual calculations)
-  real(rkind),intent(out)         :: dMat(:)                ! diagonal of the Jacobian matrix (excludes fluxes)
+  real(rkind),intent(out)         :: dMat(:)                ! diagonal of the Jacobian matrix excluding fluxes, not depending on the state vector
   ! output: error control
   integer(i4b),intent(out)        :: err                    ! error code
   character(*),intent(out)        :: message                ! error message
