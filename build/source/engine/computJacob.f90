@@ -646,7 +646,7 @@ subroutine fluxJacAdd(&
           endif
 
           ! - include derivatives of heat capacity w.r.t water for layer below
-          if(iLayer<nSnow .or. (iLayer==nSnow .and. nSoilOnlyNrg>0))then ! have layer below
+          if(iLayer<nSnow .or. (iLayer==nSnow .and. nSoil>0))then ! have layer below
             if(ixSnowSoilNrg(iLayer+1)/=integerMissing) aJac(ixInd(ixSnowSoilNrg(iLayer+1),watState),watState) = (dt/mLayerDepth(iLayer+1))*(-dNrgFlux_dWatAbove(iLayer) )
           endif
         endif   ! (if the water state for the current layer is within the state subset)
@@ -800,7 +800,7 @@ subroutine fluxJacAdd(&
           endif
 
           ! - include derivatives of heat capacity w.r.t water fluxes for layer above
-          if(iLayer>1 .or. (iLayer==1 .and. nSnowOnlyNrg>0))then ! have layer above
+          if(iLayer>1 .or. (iLayer==1 .and. nSnow>0))then ! have layer above
             if(ixSnowSoilNrg(jLayer-1)/=integerMissing) aJac(ixInd(ixSnowSoilNrg(jLayer-1),watState),watState) = (dt/mLayerDepth(jLayer-1))*( dNrgFlux_dWatBelow(jLayer-1) )
           endif
 
