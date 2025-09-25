@@ -130,7 +130,7 @@ module Newton_functions
    !procedure :: J  => Jacobian_f_Rich_vec  ! solver
    procedure :: J1 => Jacobian_f1_Rich_vec ! solver
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
-   procedure :: apply_constraints => SUMMA_imposeConstraints
+   procedure :: apply_constraints => SUMMA_refine_Newton_step ! SUMMA_imposeConstraints
    procedure :: custom_convergence => SUMMA_checkConv  
  
    ! scalar routines
@@ -556,12 +556,43 @@ contains
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
+  integer(i4b) :: nrow_banded ! # of rows for LAPACK banded matrix storage
+  integer(i4b) :: nBands      ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil       ! number of soil layers in the solution vector
-  logical(lgt) :: return_flag
-  real(rkind),allocatable :: newtStepScaled(:),aJacScaled(:,:),rVecScaled(:) 
+  real(rkind),allocatable :: newtStepScaled(:),aJac(:,:),aJacScaled(:,:),rVecScaled(:) 
   real(rkind),allocatable :: stateVecTrial(:),stateVecNew(:)
-  integer(i4b) :: err
-  character(:),allocatable :: cmessage
+  real(rkind),allocatable :: fluxVecNew(:)             ! new flux vector
+  real(rkind),allocatable :: resSinkNew(:)             ! sink terms on the RHS of the flux equation
+  real(qp)   ,allocatable :: resVecNew(:) ! NOTE: qp   ! new residual vector
+
+  logical(lgt)   :: return_flag
+  integer(i4b)   :: err
+  character(256) :: cmessage
+
+  ! memory allocation for SUMMA's Jacobian 
+  if (f_obj % banded) then ! banded storage
+   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    nrow_banded=subdiag+superdiag+1
+    nBands=nrow_banded+subdiag
+    allocate(aJac(1:nBands,1:n)) !note: first 1:subdiag rows are for extra storage -- Jacobian uses remaining rows
+   end associate
+  else ! full matrix storage
+   associate(n => f_obj % n)
+    allocate(aJac(1:n,1:n))
+   end associate
+  end if
+  allocate(aJacScaled,mold=aJac) ! use same index ranges as aJac
+
+  ! get SUMMA Jacobian from solver Jacobian
+  if (f_obj % banded) then ! banded storage
+   associate(n => f_obj % n, subdiag => f_obj % subdiag)
+    aJac(subdiag+1:nBands,1:n) = f_obj % J_save(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+   end associate
+  else ! full matrix storage
+   associate(n => f_obj % n)
+    aJac = f_obj % J_save(1:n,1:n)
+   end associate
+  end if
 
   ! get the number of soil layers in the solution vector
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
@@ -574,7 +605,6 @@ contains
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
    nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
-   aJac     => f_obj % J_save              , &
    fScale   => f_obj % fScale              , & 
    xScale   => f_obj % xScale                & 
   &)
@@ -609,21 +639,25 @@ contains
    deriv_data        => f_obj % deriv_data        , &
    dBaseflow_dMatric => f_obj % dBaseflow_dMatric , &
    ! output
-   out_SS4HG => f_obj % out_SS4HG &  
+   stateVecNew => xvec1             , &
+   fluxVecNew  => f_obj % fluxVec0  , &
+   resSinkNew  => f_obj % rAdd      , &
+   resVecNew   => f_obj % resVec    , &
+   out_SS4HG   => f_obj % out_SS4HG   &  
   &)
-  ! SJT: ********* Continue here by interfacing the output arguments for refine_Newton_step *********
-  !call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
-  !                       &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
-  !                       &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
-  !                       &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                    ! output
+  call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
+                         &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
+                         &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
+                         &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                        ! output
   end associate
 
-
+  ! check for errors in refine_Newton_step call
   if (return_flag) then
    if (f_obj % out_error) then
     write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: refine_Newton_step message="//trim(f_obj % out_SS4HG % message); stop
    end if
   end if
+
  end subroutine SUMMA_refine_Newton_step
 
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
