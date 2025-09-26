@@ -263,7 +263,7 @@ subroutine computJacob(&
     ! -----
     ! * cross derivatives in the vegetation...
     ! ---------------------------------------------
-    if(computeVegFlux)then  ! (derivatives only defined when vegetation protrudes over the surface)
+    if(computeVegFlux)then ! (derivatives only defined when vegetation protrudes over the surface)
       if(ixVegHyd/=integerMissing .and. ixVegNrg/=integerMissing)&
           ! NOTE: dIce/dLiq = (1 - scalarFracLiqVeg); dIce*LH_fus/canopyDepth = J m-3; dLiq = kg m-2
           aJac(ixInd(ixVegNrg,ixVegHyd),ixVegHyd) = (-1._rkind + scalarFracLiqVeg)*LH_fus/canopyDepth &
@@ -291,10 +291,10 @@ subroutine computJacob(&
                                      + dVolHtCapBulk_dTheta(iLayer) * mLayerdTemp_dt(iLayer) + mLayerCm(iLayer) &
                                      + (dt/mLayerDepth(iLayer))*(-dNrgFlux_dWatBelow(iLayer-1) + dNrgFlux_dWatAbove(iLayer)) &
                                      + LH_fus*iden_water * mLayerdTemp_dt(iLayer) * dFracLiqWat_dTk(iLayer)    ! (dF/dLiq)
-        endif   ! (if the water state for the current layer is within the state subset)
+        endif ! (if the water state for the current layer is within the state subset)
 
-      end do  ! (looping through snow layers)
-    endif   ! (if there are state variables for both water and energy in the snow domain)
+      end do ! (looping through snow layers)
+    endif ! (if there are state variables for both water and energy in the snow domain)
 
     ! -----
     ! * cross derivatives in the soil domain...
@@ -319,10 +319,10 @@ subroutine computJacob(&
                                                        + (dt/mLayerDepth(jLayer))*(-dNrgFlux_dWatBelow(jLayer-1) + dNrgFlux_dWatAbove(jLayer))
           if(mLayerdTheta_dTk(jLayer) > tiny(1.0_rkind))& ! ice is present
               aJac(ixInd(nrgState,watState),watState) = -LH_fus*iden_water * dVolTot_dPsi0(iLayer) + aJac(ixInd(nrgState,watState),watState)   ! dNrg/dMat (J m-3 m-1) -- dMat changes volumetric water, and hence ice content
-        endif   ! (if the water state for the current layer is within the state subset)
+        endif ! (if the water state for the current layer is within the state subset)
 
-      end do  ! (looping through energy states in the soil domain)
-    endif   ! (if there are state variables for both water and energy in the soil domain)
+      end do ! (looping through energy states in the soil domain)
+    endif ! (if there are state variables for both water and energy in the soil domain)
 
     ! *********************************************************************************************************************************************************
     ! * PART 2: COMPUTE FLUX JACOBIAN TERMS 
@@ -513,7 +513,7 @@ subroutine fluxJacAdd(&
     ! -----
     ! * energy and liquid fluxes over vegetation...
     ! ---------------------------------------------
-    if(computeVegFlux)then  ! (derivatives only defined when vegetation protrudes over the surface)
+    if(computeVegFlux)then ! (derivatives only defined when vegetation protrudes over the surface)
 
       ! * energy fluxes with the canopy water
       if(ixVegHyd/=integerMissing)then
@@ -572,7 +572,7 @@ subroutine fluxJacAdd(&
     ! * energy fluxes for the snow and soil domains...
     ! -------------------------------------------
     if(nSnowSoilNrg>0)then
-      do iLayer=1,nLayers  ! loop through all layers in the snow and soil domains
+      do iLayer=1,nLayers ! loop through all layers in the snow and soil domains
 
         ! check if the state is in the subset
         if(ixSnowSoilNrg(iLayer)==integerMissing) cycle
@@ -592,14 +592,14 @@ subroutine fluxJacAdd(&
           if(ixSnowSoilNrg(iLayer+1)/=integerMissing) aJac(ixInd(ixSnowSoilNrg(iLayer+1),nrgState),nrgState) = (dt/mLayerDepth(iLayer+1))*(-dNrgFlux_dTempAbove(iLayer  ) )
         endif
 
-      end do  ! (looping through energy states in the snow and soil domains)
-    endif   ! (if the subset includes energy state variables in the snow and soil domains)
+      end do ! (looping through energy states in the snow and soil domains)
+    endif ! (if the subset includes energy state variables in the snow and soil domains)
 
     ! -----
     ! * liquid water fluxes for the snow domain...
     ! --------------------------------------------
     if(nSnowOnlyHyd>0)then
-      do iLayer=1,nSnow  ! loop through layers in the snow domain
+      do iLayer=1,nSnow ! loop through layers in the snow domain
 
         ! - check that the snow layer is desired
         if(ixSnowOnlyHyd(iLayer)==integerMissing) cycle
@@ -620,8 +620,8 @@ subroutine fluxJacAdd(&
           aJac(ixInd(ixSnowOnlyHyd(iLayer+1),watState),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot  ! dVol(below)/dLiq(above)
         endif
 
-      end do  ! (looping through liquid water states in the snow domain)
-    endif   ! (if the subset includes hydrology state variables in the snow domain)
+      end do ! (looping through liquid water states in the snow domain)
+    endif ! (if the subset includes hydrology state variables in the snow domain)
 
     ! -----
     ! * cross derivatives in the snow domain...
@@ -637,7 +637,7 @@ subroutine fluxJacAdd(&
         if(nrgState/=integerMissing .and. watState/=integerMissing)then
           ! - include derivatives of water fluxes w.r.t energy fluxes for current layer, water does not move upwards in snow
           aJac(ixInd(watState,nrgState),nrgState) = (dt/mLayerDepth(iLayer))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! (dVol/dT)             
-        endif   ! (if both the energy and water states for the current layer are within the state subset)
+        endif ! (if both the energy and water states for the current layer are within the state subset)
 
         if(watState/=integerMissing)then
           ! - include derivatives of heat capacity w.r.t water for layer above
@@ -649,17 +649,17 @@ subroutine fluxJacAdd(&
           if(iLayer<nSnow .or. (iLayer==nSnow .and. nSoil>0))then ! have layer below
             if(ixSnowSoilNrg(iLayer+1)/=integerMissing) aJac(ixInd(ixSnowSoilNrg(iLayer+1),watState),watState) = (dt/mLayerDepth(iLayer+1))*(-dNrgFlux_dWatAbove(iLayer) )
           endif
-        endif   ! (if the water state for the current layer is within the state subset)
+        endif ! (if the water state for the current layer is within the state subset)
 
         if(nrgState/=integerMissing)then
           ! - sub-diagonal elements for snow, sub-diagonal only (water does not move upwards in snow)
           if(iLayer<nSnow .and. mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then
             aJac(ixInd(ixSnowOnlyHyd(iLayer+1),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! dVol(below)/dT(above)
           endif 
-        endif   ! (if the energy state for the current layer is within the state subset)
+        endif ! (if the energy state for the current layer is within the state subset)
 
-      end do  ! (looping through snow layers)
-    endif   ! (if there are state variables for both water and energy in the snow domain)
+      end do ! (looping through snow layers)
+    endif ! (if there are state variables for both water and energy in the snow domain)
 
     ! -----
     ! * liquid water fluxes for the soil domain...
@@ -696,17 +696,17 @@ subroutine fluxJacAdd(&
                   aJac(ixInd(watState,qState),qState) = (dt/mLayerDepth(jLayer))*dBaseflow_dMatric(iLayer,pLayer) + aJac(ixInd(watState,qState),qState)
             endif
           end do
-        endif
+        endif ! (if computed baseflow)
 
         ! - include derivatives for surface infiltration below surface
         if(ixSoilOnlyHyd(1)/=integerMissing)then
           if(watState - ixSoilOnlyHyd(1) <= ku .or. fullMatrix) & 
               aJac(ixInd(ixSoilOnlyHyd(1),watState),watState) = -(dt/mLayerDepth(nSnow+1))*dq_dHydStateLayerSurfVec(iLayer) + aJac(ixInd(ixSoilOnlyHyd(1),watState),watState)
         endif
-      end do  ! (looping through hydrology states in the soil domain)
+      end do ! (looping through hydrology states in the soil domain)
 
       ! - include derivatives for surface infiltration above surface if there is snow (vegetation handled already)
-      if(nSnow>0 .and. ixSoilOnlyHyd(1)/=integerMissing)then ! have snow above first soil layer
+      if(nSnow>0 .and. ixSoilOnlyHyd(1)/=integerMissing .and. dq_dHydStateLayerSurfVec(1)/=0._rkind)then ! have snow above first soil layer
         denseLimit = nSnow ! if passed through a too dense snowpack, need to find top dense layer (bottom layer always included, dense or not)
         do pLayer=nSnow,1,-1
           if(mLayerVolFracIce(pLayer)<=maxVolIceContent) exit
@@ -722,9 +722,9 @@ subroutine fluxJacAdd(&
             if(ixSoilOnlyHyd(1) - ixSnowOnlyHyd(pLayer) <= kl .or. fullMatrix) &
                 aJac(ixInd(ixSoilOnlyHyd(1),ixSnowOnlyHyd(pLayer)),ixSnowOnlyHyd(pLayer)) = -(dt/mLayerDepth(nSnow+1))*scalarSoilControl*iLayerLiqFluxSnowDeriv(pLayer)*convLiq2tot + aJac(ixInd(ixSoilOnlyHyd(1),ixSnowOnlyHyd(pLayer)),ixSnowOnlyHyd(pLayer))
           endif
-        end do
-      endif
-    endif   ! (if the subset includes hydrology state variables in the soil domain)
+        end do ! (looping through snow layers above soil until non-dense layer)
+      endif ! (if snow present above soil)
+    endif ! (if the subset includes hydrology state variables in the soil domain)
 
     ! -----
     ! * liquid water fluxes for the aquifer...
@@ -748,7 +748,7 @@ subroutine fluxJacAdd(&
           if(ixAqWat-ixTopNrg <= kl .or. fullMatrix) aJac(ixInd(ixAqWat,ixTopNrg),ixTopNrg) = -dAquiferTrans_dTGround*dt ! dVol/dT (K-1)
         endif
       endif
-    endif
+    endif ! (if aquifer water state is in the subset)
 
     ! -----
     ! * cross derivatives in the soil domain...
@@ -808,7 +808,7 @@ subroutine fluxJacAdd(&
           if(iLayer<nSoil)then ! have layer below
             if(ixSnowSoilNrg(jLayer+1)/=integerMissing) aJac(ixInd(ixSnowSoilNrg(jLayer+1),watState),watState) = (dt/mLayerDepth(jLayer+1))*(-dNrgFlux_dWatAbove(jLayer) )
           endif
-        endif   ! (if the water state for the current layer is within the state subset)
+        endif ! (if the water state for the current layer is within the state subset)
 
         if(nrgState/=integerMissing)then
           ! - compute super-diagonal elements
@@ -826,11 +826,11 @@ subroutine fluxJacAdd(&
             if(nrgState - ixSoilOnlyHyd(1) <= ku .or. fullMatrix) &
                 aJac(ixInd(ixSoilOnlyHyd(1),nrgState),nrgState) = -(dt/mLayerDepth(nSnow+1))*dq_dNrgStateLayerSurfVec(iLayer) + aJac(ixInd(ixSoilOnlyHyd(1),nrgState),nrgState)
           endif
-        endif   ! (if the energy state for the current layer is within the state subset)
-      end do  ! (looping through energy states in the soil domain)
+        endif ! (if the energy state for the current layer is within the state subset)
+      end do ! (looping through energy states in the soil domain)
 
       ! - include derivatives for surface infiltration above surface if there is snow (vegetation handled already)
-      if(nSnow>0 .and. ixSoilOnlyHyd(1)/=integerMissing)then ! have snow above first soil layer
+      if(nSnow>0 .and. ixSoilOnlyHyd(1)/=integerMissing .and. dq_dNrgStateLayerSurfVec(1)/=0._rkind)then ! have snow above first soil layer
         denseLimit = nSnow ! if passed through a too dense snowpack, need to find top dense layer (bottom layer always included, dense or not)
         do pLayer=nSnow,1,-1
           if(mLayerVolFracIce(pLayer)<=maxVolIceContent) exit
@@ -841,10 +841,10 @@ subroutine fluxJacAdd(&
             if(ixSoilOnlyHyd(1) - ixSnowOnlyNrg(pLayer) <= kl .or. fullMatrix) &
                 aJac(ixInd(ixSoilOnlyHyd(1),ixSnowOnlyNrg(pLayer)),ixSnowOnlyNrg(pLayer)) = -(dt/mLayerDepth(nSnow+1))*scalarSoilControl*iLayerLiqFluxSnowDeriv(pLayer)*mLayerdTheta_dTk(pLayer) + aJac(ixInd(ixSoilOnlyHyd(1),ixSnowOnlyNrg(pLayer)),ixSnowOnlyNrg(pLayer))
           endif
-        end do
-      endif
+        end do ! (looping through snow layers above soil until non-dense layer)
+      endif ! (if snow present above soil)
 
-    endif   ! (if there are state variables for both water and energy in the soil domain)
+    endif ! (if there are state variables for both water and energy in the soil domain)
    
   end associate ! end association to variables in the data structures
 

@@ -325,7 +325,7 @@ subroutine computJacobWithPrime(&
     ! -----
     ! * cross derivatives in the vegetation...
     ! ---------------------------------------------
-    if(computeVegFlux)then  ! (derivatives only defined when vegetation protrudes over the surface)
+    if(computeVegFlux)then ! (derivatives only defined when vegetation protrudes over the surface)
       if(ixVegHyd/=integerMissing .and. ixVegNrg/=integerMissing)&
           ! NOTE: dIce/dLiq = (1 - scalarFracLiqVeg); dIce*LH_fu0/canopyDepth = J m-3; dLiq = kg m-2
           aJac(ixInd(ixVegNrg,ixVegHyd),ixVegHyd) = (-1._rkind + scalarFracLiqVeg)*LH_fu0/canopyDepth * cj &
@@ -353,10 +353,10 @@ subroutine computJacobWithPrime(&
                                       + dVolHtCapBulk_dTheta(iLayer) * mLayerTempPrime(iLayer) + mLayerCm(iLayer) * cj &
                                       + (dt/mLayerDepth(iLayer))*(-dNrgFlux_dWatBelow(iLayer-1) + dNrgFlux_dWatAbove(iLayer)) &
                                       + LH_fu0*iden_water * mLayerTempPrime(iLayer) * dFracLiqWat_dTk(iLayer)    ! (dF/dLiq)
-        endif   ! (if the water state for the current layer is within the state subset)
+        endif ! (if the water state for the current layer is within the state subset)
 
-      end do  ! (looping through snow layers)
-    endif   ! (if there are state variables for both water and energy in the snow domain)
+      end do ! (looping through snow layers)
+    endif ! (if there are state variables for both water and energy in the snow domain)
 
     ! -----
     ! * cross derivatives in the soil domain...
@@ -383,10 +383,10 @@ subroutine computJacobWithPrime(&
           if(mLayerdTheta_dTk(jLayer) > tiny(1.0_rkind))&  ! ice is present
               aJac(ixInd(nrgState,watState),watState) = -LH_fu0*iden_water * dVolTot_dPsi0(iLayer) * cj &
                                                        - LH_fu0*iden_water * mLayerMatricHeadPrime(iLayer) * d2VolTot_dPsi02(iLayer) + aJac(ixInd(nrgState,watState),watState) ! dNrg/dMat (J m-3 m-1) -- dMat changes volumetric water, and hence ice content
-        endif   ! (if the water state for the current layer is within the state subset)
+        endif ! (if the water state for the current layer is within the state subset)
 
-      end do  ! (looping through energy states in the soil domain)
-    endif   ! (if there are state variables for both water and energy in the soil domain)
+      end do ! (looping through energy states in the soil domain)
+    endif ! (if there are state variables for both water and energy in the soil domain)
 
     ! *********************************************************************************************************************************************************
     ! * PART 2: COMPUTE FLUX JACOBIAN TERMS 
