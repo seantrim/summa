@@ -69,6 +69,7 @@ contains
    call linear_solve(f_obj,M,A,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
 
    xkp1=xk+B ! update guess
+   if (f_obj % refinement) call f_obj % apply_refinement(xk,xkp1) ! apply Newton step refinement
 
    call check_residual_vector(f_obj,k,xkp1,xk,R_est,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est

@@ -29,6 +29,7 @@ module Newton_functions
    logical      :: inner       ! flag to indicate the execution of inner iterations
    logical      :: converged   ! flag to indicate that the obtained solution meets the convergence criterion
    logical      :: constraints ! flag to indicate that constraints are to be applied between outer/classical iterations
+   logical      :: refinement  ! flag to indicate that refinement is to be applied following outer/classical Newton steps
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
@@ -130,7 +131,8 @@ module Newton_functions
    !procedure :: J  => Jacobian_f_Rich_vec  ! solver
    procedure :: J1 => Jacobian_f1_Rich_vec ! solver
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
-   procedure :: apply_constraints => SUMMA_refine_Newton_step ! SUMMA_imposeConstraints
+   procedure :: apply_constraints  => SUMMA_imposeConstraints
+   procedure :: apply_refinement   => SUMMA_refine_Newton_step
    procedure :: custom_convergence => SUMMA_checkConv  
  
    ! scalar routines
@@ -154,6 +156,7 @@ contains
    f_obj % banded      = .false. ! flag for banded Jacobians
    f_obj % nested      = .false. ! flag for nested algorithm
    f_obj % constraints = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
+   f_obj % refinement  = .false. ! flag to indicate that refinement is to be applied following outer/classical Newton steps
 
    f_obj % kmax        = 100_i4b ! max # of classical/outer iterations
    f_obj % lmax        = 100_i4b ! max # inner iterations
@@ -559,29 +562,37 @@ contains
   integer(i4b) :: nrow_banded ! # of rows for LAPACK banded matrix storage
   integer(i4b) :: nBands      ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil       ! number of soil layers in the solution vector
-  real(rkind),allocatable :: newtStepScaled(:),aJac(:,:),aJacScaled(:,:),rVecScaled(:) 
-  real(rkind),allocatable :: stateVecTrial(:),stateVecNew(:)
-  real(rkind),allocatable :: fluxVecNew(:)             ! new flux vector
-  real(rkind),allocatable :: resSinkNew(:)             ! sink terms on the RHS of the flux equation
-  real(qp)   ,allocatable :: resVecNew(:) ! NOTE: qp   ! new residual vector
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState)       ! Jacobian matrix
+  real(rkind)  :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! Jacobian matrix (scaled)
+  real(rkind),dimension(f_obj % in_SS4HG % nState) :: rVecScaled           ! residual vector (scaled)
+  real(rkind),dimension(f_obj % in_SS4HG % nState) :: newtStepScaled       ! full newton step (scaled)
+  real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecTrial  ! unrefined guess
+  real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecNew    ! refined guess
+
+
+  !real(rkind),allocatable :: newtStepScaled(:),aJac(:,:),aJacScaled(:,:),rVecScaled(:) 
+  !real(rkind),allocatable :: newtStepScaled(:),rVecScaled(:) 
+  !real(rkind),allocatable :: fluxVecNew(:)             ! new flux vector
+  !real(rkind),allocatable :: resSinkNew(:)             ! sink terms on the RHS of the flux equation
+  !real(qp)   ,allocatable :: resVecNew(:) ! NOTE: qp   ! new residual vector
 
   logical(lgt)   :: return_flag
   integer(i4b)   :: err
   character(256) :: cmessage
 
-  ! memory allocation for SUMMA's Jacobian 
-  if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nrow_banded=subdiag+superdiag+1
-    nBands=nrow_banded+subdiag
-    allocate(aJac(1:nBands,1:n)) !note: first 1:subdiag rows are for extra storage -- Jacobian uses remaining rows
-   end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    allocate(aJac(1:n,1:n))
-   end associate
-  end if
-  allocate(aJacScaled,mold=aJac) ! use same index ranges as aJac
+!  ! memory allocation for SUMMA's Jacobian 
+!  if (f_obj % banded) then ! banded storage
+!   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+!    nrow_banded=subdiag+superdiag+1
+!    nBands=nrow_banded+subdiag
+!    allocate(aJac(1:nBands,1:n)) !note: first 1:subdiag rows are for extra storage -- Jacobian uses remaining rows
+!   end associate
+!  else ! full matrix storage
+!   associate(n => f_obj % n)
+!    allocate(aJac(1:n,1:n))
+!   end associate
+!  end if
+!  allocate(aJacScaled,mold=aJac) ! use same index ranges as aJac
 
   ! get SUMMA Jacobian from solver Jacobian
   if (f_obj % banded) then ! banded storage
@@ -597,10 +608,13 @@ contains
   ! get the number of soil layers in the solution vector
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
 
-  ! get scaled variables
+  ! set unrefined guess
   stateVecTrial  = xvec1
-  newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step 
-  rVecScaled     = f_obj % resVec  * f_obj % fScale ! get scaled residual
+
+  ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
+  ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
+  newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+  rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -608,7 +622,7 @@ contains
    fScale   => f_obj % fScale              , & 
    xScale   => f_obj % xScale                & 
   &)
-   call scaleMatrices(ixMatrix,nState,aJac,fScale,xScale,aJacScaled,err,cmessage)
+   call scaleMatrices(ixMatrix,nState,aJac,fScale,xScale,aJacScaled,err,cmessage) ! matches solve_linear_system
   end associate
   if (err/=0) then
    if (f_obj % out_error) then
@@ -639,7 +653,6 @@ contains
    deriv_data        => f_obj % deriv_data        , &
    dBaseflow_dMatric => f_obj % dBaseflow_dMatric , &
    ! output
-   stateVecNew => xvec1             , &
    fluxVecNew  => f_obj % fluxVec0  , &
    resSinkNew  => f_obj % rAdd      , &
    resVecNew   => f_obj % resVec    , &
@@ -658,6 +671,11 @@ contains
    end if
   end if
 
+  ! store refined guess
+  xvec1 = stateVecNew
+
+  ! test block --- SJT: remove this
+  if (f_obj % out_SS4HG % converged) print *, "SUMMA_refine_Newton_step: f_obj % out_SS4HG % converged = .true."
  end subroutine SUMMA_refine_Newton_step
 
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
