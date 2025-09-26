@@ -1032,7 +1032,7 @@ contains
    ! 'strict' uses two consecutive iterations and is extremely conservative
    !     |--> (actually computes the convergence error of the previous iteration)
    ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
-  nested_Newton % convergence = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+  nested_Newton % convergence = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
   ! solver output
   call nested_Newton % solver_output('silent') ! standard output used by default 
@@ -1059,6 +1059,7 @@ contains
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
   ! call solver
+  nested_Newton % refinement  = .false.  ! apply refine_Newton_step following outer/classical iterations
   nested_Newton % constraints = .true. ! apply imposeConstraints between outer/classical iterations
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
 

@@ -314,7 +314,7 @@ subroutine opSplittin(&
   logical(lgt)                    :: exit_split_select,exit_coupling,exit_stateThenDomain,exit_solution
   logical(lgt)                    :: cycle_split_select,cycle_coupling,cycle_stateThenDomain,cycle_domainSplit,cycle_solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
+  logical(lgt),parameter :: nested_Newton_test=.true. ! test output
   ! ------------------------ classes for subroutine arguments (classes defined in data_types module) ------------------------
   !      ** intent(in) arguments **         ||       ** intent(inout) arguments **        ||      ** intent(out) arguments **
   type(in_type_indexSplit)  :: in_indexSplit;                                             type(out_type_indexSplit)  :: out_indexSplit;  ! indexSplit arguments
