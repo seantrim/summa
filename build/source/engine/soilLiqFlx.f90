@@ -1045,8 +1045,8 @@ contains
  
      end select 
    else ! do not compute infiltration after first flux call in a splitting operation unless updateInfil is true
-     dq_dHydStateVec(:) = 0._rkind
-     dq_dNrgStateVec(:) = 0._rkind ! energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
+     dq_dHydStateVec(:) = realMissing ! not used, so cause problems
+     dq_dNrgStateVec(:) = realMissing ! not used, so cause problems
    end if 
 
   end associate
@@ -1147,8 +1147,13 @@ contains
    dq_dHydStateVec => out_surfaceFlx % dq_dHydStateVec , & ! ... hydrology state in above soil snow or canopy and every soil layer (m s-1 or s-1)
    dq_dNrgStateVec => out_surfaceFlx % dq_dNrgStateVec   & ! ... energy state in above soil snow or canopy and every soil layer  (m s-1 K-1)
   &)
-   dq_dHydStateVec(:) = dq_dHydStateVec_IE(:) + dq_dHydStateVec_SE(:) ! infiltration derivative w.r.t hydrology state variable 
-   dq_dNrgStateVec(:) = dq_dNrgStateVec_IE(:) + dq_dNrgStateVec_SE(:) ! infiltration derivative w.r.t energy state variable 
+   if(updateInfil)then
+     dq_dHydStateVec(:) = dq_dHydStateVec_IE(:) + dq_dHydStateVec_SE(:) ! infiltration derivative w.r.t hydrology state variable 
+     dq_dNrgStateVec(:) = dq_dNrgStateVec_IE(:) + dq_dNrgStateVec_SE(:) ! infiltration derivative w.r.t energy state variable 
+   else
+     dq_dHydStateVec(:) = realMissing ! not used, so cause problems
+     dq_dNrgStateVec(:) = realMissing ! not used, so cause problems
+   end if
   end associate
 
  end subroutine update_gather_runoff_components
@@ -1269,8 +1274,7 @@ contains
    message            => out_surfaceFlx % message            & ! error message
   &)
 
-   if (updateInfil) then
-
+   if(updateInfil)then
     ! compute derivatives needed for infiltration derivative
     dS1_dWat          = mLayerDepth(:)                       ! derivative of S1 w.r.t. water content
     S1_T_derivatives  = SoftArgMax(-alpha_LSE,[S1,S1_T_max]) ! compute vector of derivatives for S1_T
@@ -1305,12 +1309,6 @@ contains
     ! * compute the energy derivatives (only saturation excess components for FUSE) *
     ! energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
     dq_dNrgStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dTk(:) 
-
-   else ! zero derivatives if not first split operation
-
-    dq_dHydStateVec_SE(:) = 0._rkind 
-    dq_dNrgStateVec_SE(:) = 0._rkind
-
    end if
 
   end associate
@@ -1429,8 +1427,7 @@ contains
    message            => out_surfaceFlx % message            & ! error message
   &)
 
-   if (updateInfil) then
-
+   if(updateInfil)then
     ! compute derivatives needed for infiltration derivative
     ! Ac   = 1._rkind - base**b 
     dS1_dWat  = mLayerDepth(:)                                 ! derivative of S1 w.r.t. water content
@@ -1470,12 +1467,6 @@ contains
     ! * compute the energy derivatives components (only saturation excess components for FUSE) *
     ! note: energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
     dq_dNrgStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dTk(:)
-
-   else ! zero derivatives if not first split operation
-
-    dq_dHydStateVec_SE(:) = 0._rkind 
-    dq_dNrgStateVec_SE(:) = 0._rkind
-  
    end if
 
   end associate
@@ -1656,8 +1647,7 @@ contains
    message            => out_surfaceFlx % message            & ! error message
   &)
 
-   if (updateInfil) then
-
+   if(updateInfil)then
     ! compute derivatives needed for infiltration derivative
     if (S2 > 0._rkind) then ! for S2 > 0: Ac = 1._rkind-gammp(alpha,x_crit/theta)
      dS2_dWat  = mLayerDepth(:)                       ! derivative of S2 w.r.t. water content      
@@ -1698,12 +1688,6 @@ contains
     ! * compute the energy derivatives components (only saturation excess components for FUSE) *
     ! note: energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
     dq_dNrgStateVec_SE(:) = -scalarRainPlusMelt * dAc_dWat(:) * dVolFracLiq_dTk(:)
-
-   else ! zero derivatives if not first split operation
-
-    dq_dHydStateVec_SE(:) = 0._rkind 
-    dq_dNrgStateVec_SE(:) = 0._rkind
-  
    end if
 
   end associate
@@ -1789,17 +1773,14 @@ contains
      end select
      ! note: energy state variable is temperature (transformed outside soilLiqFlx_module if needed)
      dq_dNrgStateVec(1) = -(dHydCond_dTemp/2._rkind)*(scalarMatricHeadLiq - upperBoundHead)/(mLayerDepth(1)*0.5_rkind) + dHydCond_dTemp/2._rkind
-    else
-     dq_dHydStateVec(1) = 0._rkind
-     dq_dNrgStateVec(1) = 0._rkind
    end if
 
-  ! * additional assignment statements for surfaceFlx input-output object based on presribed head values *
-  ! the infiltration is always constrained by the prescribed head so the maximum infiltration rate is set to missing
-  io_surfaceFlx % xMaxInfilRate    = realMissing ! maximum infiltration rate (m s-1)
-  ! no soil ice assumed for FUSE PRMS
-  io_surfaceFlx % scalarInfilArea  = 1._rkind ! fraction of unfrozen area where water can infiltrate (-)
-  io_surfaceFlx % scalarFrozenArea = 0._rkind      ! fraction of area that is considered impermeable due to soil ice (-)
+   ! * additional assignment statements for surfaceFlx input-output object based on presribed head values *
+   ! the infiltration is always constrained by the prescribed head so the maximum infiltration rate is set to missing
+   io_surfaceFlx % xMaxInfilRate    = realMissing ! maximum infiltration rate (m s-1)
+   ! no soil ice assumed for FUSE PRMS
+   io_surfaceFlx % scalarInfilArea  = 1._rkind ! fraction of unfrozen area where water can infiltrate (-)
+   io_surfaceFlx % scalarFrozenArea = 0._rkind      ! fraction of area that is considered impermeable due to soil ice (-)
 
   end associate
  end subroutine update_surfaceFlx_prescribedHead
@@ -1813,7 +1794,7 @@ contains
   call update_surfaceFlx_liquidFlux_computation_infiltrating_area
   call update_surfaceFlx_liquidFlux_computation_validate_infiltration
   call update_surfaceFlx_liquidFlux_computation_impermeable_area
-  call update_surfaceFlx_liquidFlux_computation_flux_derivatives
+  if(updateInfil) call update_surfaceFlx_liquidFlux_computation_flux_derivatives
   ! -- put it all together
   call update_surfaceFlx_liquidFlux_infiltration
 
@@ -2081,7 +2062,7 @@ contains
    ! infiltration rate derivatives, first initialize
     dInfilRate_dWat(:) = 0._rkind
     dInfilRate_dTk(:)  = 0._rkind
-   if (updateInfil) then
+   if(updateInfil)then
      if (xMaxInfilRate < scalarRainPlusMelt) then ! = dxMaxInfilRate_d, dependent on layers not at surface
        dInfilRate_dWat(:) = dxMaxInfilRate_dWat(:)
        dInfilRate_dTk(:)  = dxMaxInfilRate_dTk(:)
