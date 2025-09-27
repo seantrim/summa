@@ -289,7 +289,7 @@ subroutine coupled_em(&
   logical(lgt)                         :: enthalpyStateVec       ! flag if enthalpy is a state variable (IDA)
   logical(lgt)                         :: use_lookup             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_test=.true. ! test output
+  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
 
   ! ----------------------------------------------------------------------------------------------------------------------------------------------
   ! initialize error control

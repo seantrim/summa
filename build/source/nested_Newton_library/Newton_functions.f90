@@ -32,10 +32,13 @@ module Newton_functions
    logical      :: refinement  ! flag to indicate that refinement is to be applied following outer/classical Newton steps
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
+   integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
+   integer(i4b) :: nrow_banded       ! # of matrix rows for banded storage
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
    real(r8b),allocatable    :: J_save(:,:)   ! stored value of total Jacobian
+   real(r8b),allocatable    :: f_vec_save(:) ! stored value of total non-linear function evaluation
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
@@ -174,9 +177,25 @@ contains
   ! ** allocate array data components for f_obj_base class **
   class(f_obj_base),intent(inout) :: f_obj
 
+  ! allocate solution and function arrays
   associate(n => f_obj % n)
    allocate(f_obj % x0(1:n),f_obj % x1(1:n))
+   allocate(f_obj % f_vec_save(1:n)) 
   end associate
+
+  ! allocate Jacobian array
+  if (f_obj % banded) then ! banded storage
+   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    f_obj % nrow_banded=subdiag+superdiag+1
+    f_obj % nrow = f_obj % nrow_banded
+    allocate(f_obj % J_save(1:f_obj % nrow_banded,1:n))
+   end associate
+  else ! full matrix storage
+   associate(n => f_obj % n)
+    f_obj % nrow = n
+    allocate(f_obj % J_save(1:n,1:n))
+   end associate
+  end if
  end subroutine f_allocate_memory
 
  subroutine f_solver_output(f_obj,method,unit)
@@ -434,11 +453,13 @@ contains
 
  function f_diff_vec(f_obj,xvec) result(f_vec)
   ! *** form non-linear vector function using the Jordan decomposition ***
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f_vec(1:f_obj % n) ! non-linear function vector
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+  real(r8b)                       :: f_vec(1:f_obj % n) ! non-linear function vector
 
   f_vec=f_obj % f1_vec(xvec)- f_obj % f2_vec(xvec)
+
+  f_obj % f_vec_save = f_vec(:) ! store function evaluation
  end function f_diff_vec
 
  function f1_Rich_vec(f_obj,xvec) result(f1_vec)
@@ -559,7 +580,6 @@ contains
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
-  integer(i4b) :: nrow_banded ! # of rows for LAPACK banded matrix storage
   integer(i4b) :: nBands      ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil       ! number of soil layers in the solution vector
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState)       ! Jacobian matrix
@@ -569,34 +589,16 @@ contains
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecTrial  ! unrefined guess
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecNew    ! refined guess
 
-
-  !real(rkind),allocatable :: newtStepScaled(:),aJac(:,:),aJacScaled(:,:),rVecScaled(:) 
-  !real(rkind),allocatable :: newtStepScaled(:),rVecScaled(:) 
-  !real(rkind),allocatable :: fluxVecNew(:)             ! new flux vector
-  !real(rkind),allocatable :: resSinkNew(:)             ! sink terms on the RHS of the flux equation
-  !real(qp)   ,allocatable :: resVecNew(:) ! NOTE: qp   ! new residual vector
-
   logical(lgt)   :: return_flag
   integer(i4b)   :: err
   character(256) :: cmessage
 
-!  ! memory allocation for SUMMA's Jacobian 
-!  if (f_obj % banded) then ! banded storage
-!   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-!    nrow_banded=subdiag+superdiag+1
-!    nBands=nrow_banded+subdiag
-!    allocate(aJac(1:nBands,1:n)) !note: first 1:subdiag rows are for extra storage -- Jacobian uses remaining rows
-!   end associate
-!  else ! full matrix storage
-!   associate(n => f_obj % n)
-!    allocate(aJac(1:n,1:n))
-!   end associate
-!  end if
-!  allocate(aJacScaled,mold=aJac) ! use same index ranges as aJac
 
   ! get SUMMA Jacobian from solver Jacobian
+  aJac = 0._rkind
   if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag)
+   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+    nBands=nrow_banded+subdiag
     aJac(subdiag+1:nBands,1:n) = f_obj % J_save(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
    end associate
   else ! full matrix storage
@@ -609,12 +611,14 @@ contains
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
 
   ! set unrefined guess
-  stateVecTrial  = xvec1
+  !stateVecTrial = xvec1
+  stateVecTrial = xvec0 ! SJT: verify this ------------------------------------------------
 
   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
   newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
   rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
+  !rVecScaled = f_obj % fScale(:) * real(f_obj % f_vec_save(:), rkind) ! matches solve_linear_system
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -658,10 +662,12 @@ contains
    resVecNew   => f_obj % resVec    , &
    out_SS4HG   => f_obj % out_SS4HG   &  
   &)
+  !print *, mSoil,sum(stateVecTrial),sum(newtStepScaled),sum(aJacScaled),sum(rVecScaled),sum(fScale),sum(xScale)
   call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
                          &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
                          &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
                          &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                        ! output
+  !print *, sum(stateVecNew),sum(fluxVecNew),sum(resSinkNew),sum(resVecNew)
   end associate
 
   ! check for errors in refine_Newton_step call
@@ -675,7 +681,7 @@ contains
   xvec1 = stateVecNew
 
   ! test block --- SJT: remove this
-  if (f_obj % out_SS4HG % converged) print *, "SUMMA_refine_Newton_step: f_obj % out_SS4HG % converged = .true."
+  !if (f_obj % out_SS4HG % converged) print *, "SUMMA_refine_Newton_step: f_obj % out_SS4HG % converged = .true."
  end subroutine SUMMA_refine_Newton_step
 
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
@@ -795,29 +801,12 @@ contains
   ! note: perhaps it is possible to reduce the number of arrays to save memory
   ! solver variables
   class(f_obj_inputs),intent(inout) :: f_obj
-  real(r8b),allocatable,intent(out) :: J(:,:)
-  integer(i4b)                      :: nrow_banded     ! # of rows for LAPACK banded matrix storage
+  real(r8b)          ,intent(out)   :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton Jacobian
   integer(i4b)                      :: nBands          ! SUMMA's leading dimension for banded Jacobians
   ! SUMMA variables
   type(in_type_computJacob)         :: in_computJacob  ! computJacob input object
   type(out_type_computJacob)        :: out_computJacob ! computJacob output object  
-  real(r8b),allocatable             :: aJac(:,:)       ! SUMMA Jacobian array with extra storage rows
-
-
-  ! memory allocation for Jacobian 
-  if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nrow_banded=subdiag+superdiag+1
-    nBands=nrow_banded+subdiag
-    allocate(J(1:nrow_banded,1:n))
-    allocate(aJac(1:nBands,1:n)) !note: first 1:subdiag rows are for extra storage -- Jacobian uses remaining rows
-   end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    allocate(J(1:n,1:n))
-    allocate(aJac(1:n,1:n))
-   end associate
-  end if
+  real(rkind) :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
 
   ! initialize
   ! *** Transfer data to in_computJacob class object from local variables in summaSolve4homegrown ***
@@ -859,7 +848,8 @@ contains
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag)
+   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+    nBands=nrow_banded+subdiag
     J(1:nrow_banded,1:n)=aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
@@ -882,6 +872,8 @@ contains
   call f_obj % SUMMA_eval8summa(xvec)
 
   f_vec=real(f_obj % resVec,r8b)
+  
+  f_obj % f_vec_save = f_vec(:) ! store function evaluation
  end function f_SUMMA_vec
 
  function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
@@ -889,7 +881,7 @@ contains
   ! solver variables
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  real(r8b),allocatable           :: J(:,:)
+  real(r8b)                       :: J(1:f_obj % nrow,1:f_obj %n) ! nested Newton Jacobian (takes matrix storage type into account)
 
   ! compute derivatives based on current guess
   call f_obj % SUMMA_eval8summa(xvec)
@@ -898,7 +890,7 @@ contains
   call f_obj % SUMMA_computJacob(J)
 
   ! store Jacobian to permit reuse
-  f_obj % J_save = J
+  f_obj % J_save = J(:,:)
  end function Jacobian_f_SUMMA_vec
 
 end module Newton_functions
