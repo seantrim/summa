@@ -160,6 +160,7 @@ subroutine systemSolv(&
   USE eval8summaWithPrime_module,only:eval8summaWithPrime   ! get the fluxes and residuals
   USE summaSolve4ida_module,only:summaSolve4ida             ! solve DAE by IDA
   USE summaSolve4kinsol_module,only:summaSolve4kinsol       ! solve DAE by KINSOL
+  USE summaSolve4arkode_module,only:summaSolve4arkode       ! solve DAE by IDA
 #endif
   USE eval8summa_module,only:eval8summa                     ! get the fluxes and residuals
   USE summaSolve4homegrown_module,only:summaSolve4homegrown ! solve DAE using homegrown solver
@@ -272,6 +273,7 @@ subroutine systemSolv(&
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
   logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -284,7 +286,11 @@ subroutine systemSolv(&
   associate(ixNumericalMethod => model_decisions(iLookDECISIONS%num_method)%iDecision) ! intent(in): [i4b] choice of numerical solver
     select case(ixNumericalMethod)
       case(ida)    ! solve for general time step using IDA
+       if (ARKODE_flag) then ! replace with model decision in future update -- test flag for now
+        call solve_with_ARKODE; if (return_flag) return           ! solve using ARKODE -- return if error
+       else
         call solve_with_IDA; if (return_flag) return              ! solve using IDA -- return if error
+       end if
       case(kinsol) ! solve for BE time step using KINSOL
         call solve_with_KINSOL; if (return_flag) return           ! solve using KINSOL -- return if error
       case(homegrown) ! solve for BE time step using Newton iterations
@@ -676,60 +682,59 @@ contains
   end associate
 
   ! ** update operations **
-  ! call summaSolve4arkode(...) 
 
-   !---------------------------
-   ! * solve My' = fE(t,y) + fI(t,y) using ARKODE (y is the state vector, y'=dy/dt) *
-   !---------------------------
+  !---------------------------
+  ! * solve My' = fE(t,y) + fI(t,y) using ARKODE (y is the state vector, y'=dy/dt) *
+  !---------------------------
   associate(&
    nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers
    nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
   &)
    ! iterations and updates to trial state vector, fluxes, and derivatives are done inside ARKODE solver
    call summaSolve4arkode(&
-                          dt_cur,                  & ! intent(in):    current stepsize
-                          dt,                      & ! intent(in):    entire time step for drainage pond rate
-                          atol,                    & ! intent(in):    absolute tolerance
-                          rtol,                    & ! intent(in):    relative tolerance
-                          nSnow,                   & ! intent(in):    number of snow layers
-                          nSoil,                   & ! intent(in):    number of soil layers
-                          nLayers,                 & ! intent(in):    number of snow+soil layers
-                          nState,                  & ! intent(in):    number of state variables in the current subset
-                          ixMatrix,                & ! intent(in):    type of matrix (dense or banded)
-                          firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
-                          computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
-                          scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
-                          computMassBalance,       & ! intent(in):    flag to compute mass balance
-                          computNrgBalance,        & ! intent(in):    flag to compute energy balance
-                          ! input: state vector
-                          stateVecTrial,           & ! intent(in):    model state vector at the beginning of the data time step
-                          sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
-                          dMat,                    & ! intent(inout): diagonal of the Jacobian matrix (excludes fluxes)
-                          ! input: data structures
-                          model_decisions,         & ! intent(in):    model decisions
-                          lookup_data,             & ! intent(in):    lookup data
-                          type_data,               & ! intent(in):    type of vegetation and soil
-                          attr_data,               & ! intent(in):    spatial attributes
-                          mpar_data,               & ! intent(in):    model parameters
-                          forc_data,               & ! intent(in):    model forcing data
-                          bvar_data,               & ! intent(in):    average model variables for the entire basin
-                          prog_data,               & ! intent(in):    model prognostic variables for a local HRU
-                          ! input-output: data structures
-                          indx_data,               & ! intent(inout): index data
-                          diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
-                          flux_temp,               & ! intent(inout): model fluxes for a local HRU
-                          flux_sum,                & ! intent(inout): sum of fluxes model fluxes for a local HRU over a data step
-                          deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
-                          mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
-                          ! output
-                          ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                          sunSucceeds,             & ! intent(out):   flag to indicate if ida successfully solved the problem in current data step
-                          tooMuchMelt,             & ! intent(inout): flag to denote that there was too much melt
-                          nSteps,                  & ! intent(out):   number of time steps taken in solver
-                          stateVecNew,             & ! intent(inout): model state vector (y) at the end of the data time step
-                          !stateVecPrime,           & ! intent(inout): derivative of model state vector (y') at the end of the data time step
-                          balance,                 & ! intent(inout): balance per state
-                          err,cmessage)              ! intent(out):   error control
+                      dt_cur,                  & ! intent(in):    current stepsize
+                      dt,                      & ! intent(in):    data time step
+                      atol,                    & ! intent(in):    absolute tolerance
+                      rtol,                    & ! intent(in):    relative tolerance
+                      fScale,                  & ! intent(inout): characteristic scale of the function evaluations (mixed units)
+                      nSnow,                   & ! intent(in):    number of snow layers
+                      nSoil,                   & ! intent(in):    number of soil layers
+                      nLayers,                 & ! intent(in):    total number of layers
+                      nState,                  & ! intent(in):    total number of state variables
+                      ixMatrix,                & ! intent(in):    type of matrix (dense or banded)
+                      firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                      computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                      scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                      computMassBalance,       & ! intent(in):    flag to compute mass balance
+                      computNrgBalance,        & ! intent(in):    flag to compute energy balance
+                      ! input: state vectors
+                      stateVecInit,            & ! intent(in):    initial state vector
+                      sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                      dMat,                    & ! intent(inout): diagonal of the Jacobian matrix (excludes fluxes)
+                      ! input: data structures
+                      model_decisions,         & ! intent(in):    model decisions
+                      lookup_data,             & ! intent(in):    lookup data
+                      type_data,               & ! intent(in):    type of vegetation and soil
+                      attr_data,               & ! intent(in):    spatial attributes
+                      mpar_data,               & ! intent(in):    model parameters
+                      forc_data,               & ! intent(in):    model forcing data
+                      bvar_data,               & ! intent(in):    average model variables for the entire basin
+                      prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                      ! input-output: data structures
+                      indx_data,               & ! intent(inout): index data
+                      diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                      flux_temp,               & ! intent(inout): model fluxes for a local HRU
+                      flux_sum,                & ! intent(inout): sum of fluxes model fluxes for a local HRU over a dt_cur
+                      deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                      mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
+                      ! output
+                      ixSaturation,            & ! intent(inout)  index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                      sunSucceeds,             & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
+                      tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
+                      nSteps,                  & ! intent(out):   number of time steps taken in solver
+                      stateVecNew,             & ! intent(out):   model state vector
+                      balance,                 & ! intent(inout): balance per state
+                      err,cmessage)               ! intent(out):   error control
   end associate
 
   ! ** finalize operations **
