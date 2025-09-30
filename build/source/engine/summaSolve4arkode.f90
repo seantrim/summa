@@ -265,7 +265,7 @@ contains
    integer(i4b) :: iVar ! loop index
 
    ! error messages
-   character(:),allocatable :: cmessage ! error message
+   character(256) :: cmessage ! error message
 
    !======= Internals ============
 
