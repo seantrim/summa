@@ -37,8 +37,8 @@ module Newton_functions
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
-   real(r8b),allocatable    :: J_save(:,:)   ! stored value of total Jacobian
-   real(r8b),allocatable    :: f_vec_save(:) ! stored value of total non-linear function evaluation
+   real(r8b),allocatable    :: J(:,:)        ! total Jacobian
+   real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
@@ -124,15 +124,15 @@ module Newton_functions
   contains
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
-   procedure :: f_vec  => f_SUMMA_vec ! solver
-   !procedure :: f_vec  => f_diff_vec  ! solver
+   procedure :: f_vec_eval => f_SUMMA_vec ! solver
+   !procedure :: f_vec_eval => f_diff_vec  ! solver
    procedure :: f1_vec => f1_Rich_vec ! solver
    procedure :: f2_vec => f2_Rich_vec ! solver
    procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
-   procedure :: J  => Jacobian_f_SUMMA_vec  ! solver
-   !procedure :: J  => Jacobian_f_Rich_vec  ! solver
+   procedure :: J_eval => Jacobian_f_SUMMA_vec  ! solver
+   !procedure :: J_eval => Jacobian_f_Rich_vec  ! solver
    procedure :: J1 => Jacobian_f1_Rich_vec ! solver
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
@@ -182,7 +182,7 @@ contains
   ! allocate solution and function arrays
   associate(n => f_obj % n)
    allocate(f_obj % x0(1:n),f_obj % x1(1:n))
-   allocate(f_obj % f_vec_save(1:n)) 
+   allocate(f_obj % f_vec(1:n)) 
   end associate
 
   ! allocate Jacobian array
@@ -190,12 +190,12 @@ contains
    associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
     f_obj % nrow_banded=subdiag+superdiag+1
     f_obj % nrow = f_obj % nrow_banded
-    allocate(f_obj % J_save(1:f_obj % nrow_banded,1:n))
+    allocate(f_obj % J(1:f_obj % nrow_banded,1:n))
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
     f_obj % nrow = n
-    allocate(f_obj % J_save(1:n,1:n))
+    allocate(f_obj % J(1:n,1:n))
    end associate
   end if
  end subroutine f_allocate_memory
@@ -453,16 +453,13 @@ contains
   end if
  end function Jacobian_f2_Rich_vec
 
- function f_diff_vec(f_obj,xvec) result(f_vec)
-  ! *** form non-linear vector function using the Jordan decomposition ***
+ subroutine f_diff_vec(f_obj,xvec)
+  ! *** form non-linear vector function using the decomposition ***
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
-  real(r8b)                       :: f_vec(1:f_obj % n) ! non-linear function vector
 
-  f_vec=f_obj % f1_vec(xvec)- f_obj % f2_vec(xvec)
-
-  f_obj % f_vec_save = f_vec(:) ! store function evaluation
- end function f_diff_vec
+  f_obj % f_vec = f_obj % f1_vec(xvec) - f_obj % f2_vec(xvec)
+ end subroutine f_diff_vec
 
  function f1_Rich_vec(f_obj,xvec) result(f1_vec)
   class(f_obj_type),intent(in) :: f_obj
@@ -599,11 +596,11 @@ contains
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
     nBands=nrow_banded+subdiag
-    aJac(subdiag+1:nBands,1:n) = f_obj % J_save(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+    aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
-    aJac = f_obj % J_save(1:n,1:n)
+    aJac = f_obj % J(1:n,1:n)
    end associate
   end if
 
@@ -617,7 +614,7 @@ contains
   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
   newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
   rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
-  !rVecScaled = f_obj % fScale(:) * real(f_obj % f_vec_save(:), rkind) ! matches solve_linear_system (equivalent to above line)
+  !rVecScaled = f_obj % fScale(:) * real(f_obj % f_vec(:), rkind) ! matches solve_linear_system (equivalent to above line)
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -798,12 +795,11 @@ contains
   end associate
  end subroutine SUMMA_eval8summa
 
- subroutine SUMMA_computJacob(f_obj,J)
+ subroutine SUMMA_computJacob(f_obj)
   ! ** Interface for SUMMA's computJacob subroutine **
   ! note: perhaps it is possible to reduce the number of arrays to save memory
   ! solver variables
   class(f_obj_inputs),intent(inout) :: f_obj
-  real(r8b)          ,intent(out)   :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton Jacobian
   integer(i4b)                      :: nBands          ! SUMMA's leading dimension for banded Jacobians
   ! SUMMA variables
   type(in_type_computJacob)         :: in_computJacob  ! computJacob input object
@@ -843,7 +839,7 @@ contains
    call out_computJacob % finalize(err,cmessage)
    if (err /= 0) then
     if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in Jacobian_f_SUMMA_vec: computJacob message="//trim(cmessage); stop
+     write(f_obj % unit,*) "Error in SUMMA_computJacob: computJacob message="//trim(cmessage); stop
     end if
    end if
   end associate
@@ -852,47 +848,42 @@ contains
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
     nBands=nrow_banded+subdiag
-    J(1:nrow_banded,1:n)=aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+    f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
-    J=aJac(1:n,1:n)
+    f_obj % J = aJac(1:n,1:n)
    end associate
   end if
 
  end subroutine SUMMA_computJacob
 
- function f_SUMMA_vec(f_obj,xvec) result(f_vec)
+ subroutine f_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function ***
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
-  real(r8b)                       :: f_vec(1:f_obj % n) ! non-linear function vector
 
   ! compute SUMMA residual (taken to be the non-linear function) based on current guess
   ! note: - eval8summa may contain extraneous computations not needed for the residual
   !       - perhaps introducing logical flags in eval8summa to isolate the required operations would boost efficiency 
   call f_obj % SUMMA_eval8summa(xvec)
 
-  f_vec=real(f_obj % resVec,r8b)
+  f_obj % f_vec = real(f_obj % resVec,r8b)
   
-  f_obj % f_vec_save = f_vec(:) ! store function evaluation
- end function f_SUMMA_vec
+ end subroutine f_SUMMA_vec
 
- function Jacobian_f_SUMMA_vec(f_obj,xvec) result(J)
+ subroutine Jacobian_f_SUMMA_vec(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian **
   ! solver variables
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                       :: J(1:f_obj % nrow,1:f_obj %n) ! nested Newton Jacobian (takes matrix storage type into account)
 
   ! compute derivatives based on current guess
-  call f_obj % SUMMA_eval8summa(xvec)
+  !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
 
   ! assemble Jacobian using the computed derivatives
-  call f_obj % SUMMA_computJacob(J)
+  call f_obj % SUMMA_computJacob()
 
-  ! store Jacobian to permit reuse
-  f_obj % J_save = J(:,:)
- end function Jacobian_f_SUMMA_vec
+ end subroutine Jacobian_f_SUMMA_vec
 
 end module Newton_functions

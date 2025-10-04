@@ -30,48 +30,37 @@ contains
   ! Newton solver for vector problems
   type(f_obj_type),intent(inout) :: f_obj 
   real(r8b) :: xk(1:f_obj % n),xkp1(1:f_obj % n) ! x^k and x^{k+1}
-  real(r8b),allocatable :: J(:,:)                ! Jacobian
-  real(r8b) :: fval(1:f_obj % n)                 ! for storing the current function value
   real(r8b) :: final_mean                        ! mean of final solution vector
   real(r8b) :: R_est                             ! estimated max relative difference in solution between iterations
   integer(i4b) :: k                              ! iteration counter
+  logical :: f_eval_flag                         ! flag controlling non-linear function evaluations
   logical :: exit_flag                           ! exit flag
   ! LAPACK Variables
-  real(r8b),allocatable :: A(:,:)                ! input and result matrix
   real(r8b) :: B(1:f_obj % n)                    ! right-hand side / solution vector
   integer(i4b) :: M                              ! # of rows/columns for linear system
-  integer(i4b) :: nrow_banded                    ! # of rows for banded storage
 
   ! initialize convergence flag
   f_obj % converged = .false.
-
-  ! allocate memory for choice of Jacobian storage
-  if (f_obj % banded) then ! banded storage
-   nrow_banded=f_obj % subdiag + f_obj % superdiag + 1
-   allocate(J(1:nrow_banded,1:f_obj % n),A(1:nrow_banded,1:f_obj % n))
-  else ! full matrix storage
-   allocate(J(1:f_obj % n,1:f_obj % n),A(1:f_obj % n,1:f_obj % n))
-  end if
 
   ! initialize LAPACK parameters
   M=f_obj % n 
 
   f_obj % inner = .false. ! classical iterations only
+  f_eval_flag = .true. ! function evaluation flag
   exit_flag=.false.
   xk=f_obj % x0 ! initialize
   do k=0,f_obj % kmax
-   fval=f_obj % f_vec(xk)
-   J=f_obj % J(xk) ! compute Jacobian
+   if (f_eval_flag) call f_obj % f_vec_eval(xk) ! compute non-linear function vector (f_obj % f_vec)
+   call f_obj % J_eval(xk) ! compute Jacobian (f_obj % J)
 
    ! begin LAPACK operations
-   A=J     ! initialize matrix used by LAPACK
-   B=-fval ! initialize right-side vector used by LAPACK
-   call linear_solve(f_obj,M,A,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
+   B=-f_obj % f_vec ! initialize right-side vector used by LAPACK
+   call linear_solve(f_obj,f_obj % n,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output -- M is the # of rows/columns of A
 
    xkp1=xk+B ! update guess
    if (f_obj % refinement) call f_obj % apply_refinement(xk,xkp1) ! apply Newton step refinement
 
-   call check_residual_vector(f_obj,k,xkp1,xk,R_est,exit_flag)
+   call check_residual_vector(f_obj,k,xkp1,xk,R_est,f_eval_flag,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
@@ -82,9 +71,11 @@ contains
    xk=xkp1 ! prep for next iteration - can probably evaluate in place
   end do
   ! final output
-  final_mean=sum(xkp1)/f_obj % n 
   if (exit_flag.eqv..true.) then
-   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k+1,final_mean,f_obj % R(1)
+   if (f_obj % out_detail) then
+    final_mean=sum(xkp1)/f_obj % n 
+    write(f_obj % unit,'(i4,3(g23.15))') k+1,final_mean,f_obj % R(1)
+   end if
    f_obj % kcount=k+1
   else
    f_obj % kcount=k
@@ -98,7 +89,6 @@ contains
   end if
 
   f_obj % x1=xkp1
-  !write(f_obj % unit,*) "Mean Solution=",final_mean
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
 
  end subroutine Newton_vector
@@ -113,6 +103,7 @@ contains
   real(r8b) :: R_est                             ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
   integer(i4b) :: l_total                        ! total number of inner iterations
+  logical :: f_eval_flag                         ! flag for function evaluations (may need to separate into inner and outer flags)
   logical :: exit_outer,exit_inner 
   ! LAPACK Variables
   real(r8b),allocatable :: A(:,:)                ! input and result matrix
@@ -158,7 +149,7 @@ contains
     call linear_solve(f_obj,M,A,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
     xkp1lp1=B ! update guess
 
-    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,R_est,exit_inner)
+    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,R_est,f_eval_flag,exit_inner)
     ! print exact convergence error
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
@@ -179,8 +170,10 @@ contains
     l_total=l_total+l
    end if
 
+   if (f_obj % refinement) call f_obj % apply_refinement(xk0,xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
+
    f_obj % inner=.false.
-   call check_residual_vector(f_obj,k,xkp1lp1,xk0,R_est,exit_outer)
+   call check_residual_vector(f_obj,k,xkp1lp1,xk0,R_est,f_eval_flag,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
@@ -194,10 +187,10 @@ contains
   end do outer
 
   ! outer iterations counts 
-  final_mean=sum(xkp1lp1)/f_obj % n
   if (exit_outer) then
    ! final convergence error for outer iterations (if early loop exit occurred)
    if (f_obj % out_detail) then
+    final_mean=sum(xkp1lp1)/f_obj % n
     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean,f_obj % R(1) ! mean of final solution 
    end if
    f_obj % kcount = k+1
@@ -213,7 +206,6 @@ contains
   end if
 
   f_obj % x1=xkp1lp1
-  !write(f_obj % unit,*) "Mean Solution=",final_mean
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then
@@ -222,24 +214,26 @@ contains
   end if
  end subroutine nested_Newton_vector
 
- subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag)
+ subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,f_eval_flag,exit_flag)
   ! *** Check residual vector for potential loop exit ***
   type(f_obj_type),intent(inout) :: f_obj 
-  integer(i4b),intent(in) :: iteration  ! interation count
+  integer(i4b),intent(in) :: iteration   ! interation count
   real(r8b),intent(in)    :: xkp1(1:f_obj % n)  ! current root estimate
   real(r8b),intent(in)    :: xk(1:f_obj % n)    ! previous root estimate
-  logical,intent(inout)   :: exit_flag  ! exit flag
-  real(r8b),intent(out)   :: R_est      ! estimated R for current iteration (computed in the previous call)
+  logical,intent(inout)   :: f_eval_flag ! function evaluation flag
+  logical,intent(inout)   :: exit_flag   ! exit flag
+  real(r8b),intent(out)   :: R_est       ! estimated R for current iteration (computed in the previous call)
   ! local variables
-  real(r8b)               :: tol        ! tolerance
-  real(r8b)               :: R(-1:1)    ! maximum residual array (two previous exact values and prediction for next iteration)
+  real(r8b)               :: tol         ! tolerance
+  real(r8b)               :: R(-1:1)     ! maximum residual array (two previous exact values and prediction for next iteration)
   integer(i4b)            :: i                  ! index for residual vector
   real(r8b)               :: R_vec(1:f_obj % n) ! residual vector
   real(r8b)               :: b                  ! exponent used for convergence error estimation 
 
   if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
    ! function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
-   exit_flag = f_obj % custom_convergence(f_obj % f_vec(xkp1),xkp1-xk,xkp1)
+   call f_obj % f_vec_eval(xkp1); f_eval_flag = .false. ! function evaluation (may be reused for next Newton iteration)
+   exit_flag = f_obj % custom_convergence(f_obj % f_vec,xkp1-xk,xkp1)
    if (exit_flag)  return  ! set exit flag if criterion is satisfied
   else
 
