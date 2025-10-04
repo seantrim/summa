@@ -340,61 +340,54 @@ contains
   end if
  end function matrix_vector_product
 
- subroutine linear_solve(f_obj,M,A,B,tol)
+ subroutine linear_solve(f_obj,N,A,B,tol)
   ! *** Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A *** 
   type(f_obj_type),intent(in) :: f_obj           ! class object containing solver options
   ! LAPACK Variables
-  integer(i4b),intent(in) :: M                   ! # of rows/columns for linear system
+  integer(i4b),intent(in) :: N                   ! # of rows/columns for linear system
   real(r8b),allocatable,intent(inout) :: A(:,:)  ! input and result matrix (result is LU factorization of scaled matrix)
-  real(r8b),intent(inout) :: B(1:M)              ! right-hand side / solution vector
+  real(r8b),intent(inout) :: B(1:N)              ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                 ! tolerance value used by the calling routine
   ! local variables
-  character(1) :: FACT                           ! option for matrix factoring
-  character(1) :: TRANS                          ! option for matrix transposition
-  character(1) :: EQUED                          ! specifies equilibration type
-  integer(i4b) :: N                              ! # of matrix columns
+  character(1),parameter :: FACT='E'             ! option for matrix factoring (equilibrate matrix prior to factoring)
+  character(1),parameter :: TRANS='N'            ! option for matrix transposition (no transposition)
+  character(1),parameter :: EQUED='N'            ! specifies equilibration type (no initial equilibration)
   integer(i4b) :: KL,KU                          ! # of subdiagonals and superdiagonals
   integer(i4b) :: LDA,LDAF,LDX,LDB               ! leading dimensions of A, AF, X, and B arrays
-  integer(i4b) :: NRHS                           ! # of right-hand sides in B vector
+  integer(i4b),parameter :: NRHS=1_i4b           ! # of right-hand sides in B vector
   integer(i4b) :: INFO                           ! error code
-  integer(i4b) :: IPIV(1:M)                      ! pivot index vector
-  integer(i4b) :: IWORK(1:M)                     ! work integer array
-  real(r8b) :: RA(1:M),CA(1:M)                   ! row and column scale factors for A
+  integer(i4b) :: IPIV(1:N)                      ! pivot index vector
+  integer(i4b) :: IWORK(1:N)                     ! work integer array
+  real(r8b) :: RA(1:N),CA(1:N)                   ! row and column scale factors for A
   real(r8b) :: RCOND                             ! estimate of condition number reciprocal
   real(r8b),allocatable :: AF(:,:)               ! output matrix (result is LU factorization of scaled matrix)
-  !real(r8b) :: AF(1:M,1:M)                       ! output matrix (result is LU factorization of scaled matrix)
-  real(r8b) :: X(1:M)                            ! solution to original (unscaled) system
+  real(r8b) :: X(1:N)                            ! solution to original (unscaled) system
   real(r8b) :: FERR(1:1),BERR(1:1)               ! forward and backward error estimates (single right-hand side assumed)
   real(r8b),allocatable :: WORK(:)               ! work array (reciprocal pivot growth factor in work(1) on exit)
-  !real(r8b) :: WORK(1:4_i4b*M)                   ! work array (reciprocal pivot growth factor in work(1) on exit)
-  ! testing variables
-  logical, parameter :: test=.false.
 
-  ! allocate memory for choice of matrix storage
+  ! LAPACK parameters independent of matrix storage type
+  LDX=N; LDB=N ! use arrays of minimum size
+
+  ! allocate memory and set LAPACK parameters for choice of matrix storage
   if (f_obj % banded) then ! banded storage
    KL=f_obj % subdiag; KU=f_obj % superdiag 
    LDA=KL + KU + 1; LDAF=LDA+KL
-   allocate(AF(1:LDAF,1:M),WORK(1:3_i4b*M)) ! storing LU factors requires an additional f_obj % subdiag rows
+   allocate(AF(1:LDAF,1:N)) ! storing LU factors requires an additional f_obj % subdiag rows
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:3_i4b*N)) 
   else ! full matrix storage
-   LDA=M; LDAF=M
-   allocate(AF(1:M,1:M),WORK(1:4_i4b*M))
+   LDA=N; LDAF=N
+   allocate(AF(1:N,1:N))
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:4_i4b*N)) 
   end if
-
-  ! LAPACK Parameters
-  FACT='E'  ! equilibrate matrix prior to factoring
-  TRANS='N' ! assume no transposition
-  EQUED='N' ! assume no initial equilibration
-  N=M; LDX=M; LDB=M ! assume a square system and use arrays of minimum size
-  NRHS=1 ! assume a single right-hand side vector
 
   ! begin LAPACK operations
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
     AF(1:KL,:)=0._r8b; AF(KL+1:LDAF,:)=A(1:LDA,:) ! load banded storage matrix used by LAPACK (stores LU factors on output)
-    call DGBSV (N, KL, KU, NRHS, AF, LDAF, IPIV, B, LDB, INFO)
+    call DGBSV(N,KL,KU,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
    else ! full matrix storage
     AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
-    call DGESV (N, NRHS, AF, LDAF, IPIV, B, LDB, INFO)
+    call DGESV(N,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % banded) then ! banded matrix storage
@@ -403,29 +396,39 @@ contains
     call DGESVX(FACT,TRANS,N,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
    end if
    B=X ! put solution in output vector
-  else
-   if (f_obj % out_error) then
-    write(f_obj % unit,*) "Linear system solver choice is not supported."; stop
-   end if
   end if
 
-  if (INFO.ne.0) then
-   if (INFO.eq.(N+1_i4b)) then
-    if (f_obj % out_warning) then
-     write(f_obj % unit,*) "LAPACK Warning: RCOND=",RCOND,"may be too low for an accurate solution."
-    end if
-   else
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "LAPACK Error: DGESVX exited with an error code of",info,"."; stop
+  ! error control
+  if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
+   if (INFO.ne.0) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "LAPACK Error: DGESV or DGBSV exited with an error code of",info,"."
+     end if
+     stop ! fatal error
+   end if
+  else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
+   if (INFO.ne.0) then
+    if (INFO.eq.(N+1_i4b)) then
+     if (f_obj % out_warning) then
+      write(f_obj % unit,*) "LAPACK Warning: RCOND=",RCOND,"may be too low for an accurate solution."
+     end if
+    else
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "LAPACK Error: DGESVX or DGBSVX exited with an error code of",info,"."
+     end if
+     stop ! fatal error
     end if
    end if
-  end if
-  if (f_obj % out_warning) then
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") then
-    if ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then
-      write(f_obj % unit,*) "LAPACK Warning -- tolerance not met:",RCOND,FERR,BERR ! print error information if tolerance is not met
+   if (f_obj % out_warning) then
+    if ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then ! print error information if tolerance is not met
+      write(f_obj % unit,*) "LAPACK Warning -- tolerance not met using expert solver:",RCOND,FERR,BERR 
     end if
    end if
+  else
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Linear system solver choice is not supported."
+   end if
+   stop ! fatal error
   end if
 
  end subroutine linear_solve
