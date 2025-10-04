@@ -346,7 +346,6 @@ contains
   ! LAPACK Variables
   integer(i4b),intent(in) :: M                   ! # of rows/columns for linear system
   real(r8b),allocatable,intent(inout) :: A(:,:)  ! input and result matrix (result is LU factorization of scaled matrix)
-  !real(r8b),intent(inout) :: A(1:M,1:M)          ! input and result matrix (result is LU factorization of scaled matrix)
   real(r8b),intent(inout) :: B(1:M)              ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                 ! tolerance value used by the calling routine
   ! local variables
@@ -389,11 +388,25 @@ contains
   NRHS=1 ! assume a single right-hand side vector
 
   ! begin LAPACK operations
-  ! Use expert solver with scaling and iterative refinement
-  if (f_obj % banded) then ! banded matrix storage
-   call DGBSVX(FACT,TRANS,N,KL,KU,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
-  else ! full matrix storage
-   call DGESVX(FACT,TRANS,N,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+  if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
+   if (f_obj % banded) then ! banded matrix storage
+    AF(1:KL,:)=0._r8b; AF(KL+1:LDAF,:)=A(1:LDA,:) ! load banded storage matrix used by LAPACK (stores LU factors on output)
+    call DGBSV (N, KL, KU, NRHS, AF, LDAF, IPIV, B, LDB, INFO)
+   else ! full matrix storage
+    AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
+    call DGESV (N, NRHS, AF, LDAF, IPIV, B, LDB, INFO)
+   end if
+  else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
+   if (f_obj % banded) then ! banded matrix storage
+    call DGBSVX(FACT,TRANS,N,KL,KU,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+   else ! full matrix storage
+    call DGESVX(FACT,TRANS,N,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+   end if
+   B=X ! put solution in output vector
+  else
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Linear system solver choice is not supported."; stop
+   end if
   end if
 
   if (INFO.ne.0) then
@@ -407,14 +420,13 @@ contains
     end if
    end if
   end if
-  if (test) then
-   write(f_obj % unit,*) "LAPACK Test:",RCOND,FERR,BERR ! print error information for testing
-  else if ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then
-   if (f_obj % out_warning) then
-    write(f_obj % unit,*) "LAPACK Warning -- tolerance not met:",RCOND,FERR,BERR ! print error information if tolerance is not met
+  if (f_obj % out_warning) then
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") then
+    if ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then
+      write(f_obj % unit,*) "LAPACK Warning -- tolerance not met:",RCOND,FERR,BERR ! print error information if tolerance is not met
+    end if
    end if
   end if
-  B=X ! put solution in output vector
 
  end subroutine linear_solve
 

@@ -43,6 +43,7 @@ module Newton_functions
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
    character(:),allocatable :: convergence   ! string for convergence control option
+   character(:),allocatable :: linear_system_solver ! string for selecting solver for linear systems
    ! solver output
    character(:),allocatable :: output ! string for solver output control option
    integer(i4b) :: unit        ! file unit number for solver output
@@ -167,9 +168,10 @@ contains
    f_obj % tol         = 1.e-8   ! tolerance for classical/outer iterations
    f_obj % tol_inner   = 1.e-8   ! tolerance for inner iterations
 
-   f_obj % convergence = "strict"     ! string for convergence criterion method for solver
-   f_obj % output      = "production" ! string for solver output control option
-   f_obj % unit        = stdout       ! file unit number for solver output
+   f_obj % linear_system_solver = "LAPACK_expert" ! string for control of linear system solver
+   f_obj % convergence = "strict"                 ! string for convergence criterion method for solver
+   f_obj % output      = "production"             ! string for solver output control option
+   f_obj % unit        = stdout                   ! file unit number for solver output
 
  end subroutine f_set_defaults
  
@@ -588,11 +590,9 @@ contains
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: newtStepScaled       ! full newton step (scaled)
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecTrial  ! unrefined guess
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecNew    ! refined guess
-
   logical(lgt)   :: return_flag
   integer(i4b)   :: err
   character(256) :: cmessage
-
 
   ! get SUMMA Jacobian from solver Jacobian
   aJac = 0._rkind
@@ -611,14 +611,13 @@ contains
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
 
   ! set unrefined guess
-  !stateVecTrial = xvec1
-  stateVecTrial = xvec0 ! SJT: verify this ------------------------------------------------
+  stateVecTrial = xvec0 
 
   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
   newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
   rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
-  !rVecScaled = f_obj % fScale(:) * real(f_obj % f_vec_save(:), rkind) ! matches solve_linear_system
+  !rVecScaled = f_obj % fScale(:) * real(f_obj % f_vec_save(:), rkind) ! matches solve_linear_system (equivalent to above line)
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -662,12 +661,12 @@ contains
    resVecNew   => f_obj % resVec    , &
    out_SS4HG   => f_obj % out_SS4HG   &  
   &)
-  !print *, mSoil,sum(stateVecTrial),sum(newtStepScaled),sum(aJacScaled),sum(rVecScaled),sum(fScale),sum(xScale)
-  call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
-                         &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
-                         &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
-                         &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                        ! output
-  !print *, sum(stateVecNew),sum(fluxVecNew),sum(resSinkNew),sum(resVecNew)
+   !print *, mSoil,sum(xvec1),sum(stateVecTrial),sum(newtStepScaled),sum(aJacScaled),sum(rVecScaled),sum(fScale),sum(xScale) !SJT: --- take out ---
+   call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
+                          &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
+                          &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
+                          &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                        ! output
+   !print *, sum(stateVecNew),sum(fluxVecNew),sum(resSinkNew),sum(resVecNew) !SJT: --- take out ---
   end associate
 
   ! check for errors in refine_Newton_step call
@@ -678,7 +677,10 @@ contains
   end if
 
   ! store refined guess
-  xvec1 = stateVecNew
+  xvec1 = stateVecNew(:)
+
+  ! update function value for line search
+  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
 
   ! test block --- SJT: remove this
   !if (f_obj % out_SS4HG % converged) print *, "SUMMA_refine_Newton_step: f_obj % out_SS4HG % converged = .true."
