@@ -1032,7 +1032,10 @@ contains
 
   
   ! * Nested Newton solver options *
+
+  ! Newton iteration type
   nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+
   ! set method for computing relative convergence error
    ! 'strict' uses two consecutive iterations and is extremely conservative
    !     |--> (actually computes the convergence error of the previous iteration)
@@ -1044,30 +1047,28 @@ contains
 
   ! set tolerance values
   ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-  call nested_Newton % set_tolerance('strict',1.0e-6_r8b,30_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  call nested_Newton % set_tolerance('strict',1.0e-6_r8b,100_i4b) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+
+  ! Linear system solver choice
+  nested_Newton % linear_system_solver = "LAPACK_standard"
+
+  ! Newton step refinement
+  nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
+
+  ! constraints 
+  nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
+
+  ! * Solver Operations *
 
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
-
-  ! test block -- take out
-  !print *, "Nested Newton Test: A"
-  !print *, "ixMatrix,ixFullMatrix,ixBandMatrix:",ixMatrix,ixFullMatrix,ixBandMatrix
-  !print *, " sum of res vec  =",sum(nested_Newton % f_vec(stateVecTrial)) 
-  !print *, " sum of Jacobian =",sum(nested_Newton % J(stateVecTrial))
-  !print *, "Observed Shape of NN Jacobian:",shape(nested_Newton % J(stateVecTrial))
-  !print *, "Expected shape of NN Jacobian:",nBands-kl,nState 
-
-  ! * Solver Operations *
 
   ! set up initial guess
   nested_Newton % x1=stateVecTrial(1:nState)  ! initialize solution from previous time step
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
   ! call solver
-  nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
-  nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
-
 
   ! finalize operations for SS4HG objects (not all variables are used)
   call nested_Newton % io_SS4HG &
