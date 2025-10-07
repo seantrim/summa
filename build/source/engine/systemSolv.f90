@@ -273,7 +273,7 @@ subroutine systemSolv(&
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
   logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
-  logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: ARKODE_flag=.true.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -643,7 +643,6 @@ contains
 
  subroutine solve_with_ARKODE
   ! contains initialize-update-finalize sequence for ARKODE
-  ! note: may be able to use solve_with_IDA internal subroutine as a guide for development
 #ifdef SUNDIALS_ACTIVE
   ! ** initialize operations **
 
@@ -708,7 +707,8 @@ contains
                       computMassBalance,       & ! intent(in):    flag to compute mass balance
                       computNrgBalance,        & ! intent(in):    flag to compute energy balance
                       ! input: state vectors
-                      stateVecInit,            & ! intent(in):    initial state vector
+                      !stateVecInit,            & ! intent(in):    initial state vector
+                      stateVecTrial,           & ! intent(in):    model state vector at the beginning of the data time step
                       sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
                       dMat,                    & ! intent(inout): diagonal of the Jacobian matrix (excludes fluxes)
                       ! input: data structures

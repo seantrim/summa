@@ -132,7 +132,6 @@ contains
                       tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
                       stateVec,                & ! intent(out):   model state vector
-                     ! stateVecPrime,           & ! intent(out):   derivative of model state vector
                       balance,                 & ! intent(inout): balance per state
                       err,message)               ! intent(out):   error control
 
@@ -167,7 +166,7 @@ contains
    integer(i4b),intent(in)         :: nSnow                  ! number of snow layers
    integer(i4b),intent(in)         :: nSoil                  ! number of soil layers
    integer(i4b),intent(in)         :: nLayers                ! total number of layers
-   integer(i4b),intent(in)         :: nState                  ! total number of state variables
+   integer(i4b),intent(in)         :: nState                 ! total number of state variables
    integer(i4b),intent(in)         :: ixMatrix               ! form of matrix (dense or banded)
    logical(lgt),intent(in)         :: firstSubStep           ! flag to indicate if we are processing the first sub-step
    logical(lgt),intent(in)         :: computeVegFlux         ! flag to indicate if computing fluxes over vegetation
@@ -307,7 +306,7 @@ contains
 
    ! main solver loop
    call update_ARKODE_solver_loop; if (return_flag) return
-
+   print *, "summaSolve4arkode A:" ! SJT --- take out ---
    ! finalize
    call finalize_ARKODE_solver; if (return_flag) return
   contains
@@ -488,7 +487,7 @@ contains
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetUserData'; return_flag=.true.; return; end if
 
     ! Attach the matrix and linear solver
-    ! For the nonlinear solver, ARKODE uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it ** SJT: verify this **
+    ! For the nonlinear solver, ARKODE uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it
     retval = FARKodeSetLinearSolver(arkode_mem, sunls, sunmat_A)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetLinearSolver'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_memory
@@ -545,9 +544,9 @@ contains
    subroutine initialize_solver_options
     ! *** set ARKODE solver options ***
     ! note: implicit methods are used due to NULL input for the explicit RHS function in FARKStepCreate call in initialize_ARKODE_memory
-    logical(lgt), parameter  :: use_Butcher_tableau = .true. ! flag controlling use of specified Butcher tableau (else use order parameter)
+    logical(lgt), parameter  :: use_Butcher_tableau = .false. ! flag controlling use of specified Butcher tableau (else use order parameter)
     character(:),allocatable :: method          ! string for ARKODE Butcher tableau
-    integer(c_int),parameter :: order = 2_c_int ! order of time integration scheme if not using Butcher tableau (2 <= order <= 5)
+    integer(c_int),parameter :: order = 3_c_int ! order of time integration scheme if not using Butcher tableau (2 <= order <= 5)
 
     if (use_Butcher_tableau) then ! specify a built-in ARKODE Butcher tableau
       method = "ARKODE_SDIRK_2_1_2"
@@ -566,7 +565,7 @@ contains
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return_flag=.true.; return; end if
 
-    ! SJT: the following is based on the looping strategy from summaSolve4ida, but adaptive time steps must be taken into account 
+    ! the following is based on the looping strategy from summaSolve4ida
     tinystep = .false.
     tret(1)  = tstart  ! initial time
     tretPrev = tret(1)

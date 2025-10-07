@@ -785,7 +785,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   ! pointers to data in SUNDIALS vectors
   type(data4ida), pointer     :: eqns_data   ! equations data
   real(rkind), pointer        :: stateVec(:) ! solution vector
-  real(rkind), allocatable    :: rVec(:)     ! residual vector
+  !real(rkind), allocatable    :: rVec(:)     ! residual vector
   logical(lgt)                :: feasible    ! feasibility of state vector
   real(rkind), allocatable    :: fRHS(:)     ! RHS function for ARKODE 
   real(rkind), pointer        :: f(:)        ! pointer for RHS function for ARKODE
@@ -799,7 +799,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   call c_f_pointer(user_data, eqns_data)
 
   ! allocate memory
-  allocate(rVec(1:eqns_data%nState)) ! normally a deferred shape array but we need explicit allocation here
+  !allocate(rVec(1:eqns_data%nState)) ! normally a deferred shape array but we need explicit allocation here
 
   ! get data arrays from SUNDIALS vectors
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
@@ -857,7 +857,8 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                 eqns_data%fluxVec,                 & ! intent(out):   flux vector
                 fRHS,                              & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
-                rVec,                              & ! intent(out):   residual vector
+                eqns_data%resVec,                  & ! intent(out):   residual vector
+                !rVec,                              & ! intent(out):   residual vector
                 fNew,                              & ! intent(out):   new function evaluation
                 eqns_data%err,eqns_data%message)     ! intent(out):   error control
   if(eqns_data%err > 0)then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; endif
@@ -867,7 +868,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   f=fRHS(1:eqns_data%nState)
   
   ! save residual and return success
-  eqns_data%resVec = rVec
+  !eqns_data%resVec = rVec
   ierr = 0
   return
 
