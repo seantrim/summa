@@ -66,7 +66,8 @@ type data4ida
   real(rkind), allocatable        :: mLayerVolFracWatPrime(:)        ! prime vector of volumetric total water content of each snow and soil layer (s-1)
   ! note: the following components were added for compatibility with ARKODE
   real(rkind)                     :: dt_cur                          ! current stepsize
-  real(rkind),allocatable         :: fScale(:)                       ! characteristic scale of the function evaluations
+  real(rkind), allocatable        :: fScale(:)                       ! characteristic scale of the function evaluations
+  real(rkind), allocatable        :: fRHS(:)                         ! RHS function for ARKODE
  end type data4ida
 
 

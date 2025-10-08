@@ -785,9 +785,8 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   ! pointers to data in SUNDIALS vectors
   type(data4ida), pointer     :: eqns_data   ! equations data
   real(rkind), pointer        :: stateVec(:) ! solution vector
-  !real(rkind), allocatable    :: rVec(:)     ! residual vector
   logical(lgt)                :: feasible    ! feasibility of state vector
-  real(rkind), allocatable    :: fRHS(:)     ! RHS function for ARKODE 
+  !real(rkind), allocatable    :: fRHS(:)     ! RHS function for ARKODE 
   real(rkind), pointer        :: f(:)        ! pointer for RHS function for ARKODE
   real(rkind)                 :: fNew        ! function values, not needed here
   integer(i4b)                :: err         ! error in imposeConstraints
@@ -855,20 +854,18 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                  ! output: flux and residual vectors
                 feasible,                          & ! intent(out):   flag to denote the feasibility of the solution always true inside SUNDIALS
                 eqns_data%fluxVec,                 & ! intent(out):   flux vector
-                fRHS,                              & ! intent(out):   RHS function for ARKODE
+                eqns_data%fRHS,                    & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 eqns_data%resVec,                  & ! intent(out):   residual vector
-                !rVec,                              & ! intent(out):   residual vector
                 fNew,                              & ! intent(out):   new function evaluation
                 eqns_data%err,eqns_data%message)     ! intent(out):   error control
-  if(eqns_data%err > 0)then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; endif
-  if(eqns_data%err < 0)then; eqns_data%message=trim(eqns_data%message); ierr=1; return; endif
+  if (eqns_data%err > 0) then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; end if
+  if (eqns_data%err < 0) then; eqns_data%message=trim(eqns_data%message); ierr=1; return; end if
 
   ! assign RHS values to pointer variable
-  f=fRHS(1:eqns_data%nState)
+  f=eqns_data%fRHS(1:eqns_data%nState)
   
-  ! save residual and return success
-  !eqns_data%resVec = rVec
+  ! return success
   ierr = 0
   return
 

@@ -197,7 +197,6 @@ contains
    integer(i4b),intent(inout)      :: ixSaturation           ! index of the lowest saturated layer
    integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
    real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
-   !real(rkind),intent(inout)       :: stateVecPrime(:)       ! model state vector (y')
    logical(lgt),intent(out)        :: arkodeSucceeds         ! flag to indicate if ARKODE is successful
    logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
    !! output: residual terms and balances
@@ -225,7 +224,6 @@ contains
    type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
    type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
    type(c_ptr)                             :: arkode_mem ! ARKODE memory
-   real(c_double), pointer, dimension(neq) :: yvec(:)    ! underlying vector
 
    ! ARKODE statistics
    integer(c_long) :: nStepsSun(1)
@@ -398,6 +396,7 @@ contains
     !allocate( dCompress_dPsiPrev(nSoil) )
     allocate( mLayerCompressPrev(nSoil) ) ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
     allocate( eqns_data%fluxVec(nState) )
+    allocate( eqns_data%fRHS(nState) ); eqns_data%fRHS(:)=0._rkind ! initialize RHS function values to zero (computed in eval8summa4arkode)
     allocate( eqns_data%resVec(nState) )
     allocate( eqns_data%resSink(nState) )
     allocate( resVecPrev(nState) )
@@ -427,12 +426,13 @@ contains
 
    subroutine initialize_SUNDIALS_solution_vector 
     ! *** initialize soultion vector for SUNDIALS ***
-    ! create SUNDIALS N_Vector
-    sunvec_y => FN_VNew_Serial(neq, ctx)
+
+    ! create serial vectors
+    sunvec_y => FN_VMake_Serial(neq, stateVec, ctx)
     if (.not. associated(sunvec_y)) then; err=20_i4b; message=trim(message)//'sunvec = NULL'; return_flag=.true.; return; end if
-    yvec => FN_VGetArrayPointer(sunvec_y)
 
     ! initialize solution vector
+    print *, "summaSolve4arkode A0: sum(stateVecInit)=",sum(stateVecInit) ! SJT --- take out ---
     call setInitialCondition(neq, stateVecInit, sunvec_y)
    end subroutine initialize_SUNDIALS_solution_vector 
 
@@ -598,6 +598,8 @@ contains
         !if (retvalr == ARK_TOO_MUCH_WORK) err = -20_i4b ! exit and reduce the data window time in varSubStep (not implemented) 
         exit
       end if
+      print *, "summaSolve4arkode B: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
+      !print *, "summaSolve4arkode B1: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
 
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
       tooMuchMelt = .false.
