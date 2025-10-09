@@ -137,7 +137,7 @@ module Newton_functions
    procedure :: J2 => Jacobian_f2_Rich_vec ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_refinement   => SUMMA_refine_Newton_step
-   procedure :: custom_convergence => SUMMA_checkConv  
+   procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
  
    ! scalar routines
    procedure :: f     => f_diff 
@@ -679,9 +679,22 @@ contains
   ! update function value for line search
   f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
 
-  ! test block --- SJT: remove this
-  !if (f_obj % out_SS4HG % converged) print *, "SUMMA_refine_Newton_step: f_obj % out_SS4HG % converged = .true."
  end subroutine SUMMA_refine_Newton_step
+
+ function SUMMA_check_convergence_flag(f_obj,rVec,xInc,xVec) result(converged)
+  ! ** check convergence flag from out_SS4HG object found during Newton step refinement **
+  ! input
+  class(f_obj_type),intent(in)   :: f_obj
+  real(r8b),intent(in)           :: rVec(:) ! residual vector (mixed units)
+  real(r8b),intent(in)           :: xInc(:) ! iteration increment (mixed units)
+  real(r8b),intent(in)           :: xVec(:) ! state vector (mixed units)
+
+  ! output
+  logical :: converged
+
+  converged = f_obj % out_SS4HG % converged
+
+ end function SUMMA_check_convergence_flag
 
  function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
   ! ** interface for SUMMA's checkConv subroutine **
@@ -750,7 +763,8 @@ contains
                     .false.,                           & ! intent(in):    not inside Sundials solver
                     f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
                     f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
-                    f_obj % firstSplitOper,            & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
+                    .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
+                    !f_obj % firstSplitOper,            & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
                     f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                     f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                     ! input: state vectors

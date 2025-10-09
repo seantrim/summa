@@ -231,7 +231,6 @@ contains
   real(r8b)               :: b                  ! exponent used for convergence error estimation 
 
   if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
-   ! function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
    call f_obj % f_vec_eval(xkp1); f_eval_flag = .false. ! function evaluation (may be reused for next Newton iteration)
    exit_flag = f_obj % custom_convergence(f_obj % f_vec,xkp1-xk,xkp1)
    if (exit_flag)  return  ! set exit flag if criterion is satisfied
