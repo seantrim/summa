@@ -661,7 +661,6 @@ subroutine coupled_em(&
     substeps: do  ! continuous do statement with exit clause (alternative to "while")
 
       dt_sub = min(data_step,whole_step,maxstep_op,dt_sub) ! adjust for possible whole_step changes
-      print *, 'coupled_em A0: dt_init, dt_sub, dt_solv, data_step: ', dt_init, dt_sub, dt_solv, data_step ! SJT: --- take out ---
 
       ! print progress
       if(globalPrintFlag)then

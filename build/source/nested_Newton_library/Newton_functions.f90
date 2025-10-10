@@ -24,12 +24,18 @@ module Newton_functions
  ! ***** Parent Type ***** !
  type, public :: f_obj_base
    ! ** Default data components used by the Newton solvers ** !
-   logical      :: banded      ! flag for banded Jacobians
-   logical      :: nested      ! flag for nested algorithm
-   logical      :: inner       ! flag to indicate the execution of inner iterations
-   logical      :: converged   ! flag to indicate that the obtained solution meets the convergence criterion
-   logical      :: constraints ! flag to indicate that constraints are to be applied between outer/classical iterations
-   logical      :: refinement  ! flag to indicate that refinement is to be applied following outer/classical Newton steps
+   logical      :: banded       ! flag for banded Jacobians
+   logical      :: nested       ! flag for nested algorithm
+   logical      :: inner        ! flag to indicate the execution of inner iterations
+   logical      :: converged    ! flag to indicate that the obtained solution meets the convergence criterion
+   logical      :: constraints  ! flag to indicate that constraints are to be applied between outer/classical iterations
+   logical      :: refinement   ! flag to indicate that refinement is to be applied following outer/classical Newton steps
+   logical      :: f_eval_flag  ! flag to indicate that the total non-linear function vector is to be computed
+   logical      :: f1_eval_flag ! flag to indicate that the non-linear function 1 vector is to be computed
+   logical      :: f2_eval_flag ! flag to indicate that the non-linear function 2 vector is to be computed
+   logical      :: J_eval_flag  ! flag to indicate that the total Jacobian is to be computed
+   logical      :: J1_eval_flag ! flag to indicate that Jacobian 1 is to be computed
+   logical      :: J2_eval_flag ! flag to indicate that Jacobian 2 is to be computed
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
@@ -38,7 +44,11 @@ module Newton_functions
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
+   real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
+   real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
+   real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
+   real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
@@ -126,15 +136,15 @@ module Newton_functions
    ! vector routines
    procedure :: f_vec_eval => f_SUMMA_vec ! solver
    !procedure :: f_vec_eval => f_diff_vec  ! solver
-   procedure :: f1_vec => f1_Rich_vec ! solver
-   procedure :: f2_vec => f2_Rich_vec ! solver
+   procedure :: f1_vec_eval => f1_Rich_vec ! solver
+   procedure :: f2_vec_eval => f2_Rich_vec ! solver
    procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
    procedure :: J_eval => Jacobian_f_SUMMA_vec  ! solver
    !procedure :: J_eval => Jacobian_f_Rich_vec  ! solver
-   procedure :: J1 => Jacobian_f1_Rich_vec ! solver
-   procedure :: J2 => Jacobian_f2_Rich_vec ! solver
+   procedure :: J1_eval => Jacobian_f1_Rich_vec ! solver
+   procedure :: J2_eval => Jacobian_f2_Rich_vec ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_refinement   => SUMMA_refine_Newton_step
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
@@ -157,10 +167,16 @@ contains
   use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
   class(f_obj_base),intent(inout) :: f_obj
 
-   f_obj % banded      = .false. ! flag for banded Jacobians
-   f_obj % nested      = .false. ! flag for nested algorithm
-   f_obj % constraints = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
-   f_obj % refinement  = .false. ! flag to indicate that refinement is to be applied following outer/classical Newton steps
+   f_obj % banded       = .false. ! flag for banded Jacobians
+   f_obj % nested       = .false. ! flag for nested algorithm
+   f_obj % constraints  = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
+   f_obj % refinement   = .false. ! flag to indicate that refinement is to be applied following outer/classical Newton steps
+   f_obj % f_eval_flag  = .true.  ! flag to indicate that the total non-linear function vector is to be computed
+   f_obj % f1_eval_flag = .true.  ! flag to indicate that the non-linear function 1 vector is to be computed
+   f_obj % f2_eval_flag = .true.  ! flag to indicate that the non-linear function 2 vector is to be computed
+   f_obj % J_eval_flag  = .true.  ! flag to indicate that the total Jacobian is to be computed
+   f_obj % J1_eval_flag = .true.  ! flag to indicate that Jacobian 1 is to be computed
+   f_obj % J2_eval_flag = .true.  ! flag to indicate that Jacobian 2 is to be computed
 
    f_obj % kmax        = 100_i4b ! max # of classical/outer iterations
    f_obj % lmax        = 100_i4b ! max # inner iterations
@@ -190,12 +206,20 @@ contains
    associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
     f_obj % nrow_banded=subdiag+superdiag+1
     f_obj % nrow = f_obj % nrow_banded
-    allocate(f_obj % J(1:f_obj % nrow_banded,1:n))
+    if (f_obj % nested) then
+     allocate(f_obj % J1(1:f_obj % nrow_banded,1:n),f_obj % J2(1:f_obj % nrow_banded,1:n))
+    else
+     allocate(f_obj % J(1:f_obj % nrow_banded,1:n))
+    end if
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
     f_obj % nrow = n
-    allocate(f_obj % J(1:n,1:n))
+    if (f_obj % nested) then
+     allocate(f_obj % J1(1:n,1:n),f_obj % J2(1:n,1:n))
+    else
+     allocate(f_obj % J(1:n,1:n))
+    end if
    end associate
   end if
  end subroutine f_allocate_memory
@@ -389,83 +413,73 @@ contains
   end if
  end function Jacobian_f_Rich_vec
 
- function Jacobian_f1_Rich_vec(f_obj,xvec) result(J1)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b),allocatable        :: J1(:,:)
-  !real(r8b)                    :: J1(1:f_obj % n,1:f_obj % n)
-  integer(i4b)                 :: icol,irow
-  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
+ subroutine Jacobian_f1_Rich_vec(f_obj,xvec)
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  integer(i4b)                    :: icol,irow
 
   if (f_obj % banded) then ! banded storage
    associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nrow_banded=subdiag+superdiag+1
-    allocate(J1(1:nrow_banded,1:n))
     do icol=1,n
      do irow=max(1,icol-superdiag),min(n,icol+subdiag)
       Richards_obj % i = irow
-      J1(superdiag+1+irow-icol,icol)=f_obj % df1dx_vec(xvec,icol)
+      f_obj % J1(superdiag+1+irow-icol,icol)=f_obj % df1dx_vec(xvec,icol)
      end do
     end do 
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
-    allocate(J1(1:n,1:n))
     do icol=1,n
      do irow=1,n
       Richards_obj % i = irow
-      J1(irow,icol)=f_obj % df1dx_vec(xvec,icol)
+      f_obj % J1(irow,icol)=f_obj % df1dx_vec(xvec,icol)
      end do
     end do 
    end associate
   end if
- end function Jacobian_f1_Rich_vec
+ end subroutine Jacobian_f1_Rich_vec
 
- function Jacobian_f2_Rich_vec(f_obj,xvec) result(J2)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b),allocatable        :: J2(:,:)
-  !real(r8b)                    :: J2(1:f_obj % n,1:f_obj % n)
-  integer(i4b)                 :: icol,irow
-  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
+ subroutine Jacobian_f2_Rich_vec(f_obj,xvec)
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  integer(i4b)                    :: icol,irow
 
   if (f_obj % banded) then ! banded storage
    associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nrow_banded=subdiag+superdiag+1
-    allocate(J2(1:nrow_banded,1:n))
     do icol=1,n
      do irow=max(1,icol-superdiag),min(n,icol+subdiag)
       Richards_obj % i = irow
-      J2(superdiag+1+irow-icol,icol)=f_obj % df2dx_vec(xvec,icol)
+      f_obj % J2(superdiag+1+irow-icol,icol)=f_obj % df2dx_vec(xvec,icol)
      end do
     end do 
    end associate
   else ! full matrix storage
    associate(n => f_obj % n)
-    allocate(J2(1:n,1:n))
     do icol=1,n
      do irow=1,n
       Richards_obj % i = irow
-      J2(irow,icol)=f_obj % df2dx_vec(xvec,icol)
+      f_obj % J2(irow,icol)=f_obj % df2dx_vec(xvec,icol)
      end do
     end do 
    end associate
   end if
- end function Jacobian_f2_Rich_vec
+ end subroutine Jacobian_f2_Rich_vec
 
  subroutine f_diff_vec(f_obj,xvec)
   ! *** form non-linear vector function using the decomposition ***
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
 
-  f_obj % f_vec = f_obj % f1_vec(xvec) - f_obj % f2_vec(xvec)
+  if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec)
+  if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xvec)
+
+  f_obj % f_vec = f_obj % f1_vec(:) - f_obj % f2_vec(:)
  end subroutine f_diff_vec
 
- function f1_Rich_vec(f_obj,xvec) result(f1_vec)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f1_vec(1:f_obj % n) ! non-linear function vector
-  integer(i4b)                 :: i
+ subroutine f1_Rich_vec(f_obj,xvec)
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  integer(i4b)                    :: i
 
   associate(n => f_obj % n)
    do i=1,n ! interior grid points
@@ -474,16 +488,15 @@ contains
     if (i.ne.1) Richards_obj % h(i-1) = xvec(i-1) ! BC 
                 Richards_obj % h(i) = xvec(i) 
     if (i.ne.n) Richards_obj % h(i+1) = xvec(i+1) ! BC 
-    f1_vec(i)=f_obj % f1(xvec(i))
+    f_obj % f1_vec(i) = f_obj % f1(xvec(i))
    end do
   end associate
- end function f1_Rich_vec
+ end subroutine f1_Rich_vec
 
- function f2_Rich_vec(f_obj,xvec) result(f2_vec)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b)                    :: f2_vec(1:f_obj % n) ! non-linear function vector
-  integer(i4b)                 :: i
+ subroutine f2_Rich_vec(f_obj,xvec)
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  integer(i4b)                    :: i
 
   associate(n => f_obj % n)
    do i=1,n ! interior grid points
@@ -492,10 +505,10 @@ contains
     if (i.ne.1) Richards_obj % h(i-1) = xvec(i-1) ! BC 
                 Richards_obj % h(i) = xvec(i) 
     if (i.ne.n) Richards_obj % h(i+1) = xvec(i+1) ! BC 
-    f2_vec(i)=f_obj % f2(xvec(i))
+    f_obj % f2_vec(i) = f_obj % f2(xvec(i))
    end do
   end associate
- end function f2_Rich_vec
+ end subroutine f2_Rich_vec
 
  real(r8b) function f_diff(f_obj,x) result(f)
   ! ** complete scalar non-linear function from Jordan decomposition **
@@ -675,6 +688,9 @@ contains
 
   ! store refined guess
   xvec1 = stateVecNew(:)
+
+  ! store non-linear function vector for next Newton iteration
+  f_obj % f_vec = f_obj % resVec(:)
 
   ! update function value for line search
   f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew

@@ -33,7 +33,6 @@ contains
   real(r8b) :: final_mean                        ! mean of final solution vector
   real(r8b) :: R_est                             ! estimated max relative difference in solution between iterations
   integer(i4b) :: k                              ! iteration counter
-  logical :: f_eval_flag                         ! flag controlling non-linear function evaluations
   logical :: exit_flag                           ! exit flag
   ! LAPACK Variables
   real(r8b) :: B(1:f_obj % n)                    ! right-hand side / solution vector
@@ -46,12 +45,11 @@ contains
   M=f_obj % n 
 
   f_obj % inner = .false. ! classical iterations only
-  f_eval_flag = .true. ! function evaluation flag
   exit_flag=.false.
   xk=f_obj % x0 ! initialize
   do k=0,f_obj % kmax
-   if (f_eval_flag) call f_obj % f_vec_eval(xk) ! compute non-linear function vector (f_obj % f_vec)
-   call f_obj % J_eval(xk) ! compute Jacobian (f_obj % J)
+   if (f_obj % f_eval_flag) call f_obj % f_vec_eval(xk) ! compute non-linear function vector (f_obj % f_vec)
+   if (f_obj % J_eval_flag) call f_obj % J_eval(xk) ! compute Jacobian (f_obj % J)
 
    ! begin LAPACK operations
    B=-f_obj % f_vec ! initialize right-side vector used by LAPACK
@@ -60,7 +58,7 @@ contains
    xkp1=xk+B ! update guess
    if (f_obj % refinement) call f_obj % apply_refinement(xk,xkp1) ! apply Newton step refinement
 
-   call check_residual_vector(f_obj,k,xkp1,xk,R_est,f_eval_flag,exit_flag)
+   call check_residual_vector(f_obj,k,xkp1,xk,R_est,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
@@ -97,16 +95,13 @@ contains
   ! Newton solver
   type(f_obj_type),intent(inout) :: f_obj 
   real(r8b) :: xk0(1:f_obj % n),xkp1l(1:f_obj % n),xkp1lp1(1:f_obj % n) ! x^k, x^{k+1,l} and x^{k+1,l+1} 
-  real(r8b),allocatable :: Jdiff(:,:),J1(:,:),J2(:,:)
-  real(r8b) :: f1val(1:f_obj % n),f2val(1:f_obj % n)  ! for storing the current function value
+  real(r8b),allocatable :: Jdiff(:,:)            ! difference in Jacobians 1 and 2
   real(r8b) :: final_mean                        ! mean value of final solution vector
   real(r8b) :: R_est                             ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
   integer(i4b) :: l_total                        ! total number of inner iterations
-  logical :: f_eval_flag                         ! flag for function evaluations (may need to separate into inner and outer flags)
   logical :: exit_outer,exit_inner 
   ! LAPACK Variables
-  real(r8b),allocatable :: A(:,:)                ! input and result matrix
   real(r8b) :: B(1:f_obj % n)                    ! right-hand side / solution vector
   integer(i4b) :: M                              ! # of rows/columns for linear system
   integer(i4b) :: nrow_banded                    ! # of rows for banded storage
@@ -117,11 +112,9 @@ contains
   ! allocate memory for choice of Jacobian storage
   if (f_obj % banded) then ! banded storage
    nrow_banded=f_obj % subdiag + f_obj % superdiag + 1
-   allocate(Jdiff(1:nrow_banded,1:f_obj % n),J1(1:nrow_banded,1:f_obj % n),J2(1:nrow_banded,1:f_obj % n))
-   allocate(A(1:nrow_banded,1:f_obj % n))
+   allocate(Jdiff(1:nrow_banded,1:f_obj % n))
   else ! full matrix storage
-   allocate(Jdiff(1:f_obj % n,1:f_obj % n),J1(1:f_obj % n,1:f_obj % n),J2(1:f_obj % n,1:f_obj % n))
-   allocate(A(1:f_obj % n,1:f_obj % n))
+   allocate(Jdiff(1:f_obj % n,1:f_obj % n))
   end if
 
   ! initialize LAPACK parameters
@@ -131,25 +124,24 @@ contains
   exit_outer=.false.
   xk0=f_obj % x0 ! initial guess
   outer: do k=0,f_obj % kmax
-   J2=f_obj % J2(xk0) ! compute Jacobian
+   if (f_obj % J2_eval_flag) call f_obj % J2_eval(xk0) ! compute Jacobian
    exit_inner=.false.
    xkp1l=xk0 !initial guess for inner iterations
    f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
-    J1=f_obj % J1(xkp1l) ! compute Jacobian
-    Jdiff=J1-J2
-    f1val = f_obj % f1_vec(xkp1l)
-    f2val = f_obj % f2_vec(xk0)
+    if (f_obj % J1_eval_flag) call f_obj % J1_eval(xkp1l) ! compute Jacobian
+    Jdiff = f_obj % J1(:,:) - f_obj % J2(:,:)
+    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xkp1l)
+    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xk0)
 
     ! begin LAPACK operations
-    A=Jdiff ! initialize matrix used by LAPACK
     ! initialize right-side vector used by LAPACK
-    B=f2val-matrix_vector_product(f_obj,M,J2,xk0)-f1val+matrix_vector_product(f_obj,M,J1,xkp1l) 
-!    B=f2val-matmul(J2,xk0)-f1val+matmul(J1,xkp1l) ! initialize right-side vector used by LAPACK
-    call linear_solve(f_obj,M,A,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
+    B= f_obj % f2_vec - matrix_vector_product(f_obj,M,f_obj % J2,xk0)&
+    &- f_obj % f1_vec + matrix_vector_product(f_obj,M,f_obj % J1,xkp1l) 
+    call linear_solve(f_obj,M,Jdiff,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
     xkp1lp1=B ! update guess
 
-    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,R_est,f_eval_flag,exit_inner)
+    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,R_est,exit_inner)
     ! print exact convergence error
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
@@ -173,7 +165,7 @@ contains
    if (f_obj % refinement) call f_obj % apply_refinement(xk0,xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
 
    f_obj % inner=.false.
-   call check_residual_vector(f_obj,k,xkp1lp1,xk0,R_est,f_eval_flag,exit_outer)
+   call check_residual_vector(f_obj,k,xkp1lp1,xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
@@ -214,13 +206,12 @@ contains
   end if
  end subroutine nested_Newton_vector
 
- subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,f_eval_flag,exit_flag)
+ subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag)
   ! *** Check residual vector for potential loop exit ***
   type(f_obj_type),intent(inout) :: f_obj 
   integer(i4b),intent(in) :: iteration   ! interation count
   real(r8b),intent(in)    :: xkp1(1:f_obj % n)  ! current root estimate
   real(r8b),intent(in)    :: xk(1:f_obj % n)    ! previous root estimate
-  logical,intent(inout)   :: f_eval_flag ! function evaluation flag
   logical,intent(inout)   :: exit_flag   ! exit flag
   real(r8b),intent(out)   :: R_est       ! estimated R for current iteration (computed in the previous call)
   ! local variables
@@ -231,7 +222,7 @@ contains
   real(r8b)               :: b                  ! exponent used for convergence error estimation 
 
   if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
-   call f_obj % f_vec_eval(xkp1); f_eval_flag = .false. ! function evaluation (may be reused for next Newton iteration)
+   !call f_obj % f_vec_eval(xkp1); f_obj % f_eval_flag = .false. ! function evaluation (may be reused for next Newton iteration)
    exit_flag = f_obj % custom_convergence(f_obj % f_vec,xkp1-xk,xkp1)
    if (exit_flag)  return  ! set exit flag if criterion is satisfied
   else

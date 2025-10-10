@@ -1063,6 +1063,10 @@ contains
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
 
+  ! store initial function values based on the initial call to eval8summa
+  nested_Newton % f_vec = real(nested_Newton % resVec(:),r8b)
+  nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
+
   ! set up initial guess
   nested_Newton % x1=stateVecTrial(1:nState)  ! initialize solution from previous time step
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
