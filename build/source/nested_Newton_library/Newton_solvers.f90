@@ -28,14 +28,13 @@ contains
 
  subroutine Newton_vector(f_obj)
   ! Newton solver for vector problems
-  type(f_obj_type),intent(inout) :: f_obj 
-  real(r8b) :: xk(1:f_obj % n),xkp1(1:f_obj % n) ! x^k and x^{k+1}
-  real(r8b) :: final_mean                        ! mean of final solution vector
-  real(r8b) :: R_est                             ! estimated max relative difference in solution between iterations
+  type(f_obj_type),intent(inout) :: f_obj        ! nested Newton object 
+  real(r8b)    :: final_mean                     ! mean of final solution vector
+  real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k                              ! iteration counter
-  logical :: exit_flag                           ! exit flag
+  logical      :: exit_flag                      ! exit flag
   ! LAPACK Variables
-  real(r8b) :: B(1:f_obj % n)                    ! right-hand side / solution vector
+  real(r8b)    :: B(1:f_obj % n)                 ! right-hand side / solution vector
   integer(i4b) :: M                              ! # of rows/columns for linear system
 
   ! initialize convergence flag
@@ -46,32 +45,32 @@ contains
 
   f_obj % inner = .false. ! classical iterations only
   exit_flag=.false.
-  xk=f_obj % x0 ! initialize
+  f_obj % xk = f_obj % x0 ! initialize
   do k=0,f_obj % kmax
-   if (f_obj % f_eval_flag) call f_obj % f_vec_eval(xk) ! compute non-linear function vector (f_obj % f_vec)
-   if (f_obj % J_eval_flag) call f_obj % J_eval(xk) ! compute Jacobian (f_obj % J)
+   if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ! compute non-linear function vector (f_obj % f_vec)
+   if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
    ! begin LAPACK operations
    B=-f_obj % f_vec ! initialize right-side vector used by LAPACK
-   call linear_solve(f_obj,f_obj % n,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output -- M is the # of rows/columns of A
+   call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
 
-   xkp1=xk+B ! update guess
-   if (f_obj % refinement) call f_obj % apply_refinement(xk,xkp1) ! apply Newton step refinement
+   f_obj % xkp1 = f_obj % xk+B ! update guess
+   if (f_obj % refinement) call f_obj % apply_refinement(f_obj % xk,f_obj % xkp1) ! apply Newton step refinement
 
-   call check_residual_vector(f_obj,k,xkp1,xk,R_est,exit_flag)
-   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk)/f_obj % n,f_obj % R(0),R_est
+   call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
+   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
     exit
    end if
 
-   if (f_obj % constraints) call f_obj % apply_constraints(xk,xkp1) ! apply constraints without interfering with the convergence criterion
-   xk=xkp1 ! prep for next iteration - can probably evaluate in place
+   if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk,f_obj % xkp1) ! apply constraints without interfering with the convergence criterion
+   f_obj % xk = f_obj % xkp1 ! prep for next iteration - can probably evaluate in place
   end do
   ! final output
   if (exit_flag.eqv..true.) then
    if (f_obj % out_detail) then
-    final_mean=sum(xkp1)/f_obj % n 
+    final_mean=sum(f_obj % xkp1)/f_obj % n 
     write(f_obj % unit,'(i4,3(g23.15))') k+1,final_mean,f_obj % R(1)
    end if
    f_obj % kcount=k+1
@@ -86,7 +85,7 @@ contains
    end if
   end if
 
-  f_obj % x1=xkp1
+  f_obj % x1 = f_obj % xkp1
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
 
  end subroutine Newton_vector
@@ -94,58 +93,43 @@ contains
  subroutine nested_Newton_vector(f_obj)
   ! Newton solver
   type(f_obj_type),intent(inout) :: f_obj 
-  real(r8b) :: xk0(1:f_obj % n),xkp1l(1:f_obj % n),xkp1lp1(1:f_obj % n) ! x^k, x^{k+1,l} and x^{k+1,l+1} 
-  real(r8b),allocatable :: Jdiff(:,:)            ! difference in Jacobians 1 and 2
-  real(r8b) :: final_mean                        ! mean value of final solution vector
-  real(r8b) :: R_est                             ! estimated max relative difference in solution between iterations
+  real(r8b)    :: final_mean                     ! mean value of final solution vector
+  real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
   integer(i4b) :: l_total                        ! total number of inner iterations
-  logical :: exit_outer,exit_inner 
+  logical      :: exit_outer,exit_inner 
   ! LAPACK Variables
-  real(r8b) :: B(1:f_obj % n)                    ! right-hand side / solution vector
-  integer(i4b) :: M                              ! # of rows/columns for linear system
-  integer(i4b) :: nrow_banded                    ! # of rows for banded storage
+  real(r8b)    :: B(1:f_obj % n)                 ! right-hand side / solution vector
 
   ! initialize convergence flag
   f_obj % converged = .false.
-
-  ! allocate memory for choice of Jacobian storage
-  if (f_obj % banded) then ! banded storage
-   nrow_banded=f_obj % subdiag + f_obj % superdiag + 1
-   allocate(Jdiff(1:nrow_banded,1:f_obj % n))
-  else ! full matrix storage
-   allocate(Jdiff(1:f_obj % n,1:f_obj % n))
-  end if
-
-  ! initialize LAPACK parameters
-  M=f_obj % n
  
   l_total=0
   exit_outer=.false.
-  xk0=f_obj % x0 ! initial guess
+  f_obj % xk0=f_obj % x0 ! initial guess
   outer: do k=0,f_obj % kmax
-   if (f_obj % J2_eval_flag) call f_obj % J2_eval(xk0) ! compute Jacobian
+   if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
    exit_inner=.false.
-   xkp1l=xk0 !initial guess for inner iterations
+   f_obj % xkp1l = f_obj % xk0 !initial guess for inner iterations
    f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
-    if (f_obj % J1_eval_flag) call f_obj % J1_eval(xkp1l) ! compute Jacobian
-    Jdiff = f_obj % J1(:,:) - f_obj % J2(:,:)
-    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xkp1l)
-    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xk0)
+    if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
+    f_obj % Jdiff = f_obj % J1(:,:) - f_obj % J2(:,:)
+    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
+    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
 
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
-    B= f_obj % f2_vec - matrix_vector_product(f_obj,M,f_obj % J2,xk0)&
-    &- f_obj % f1_vec + matrix_vector_product(f_obj,M,f_obj % J1,xkp1l) 
-    call linear_solve(f_obj,M,Jdiff,B,f_obj % tol) ! Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A
-    xkp1lp1=B ! update guess
+    B= f_obj % f2_vec - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
+    &- f_obj % f1_vec + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
+    call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
+    f_obj % xkp1lp1=B ! update guess
 
-    call check_residual_vector(f_obj,l,xkp1lp1,xkp1l,R_est,exit_inner)
+    call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
     ! print exact convergence error
-    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
-    xkp1l=xkp1lp1 ! set up next inner iteration
+    f_obj % xkp1l = f_obj % xkp1lp1 ! set up next inner iteration
    end do inner
    if (l.gt.f_obj % lmax) then
     if (f_obj % out_warning) then
@@ -156,33 +140,33 @@ contains
    ! inner iteration counts 
    if (exit_inner) then
     ! final output for inner iterations
-    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l+1,sum(xkp1lp1)/f_obj % n,f_obj % R_inner(1) 
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l+1,sum(f_obj % xkp1lp1)/f_obj % n,f_obj % R_inner(1) 
     l_total=l_total+(l+1)
    else
     l_total=l_total+l
    end if
 
-   if (f_obj % refinement) call f_obj % apply_refinement(xk0,xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
+   if (f_obj % refinement) call f_obj % apply_refinement(f_obj % xk0,f_obj % xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
 
    f_obj % inner=.false.
-   call check_residual_vector(f_obj,k,xkp1lp1,xk0,R_est,exit_outer)
+   call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
-    write(f_obj % unit,'(i4,3(g23.15))') k,sum(xk0)/f_obj % n,f_obj % R(0),R_est 
+    write(f_obj % unit,'(i4,3(g23.15))') k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
    if (exit_outer) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
     exit outer
    end if
 
-   if (f_obj % constraints) call f_obj % apply_constraints(xk0,xkp1lp1) ! apply constraints without interfering with the convergence criterion
-   xk0=xkp1lp1
+   if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk0,f_obj % xkp1lp1) ! apply constraints without interfering with the convergence criterion
+   f_obj % xk0 = f_obj % xkp1lp1
   end do outer
 
   ! outer iterations counts 
   if (exit_outer) then
    ! final convergence error for outer iterations (if early loop exit occurred)
    if (f_obj % out_detail) then
-    final_mean=sum(xkp1lp1)/f_obj % n
+    final_mean=sum(f_obj % xkp1lp1)/f_obj % n
     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean,f_obj % R(1) ! mean of final solution 
    end if
    f_obj % kcount = k+1
@@ -197,7 +181,7 @@ contains
    end if
   end if
 
-  f_obj % x1=xkp1lp1
+  f_obj % x1 = f_obj % xkp1lp1
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then
@@ -222,8 +206,7 @@ contains
   real(r8b)               :: b                  ! exponent used for convergence error estimation 
 
   if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
-   !call f_obj % f_vec_eval(xkp1); f_obj % f_eval_flag = .false. ! function evaluation (may be reused for next Newton iteration)
-   exit_flag = f_obj % custom_convergence(f_obj % f_vec,xkp1-xk,xkp1)
+   exit_flag = f_obj % custom_convergence()
    if (exit_flag)  return  ! set exit flag if criterion is satisfied
   else
 
@@ -286,51 +269,45 @@ contains
   end if
  end subroutine check_residual_vector
 
- function matrix_vector_product(f_obj,M,A,x) result(y)
+ function matrix_vector_product(f_obj,A,x) result(y)
   ! *** Compute matrix vector product y=A*x ***
   ! input
   type(f_obj_type),intent(in) :: f_obj        ! class object containing solver options
-  integer(i4b),intent(in) :: M                ! # of rows/columns for linear system
-  real(r8b),allocatable,intent(in) :: A(:,:)  ! input matrix (result is LU factorization of scaled matrix)
-  real(r8b),intent(in) :: x(1:M)              ! input vector
+  real(r8b),allocatable,intent(in) :: A(:,:)  ! input matrix 
+  real(r8b),intent(in) :: x(1:f_obj % n)              ! input vector
 
   ! output
-  real(r8b) :: y(1:M)                         ! product vector
+  real(r8b) :: y(1:f_obj % n)                         ! product vector
 
   ! local variables
   character(1),parameter :: TRANS='N'                ! option for matrix transposition
-  integer(i4b) :: N                                  ! # of columns of A
   integer(i4b) :: KL,KU                              ! # of subdiagonals and superdiagonals of A (banded storage)
   integer(i4b) :: LDA                                ! first dimension of A
   integer(i4b),parameter :: INCX=1_i4b, INCY=1_i4b   ! increment for elements of x and y vectors
   real(r8b),parameter    :: ALPHA=1._r8b,BETA=0._r8b ! scalars used in LAPACK solvers
-  
-  ! set general LAPACK parameters
-  N=M
  
   ! set LAPACK parameters for choice of matrix storage
   if (f_obj % banded) then ! banded storage
    KL=f_obj % subdiag; KU=f_obj % superdiag 
    LDA=KL + KU + 1
   else ! full matrix storage
-   LDA=M
+   LDA=f_obj % n
   end if
   
   if (f_obj % banded) then ! banded storage
-   call DGBMV(TRANS,M,N,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
+   call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
   else ! full matrix storage
    !y=matmul(A,x)
-   call DGEMV(TRANS,M,N,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
+   call DGEMV(TRANS,f_obj % n,f_obj % n,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
   end if
  end function matrix_vector_product
 
- subroutine linear_solve(f_obj,N,A,B,tol)
+ subroutine linear_solve(f_obj,A,B,tol)
   ! *** Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A *** 
   type(f_obj_type),intent(in) :: f_obj           ! class object containing solver options
   ! LAPACK Variables
-  integer(i4b),intent(in) :: N                   ! # of rows/columns for linear system
-  real(r8b),allocatable,intent(inout) :: A(:,:)  ! input and result matrix (result is LU factorization of scaled matrix)
-  real(r8b),intent(inout) :: B(1:N)              ! right-hand side / solution vector
+  real(r8b),allocatable,intent(in) :: A(:,:)     ! input matrix
+  real(r8b),intent(inout) :: B(1:f_obj % n)      ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                 ! tolerance value used by the calling routine
   ! local variables
   character(1),parameter :: FACT='E'             ! option for matrix factoring (equilibrate matrix prior to factoring)
@@ -340,44 +317,44 @@ contains
   integer(i4b) :: LDA,LDAF,LDX,LDB               ! leading dimensions of A, AF, X, and B arrays
   integer(i4b),parameter :: NRHS=1_i4b           ! # of right-hand sides in B vector
   integer(i4b) :: INFO                           ! error code
-  integer(i4b) :: IPIV(1:N)                      ! pivot index vector
-  integer(i4b) :: IWORK(1:N)                     ! work integer array
-  real(r8b) :: RA(1:N),CA(1:N)                   ! row and column scale factors for A
+  integer(i4b) :: IPIV(1:f_obj % n)              ! pivot index vector
+  integer(i4b) :: IWORK(1:f_obj % n)             ! work integer array
+  real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)   ! row and column scale factors for A
   real(r8b) :: RCOND                             ! estimate of condition number reciprocal
   real(r8b),allocatable :: AF(:,:)               ! output matrix (result is LU factorization of scaled matrix)
-  real(r8b) :: X(1:N)                            ! solution to original (unscaled) system
+  real(r8b) :: X(1:f_obj % n)                    ! solution to original (unscaled) system
   real(r8b) :: FERR(1:1),BERR(1:1)               ! forward and backward error estimates (single right-hand side assumed)
   real(r8b),allocatable :: WORK(:)               ! work array (reciprocal pivot growth factor in work(1) on exit)
 
   ! LAPACK parameters independent of matrix storage type
-  LDX=N; LDB=N ! use arrays of minimum size
+  LDX=f_obj % n; LDB=f_obj % n ! use arrays of minimum size
 
   ! allocate memory and set LAPACK parameters for choice of matrix storage
   if (f_obj % banded) then ! banded storage
    KL=f_obj % subdiag; KU=f_obj % superdiag 
    LDA=KL + KU + 1; LDAF=LDA+KL
-   allocate(AF(1:LDAF,1:N)) ! storing LU factors requires an additional f_obj % subdiag rows
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:3_i4b*N)) 
+   allocate(AF(1:LDAF,1:f_obj % n)) ! storing LU factors requires an additional f_obj % subdiag rows
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:3_i4b*f_obj % n)) 
   else ! full matrix storage
-   LDA=N; LDAF=N
-   allocate(AF(1:N,1:N))
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:4_i4b*N)) 
+   LDA=f_obj % n; LDAF=f_obj % n
+   allocate(AF(1:f_obj % n,1:f_obj % n))
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:4_i4b*f_obj % n)) 
   end if
 
   ! begin LAPACK operations
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
     AF(1:KL,:)=0._r8b; AF(KL+1:LDAF,:)=A(1:LDA,:) ! load banded storage matrix used by LAPACK (stores LU factors on output)
-    call DGBSV(N,KL,KU,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
+    call DGBSV(f_obj % n,KL,KU,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
    else ! full matrix storage
     AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
-    call DGESV(N,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
+    call DGESV(f_obj % n,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % banded) then ! banded matrix storage
-    call DGBSVX(FACT,TRANS,N,KL,KU,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+    call DGBSVX(FACT,TRANS,f_obj % n,KL,KU,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
    else ! full matrix storage
-    call DGESVX(FACT,TRANS,N,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+    call DGESVX(FACT,TRANS,f_obj % n,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
    end if
    B=X ! put solution in output vector
   end if
@@ -392,7 +369,7 @@ contains
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
    if (INFO.ne.0) then
-    if (INFO.eq.(N+1_i4b)) then
+    if (INFO.eq.(f_obj % n+1_i4b)) then
      if (f_obj % out_warning) then
       write(f_obj % unit,*) "LAPACK Warning: RCOND=",RCOND,"may be too low for an accurate solution."
      end if

@@ -42,10 +42,13 @@ module Newton_functions
    integer(i4b) :: nrow_banded       ! # of matrix rows for banded storage
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
-   real(r8b),allocatable    :: x0(:),x1(:)   ! initial and final root estimates for vector algorithms
+   real(r8b),allocatable    :: x0(:),x1(:)                ! initial and final root estimates for vector algorithms
+   real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
+   real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
+   real(r8b),allocatable    :: Jdiff(:,:)    ! difference Jacobian
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
@@ -135,7 +138,7 @@ module Newton_functions
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
    procedure :: f_vec_eval => f_SUMMA_vec ! solver
-   !procedure :: f_vec_eval => f_diff_vec  ! solver
+   !procedure :: f_vec_eval => f_diff_vec  ! solver (note: f_diff_vec requires nested iterations to be activated)
    procedure :: f1_vec_eval => f1_Rich_vec ! solver
    procedure :: f2_vec_eval => f2_Rich_vec ! solver
    procedure :: dfdx_vec  => dfdx_diff_vec 
@@ -197,31 +200,30 @@ contains
 
   ! allocate solution and function arrays
   associate(n => f_obj % n)
-   allocate(f_obj % x0(1:n),f_obj % x1(1:n))
-   allocate(f_obj % f_vec(1:n)) 
+   allocate(f_obj % x0(1:n),f_obj % x1(1:n))          ! initial and final root estimates
+   allocate(f_obj % f_vec(1:n))                       ! total non-linear function vector
+   if (f_obj % nested) then
+    allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
+    allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
+   else
+    allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))                        ! intermediate root estimates for classical iterations
+   end if
   end associate
 
-  ! allocate Jacobian array
+  ! allocate Jacobian arrays
   if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    f_obj % nrow_banded=subdiag+superdiag+1
+    f_obj % nrow_banded = f_obj % subdiag + f_obj % superdiag + 1_i4b
     f_obj % nrow = f_obj % nrow_banded
-    if (f_obj % nested) then
-     allocate(f_obj % J1(1:f_obj % nrow_banded,1:n),f_obj % J2(1:f_obj % nrow_banded,1:n))
-    else
-     allocate(f_obj % J(1:f_obj % nrow_banded,1:n))
-    end if
-   end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    f_obj % nrow = n
-    if (f_obj % nested) then
-     allocate(f_obj % J1(1:n,1:n),f_obj % J2(1:n,1:n))
-    else
-     allocate(f_obj % J(1:n,1:n))
-    end if
-   end associate
+  else
+    f_obj % nrow = f_obj % n
   end if
+  if (f_obj % nested) then
+   allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
+           &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n))
+  else
+   allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n))
+  end if
+
  end subroutine f_allocate_memory
 
  subroutine f_solver_output(f_obj,method,unit)
@@ -467,6 +469,7 @@ contains
 
  subroutine f_diff_vec(f_obj,xvec)
   ! *** form non-linear vector function using the decomposition ***
+  ! note: f1_vec and f2_vec components currently only allocated for nested iterations
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
 
@@ -697,13 +700,10 @@ contains
 
  end subroutine SUMMA_refine_Newton_step
 
- function SUMMA_check_convergence_flag(f_obj,rVec,xInc,xVec) result(converged)
+ function SUMMA_check_convergence_flag(f_obj) result(converged)
   ! ** check convergence flag from out_SS4HG object found during Newton step refinement **
   ! input
   class(f_obj_type),intent(in)   :: f_obj
-  real(r8b),intent(in)           :: rVec(:) ! residual vector (mixed units)
-  real(r8b),intent(in)           :: xInc(:) ! iteration increment (mixed units)
-  real(r8b),intent(in)           :: xVec(:) ! state vector (mixed units)
 
   ! output
   logical :: converged
@@ -712,25 +712,25 @@ contains
 
  end function SUMMA_check_convergence_flag
 
- function SUMMA_checkConv(f_obj,rVec,xInc,xVec) result(converged)
+ function SUMMA_checkConv(f_obj) result(converged)
   ! ** interface for SUMMA's checkConv subroutine **
   ! input
-  class(f_obj_type),intent(inout)   :: f_obj
-  real(r8b),intent(in)              :: rVec(:) ! residual vector (mixed units)
-  real(r8b),intent(in)              :: xInc(:) ! iteration increment (mixed units)
-  real(r8b),intent(in)              :: xVec(:) ! state vector (mixed units)
+  class(f_obj_type),intent(in)   :: f_obj
 
   ! output
   logical :: converged
 
   ! local variables
-  integer(i4b) :: mSoil
+  integer(i4b) :: mSoil             ! number of soil layers in the solution vector
+  real(r8b)    :: xInc(1:f_obj % n) ! iteration increment (mixed units)
 
   ! get the number of soil layers in the solution vector
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
 
+  xInc=f_obj % xkp1(:)-f_obj % xk(:) ! iteration increment (mixed units)
+
   converged = checkConv(mSoil,f_obj % in_SS4HG,f_obj % mpar_data,f_obj % indx_data,f_obj % prog_data,&
-                       &rVec,xInc,xVec,f_obj % out_SS4HG)
+                       &f_obj % f_vec,xInc,f_obj % xkp1,f_obj % out_SS4HG)
 
  end function SUMMA_checkConv
 
