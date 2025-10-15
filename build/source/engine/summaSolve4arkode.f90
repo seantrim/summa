@@ -389,10 +389,6 @@ contains
     !allocate( eqns_data%mLayerMatricHeadPrev(nSoil) )
     !allocate( eqns_data%mLayerTempTrial(nLayers) )    ! may be required for root finding problem
     !allocate( eqns_data%mLayerMatricHeadTrial(nSoil) )
-    !allocate( eqns_data%mLayerTempPrime(nLayers) )
-    !allocate( eqns_data%mLayerMatricHeadPrime(nSoil) )
-    !allocate( eqns_data%mLayerVolFracWatPrime(nLayers) )
-    !allocate( mLayerMatricHeadPrimePrev(nSoil) )
     !allocate( dCompress_dPsiPrev(nSoil) )
     allocate( mLayerCompressPrev(nSoil) ) ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
     allocate( eqns_data%fluxVec(nState) )
@@ -410,7 +406,6 @@ contains
     eqns_data%scalarCanopyTempTrial   = prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1) ! required for ARKODE?
     !eqns_data%mLayerTempTrial(:)      = prog_data%var(iLookPROG%mLayerTemp)%dat(:)      ! may be required for root finding problem
     !eqns_data%mLayerMatricHeadPrev(:) = prog_data%var(iLookPROG%mLayerMatricHead)%dat(:)
-    !mLayerMatricHeadPrimePrev         = 0._rkind
     !dCompress_dPsiPrev(:)             = 0._rkind
     mLayerCompressPrev(:)             = 0._rkind  ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
     resVecPrev(:)                     = 0._rkind
@@ -599,7 +594,6 @@ contains
         exit
       end if
       print *, "summaSolve4arkode B: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
-      !print *, "summaSolve4arkode B1: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
 
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
       tooMuchMelt = .false.
@@ -719,7 +713,6 @@ contains
       eqns_data%scalarCanopyTempPrev     = eqns_data%scalarCanopyTempTrial ! required for ARKODE?
       !eqns_data%mLayerTempPrev(:)       = eqns_data%mLayerTempTrial(:)   ! may be required for root finding problem 
       !eqns_data%mLayerMatricHeadPrev(:) = eqns_data%mLayerMatricHeadTrial(:)
-      !mLayerMatricHeadPrimePrev(:)      = eqns_data%mLayerMatricHeadPrime(:)
       !dCompress_dPsiPrev(:)             = eqns_data%deriv_data%var(iLookDERIV%dCompress_dPsi)%dat(:)
       mLayerCompressPrev(:)              = eqns_data%diag_data%var(iLookDIAG%mLayerCompress)%dat(:)
       tretPrev                           = tret(1)
@@ -776,10 +769,6 @@ contains
     !deallocate( eqns_data%mLayerMatricHeadPrev )
     !deallocate( eqns_data%mLayerTempTrial )         ! may be required for root finding problem
     !deallocate( eqns_data%mLayerMatricHeadTrial )
-    !deallocate( eqns_data%mLayerTempPrime )
-    !deallocate( eqns_data%mLayerMatricHeadPrime )
-    !deallocate( eqns_data%mLayerVolFracWatPrime )
-    !deallocate( mLayerMatricHeadPrimePrev )
     !deallocate( dCompress_dPsiPrev )
     deallocate( eqns_data%resVec )
     deallocate( eqns_data%resSink )
