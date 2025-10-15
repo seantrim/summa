@@ -541,7 +541,7 @@ contains
     ! note: implicit methods are used due to NULL input for the explicit RHS function in FARKStepCreate call in initialize_ARKODE_memory
     logical(lgt), parameter  :: use_Butcher_tableau = .false. ! flag controlling use of specified Butcher tableau (else use order parameter)
     character(:),allocatable :: method          ! string for ARKODE Butcher tableau
-    integer(c_int),parameter :: order = 3_c_int ! order of time integration scheme if not using Butcher tableau (2 <= order <= 5)
+    integer(c_int),parameter :: order = 4_c_int ! order of time integration scheme if not using Butcher tableau (2 <= order <= 5)
 
     if (use_Butcher_tableau) then ! specify a built-in ARKODE Butcher tableau
       method = "ARKODE_SDIRK_2_1_2"
@@ -556,9 +556,17 @@ contains
    subroutine update_ARKODE_solver_loop
     ! *** main ARKODE solver loop ***
 
+    ! set initial time step size for ARKODE internal steps --------- may not be required ---------
+    retval = FARKodeSetInitStep(arkode_mem, dt_cur)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetInitStep'; return_flag=.true.; return; end if
+
     ! Enforce the solver to stop at end of the time step
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return_flag=.true.; return; end if
+
+!    ! activate fixed ARKODE internal steps --------- SJT: testing ---------
+!    retval = FARKodeSetFixedStep(arkode_mem, dt_cur/100._rkind)
+!    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetFixedStep'; return_flag=.true.; return; end if
 
     ! the following is based on the looping strategy from summaSolve4ida
     tinystep = .false.
@@ -615,6 +623,9 @@ contains
       if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeGetLastStep'; return_flag=.true.; return; end if
       dt_diff = tret(1) - tretPrev
       nSteps = nSteps + 1_i4b ! number of time steps taken in solver
+
+!      ! SJT: testing ------------------------------------------------------
+!      eqns_data % dt_cur = dt_last(1) ! try to update time step size used in computResid (among other things in eval8summa)
 
       ! possible that vegetation water may go a bit negative because of discontinous canopy wetting derivatives, so check and correct
       associate(&
