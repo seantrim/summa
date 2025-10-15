@@ -786,9 +786,8 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   type(data4ida), pointer     :: eqns_data   ! equations data
   real(rkind), pointer        :: stateVec(:) ! solution vector
   logical(lgt)                :: feasible    ! feasibility of state vector
-  !real(rkind), allocatable    :: fRHS(:)     ! RHS function for ARKODE 
   real(rkind), pointer        :: f(:)        ! pointer for RHS function for ARKODE
-  real(rkind)                 :: fNew        ! function values, not needed here
+  real(rkind)                 :: fNew        ! function values for line search, not needed here
   integer(i4b)                :: err         ! error in imposeConstraints
   character(len=256)          :: message     ! error message of downwind routine
 
@@ -796,9 +795,6 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
 
   ! get equations data from user-defined data
   call c_f_pointer(user_data, eqns_data)
-
-  ! allocate memory
-  !allocate(rVec(1:eqns_data%nState)) ! normally a deferred shape array but we need explicit allocation here
 
   ! get data arrays from SUNDIALS vectors
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
@@ -859,12 +855,14 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                 eqns_data%resVec,                  & ! intent(out):   residual vector
                 fNew,                              & ! intent(out):   new function evaluation
                 eqns_data%err,eqns_data%message)     ! intent(out):   error control
+
+  ! assign RHS values to pointer variable
+  f=eqns_data%fRHS(1:eqns_data%nState) 
+
+  ! check for errors  
   if (eqns_data%err > 0) then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; end if
   if (eqns_data%err < 0) then; eqns_data%message=trim(eqns_data%message); ierr=1; return; end if
 
-  ! assign RHS values to pointer variable
-  f=eqns_data%fRHS(1:eqns_data%nState)
-  
   ! return success
   ierr = 0
   return
