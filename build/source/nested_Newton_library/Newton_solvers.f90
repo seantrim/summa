@@ -34,7 +34,7 @@ contains
   integer(i4b) :: k                              ! iteration counter
   logical      :: exit_flag                      ! exit flag
   ! LAPACK Variables
-  real(r8b)    :: B(1:f_obj % n)                 ! right-hand side / solution vector
+  real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
   integer(i4b) :: M                              ! # of rows/columns for linear system
 
   ! initialize convergence flag
@@ -51,10 +51,10 @@ contains
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
    ! begin LAPACK operations
-   B=-f_obj % f_vec ! initialize right-side vector used by LAPACK
+   B(:,1)=-f_obj % f_vec ! initialize right-side vector used by LAPACK
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
 
-   f_obj % xkp1 = f_obj % xk+B ! update guess
+   f_obj % xkp1 = f_obj % xk+B(:,1) ! update guess
    if (f_obj % refinement) call f_obj % apply_refinement(f_obj % xk,f_obj % xkp1) ! apply Newton step refinement
 
    call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
@@ -99,7 +99,7 @@ contains
   integer(i4b) :: l_total                        ! total number of inner iterations
   logical      :: exit_outer,exit_inner 
   ! LAPACK Variables
-  real(r8b)    :: B(1:f_obj % n)                 ! right-hand side / solution vector
+  real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
 
   ! initialize convergence flag
   f_obj % converged = .false.
@@ -120,10 +120,10 @@ contains
 
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
-    B= f_obj % f2_vec - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
+    B(:,1) = f_obj % f2_vec - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
     &- f_obj % f1_vec + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
-    f_obj % xkp1lp1=B ! update guess
+    f_obj % xkp1lp1=B(:,1) ! update guess
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
     ! print exact convergence error
@@ -304,57 +304,42 @@ contains
 
  subroutine linear_solve(f_obj,A,B,tol)
   ! *** Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A *** 
-  type(f_obj_type),intent(in) :: f_obj           ! class object containing solver options
+  type(f_obj_type),intent(inout) :: f_obj                  ! nested Newton object
   ! LAPACK Variables
-  real(r8b),allocatable,intent(in) :: A(:,:)     ! input matrix
-  real(r8b),intent(inout) :: B(1:f_obj % n)      ! right-hand side / solution vector
-  real(r8b),intent(in)    :: tol                 ! tolerance value used by the calling routine
+  real(r8b),allocatable,intent(in) :: A(:,:)               ! input matrix
+  real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! right-hand side / solution vector
+  real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
-  character(1),parameter :: FACT='E'             ! option for matrix factoring (equilibrate matrix prior to factoring)
-  character(1),parameter :: TRANS='N'            ! option for matrix transposition (no transposition)
-  character(1),parameter :: EQUED='N'            ! specifies equilibration type (no initial equilibration)
-  integer(i4b) :: KL,KU                          ! # of subdiagonals and superdiagonals
-  integer(i4b) :: LDA,LDAF,LDX,LDB               ! leading dimensions of A, AF, X, and B arrays
-  integer(i4b),parameter :: NRHS=1_i4b           ! # of right-hand sides in B vector
-  integer(i4b) :: INFO                           ! error code
-  integer(i4b) :: IPIV(1:f_obj % n)              ! pivot index vector
-  integer(i4b) :: IWORK(1:f_obj % n)             ! work integer array
-  real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)   ! row and column scale factors for A
-  real(r8b) :: RCOND                             ! estimate of condition number reciprocal
-  real(r8b),allocatable :: AF(:,:)               ! output matrix (result is LU factorization of scaled matrix)
-  real(r8b) :: X(1:f_obj % n)                    ! solution to original (unscaled) system
-  real(r8b) :: FERR(1:1),BERR(1:1)               ! forward and backward error estimates (single right-hand side assumed)
-  real(r8b),allocatable :: WORK(:)               ! work array (reciprocal pivot growth factor in work(1) on exit)
-
-  ! LAPACK parameters independent of matrix storage type
-  LDX=f_obj % n; LDB=f_obj % n ! use arrays of minimum size
-
-  ! allocate memory and set LAPACK parameters for choice of matrix storage
-  if (f_obj % banded) then ! banded storage
-   KL=f_obj % subdiag; KU=f_obj % superdiag 
-   LDA=KL + KU + 1; LDAF=LDA+KL
-   allocate(AF(1:LDAF,1:f_obj % n)) ! storing LU factors requires an additional f_obj % subdiag rows
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:3_i4b*f_obj % n)) 
-  else ! full matrix storage
-   LDA=f_obj % n; LDAF=f_obj % n
-   allocate(AF(1:f_obj % n,1:f_obj % n))
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(WORK(1:4_i4b*f_obj % n)) 
-  end if
+  character(1),parameter :: FACT='E'               ! option for matrix factoring (equilibrate matrix prior to factoring)
+  character(1),parameter :: TRANS='N'              ! option for matrix transposition (no transposition)
+  character(1)           :: EQUED                  ! specifies equilibration type (no initial equilibration)
+  integer(i4b) :: INFO                             ! error code
+  integer(i4b) :: IPIV(1:f_obj % n)                ! pivot index vector
+  integer(i4b) :: IWORK(1:f_obj % n)               ! work integer array
+  real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)     ! row and column scale factors for A
+  real(r8b) :: RCOND                               ! estimate of condition number reciprocal
+  real(r8b) :: X(1:f_obj % n,1:f_obj % NRHS)             ! solution to original (unscaled) system
+  real(r8b) :: FERR(1:f_obj % NRHS),BERR(1:f_obj % NRHS) ! forward and backward error estimates (single right-hand side assumed)
 
   ! begin LAPACK operations
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
-    AF(1:KL,:)=0._r8b; AF(KL+1:LDAF,:)=A(1:LDA,:) ! load banded storage matrix used by LAPACK (stores LU factors on output)
-    call DGBSV(f_obj % n,KL,KU,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
+    ! load banded storage matrix used by LAPACK (stores LU factors on output)
+    f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
+    ! solve 
+    call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
-    AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
-    call DGESV(f_obj % n,NRHS,AF,LDAF,IPIV,B,LDB,INFO)
+    f_obj % AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
+    call DGESV(f_obj % n,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
+   EQUED='N' ! note: not a parameter because LAPACK may change this value on output
    if (f_obj % banded) then ! banded matrix storage
-    call DGBSVX(FACT,TRANS,f_obj % n,KL,KU,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+    call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,&
+               &IPIV,EQUED,RA,CA,B,f_obj % LDB,X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
    else ! full matrix storage
-    call DGESVX(FACT,TRANS,f_obj % n,NRHS,A,LDA,AF,LDAF,IPIV,EQUED,RA,CA,B,LDB,X,LDX,RCOND,FERR,BERR,WORK,IWORK,INFO)
+    call DGESVX(FACT,TRANS,f_obj % n,f_obj % NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,IPIV,EQUED,RA,CA,B,f_obj % LDB,&
+               &X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
    end if
    B=X ! put solution in output vector
   end if

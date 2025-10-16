@@ -272,7 +272,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1049,7 +1049,7 @@ contains
   maxiter = nint(mpar_data%var(iLookPARAM%maxiter)%dat(1))
 
   ! correct the number of iterations
-  localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution) - 1_i4b ! subtract one because iteration loop index starts at zero
+  localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution) - 1_i4b ! subtract one because iteration loop index starts at zero in NN solver
 
   ! set tolerance values
   ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
@@ -1101,21 +1101,13 @@ contains
   stateVecTrial = nested_Newton % x1
   stateVecPrime = stateVecTrial  !prime values not used here, dummy
   nSteps = 1 ! number of time steps taken in solver
-  niter  = nested_Newton % kcount ! set iteration count according to classical/outer iterations  
+  niter  = nested_Newton % kcount + 1_i4b ! set iteration count according to classical/outer iterations (add one to match HG solver)  
 
   ! check for convergence
   if (.not.nested_Newton % converged) then ! if failed to converge
    message=trim(message)//'failed to converge'
    err=-20; return_flag=.true.; return ! recoverable error
   end if
-
-  ! test block ------ take out
-  !print *, "systemSolv Test B: after Newton_solve call"
-  !print *, "nested_Newton % converged=",nested_Newton % converged
-  !print *, "err=",err
-  !print *, "object nSoil=",nested_Newton % indx_data%var(iLookINDEX%nSoil)%dat(1)
-  !print *, "indx_data nSoil=",indx_data%var(iLookINDEX%nSoil)%dat(1)
-  !print *, ""
 
  end subroutine nested_Newton_iterations
 

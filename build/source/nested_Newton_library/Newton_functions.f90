@@ -42,6 +42,10 @@ module Newton_functions
    integer(i4b) :: nrow_banded       ! # of matrix rows for banded storage
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
+   integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
+   integer(i4b) :: KL,KU             ! # of subdiagonals and superdiagonals for LAPACK
+   integer(i4b) :: NRHS              ! # of right-hand-side vectors for LAPACK
+   real(r8b),allocatable    :: WORK(:),AF(:,:)            ! LAPACK arrays
    real(r8b),allocatable    :: x0(:),x1(:)                ! initial and final root estimates for vector algorithms
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
    real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
@@ -222,6 +226,21 @@ contains
            &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n))
   else
    allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n))
+  end if
+
+  ! * allocate LAPACK arrays *
+  f_obj % NRHS = 1_i4b; f_obj % LDX=f_obj % n; f_obj % LDB=f_obj % n ! LAPACK parameters independent of matrix storage type
+
+  ! allocate memory and set LAPACK parameters for choice of matrix storage
+  if (f_obj % banded) then ! banded storage
+   f_obj % KL = f_obj % subdiag; f_obj % KU = f_obj % superdiag
+   f_obj % LDA = f_obj % KL + f_obj % KU + 1_i4b; f_obj % LDAF = f_obj % LDA + f_obj % KL
+   allocate(f_obj % AF(1:f_obj % LDAF,1:f_obj % n)) ! storing LU factors requires an additional f_obj % subdiag rows
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(f_obj % WORK(1:3_i4b*f_obj % n))
+  else ! full matrix storage
+   f_obj % LDA = f_obj % n; f_obj % LDAF = f_obj % n
+   allocate(f_obj % AF(1:f_obj % n,1:f_obj % n))
+   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(f_obj % WORK(1:4_i4b*f_obj % n))
   end if
 
  end subroutine f_allocate_memory
