@@ -1011,10 +1011,9 @@ contains
   nested_Newton % rAdd              = rAdd              ! additional terms in the residual vector
   nested_Newton % resVec            = resVec            ! residual vector    
 
-
   ! data components that are not allocatable
   nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
-  !nested_Newton % feasible       = feasible      ! feasibility flag (output from eval8summa)
+  nested_Newton % feasible       = feasible      ! feasibility flag (output from eval8summa)
 
   nested_Newton % lookup_data = lookup_data  ! lookup tables
   nested_Newton % flux_init   = flux_init    ! model fluxes at the start of the time step
@@ -1069,7 +1068,7 @@ contains
   ! allocate certain components of nested_Newton object
   call nested_Newton % allocate_memory()
 
-  ! store initial function values based on the initial call to eval8summa
+  ! store initial non-linear function values based on the initial call to eval8summa
   nested_Newton % f_vec = real(nested_Newton % resVec(:),r8b)
   nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
 
@@ -1099,7 +1098,7 @@ contains
   fOld          = fNew   ! may be from previous Newton iteration
   resVec        = nested_Newton % resVec ! may be from previous Newton iteration
   stateVecTrial = nested_Newton % x1
-  stateVecPrime = stateVecTrial  !prime values not used here, dummy
+  !stateVecPrime = stateVecTrial  !prime values not used here, dummy
   nSteps = 1 ! number of time steps taken in solver
   niter  = nested_Newton % kcount + 1_i4b ! set iteration count according to classical/outer iterations (add one to match HG solver)  
 

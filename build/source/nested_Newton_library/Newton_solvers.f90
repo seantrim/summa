@@ -54,8 +54,11 @@ contains
    B(:,1)=-f_obj % f_vec ! initialize right-side vector used by LAPACK
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
 
-   f_obj % xkp1 = f_obj % xk+B(:,1) ! update guess
-   if (f_obj % refinement) call f_obj % apply_refinement(f_obj % xk,f_obj % xkp1) ! apply Newton step refinement
+   if (f_obj % refinement) then
+    call f_obj % apply_refinement(.false.,f_obj % xk,B(:,1),f_obj % xkp1) ! apply Newton step refinement to obtain next guess
+   else
+    f_obj % xkp1 = f_obj % xk+B(:,1) ! update guess based on unrefined Newton step
+   end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
@@ -146,7 +149,7 @@ contains
     l_total=l_total+l
    end if
 
-   if (f_obj % refinement) call f_obj % apply_refinement(f_obj % xk0,f_obj % xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
+   if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % xk0,B(:,1),f_obj % xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
 
    f_obj % inner=.false.
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)

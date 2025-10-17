@@ -229,7 +229,10 @@ contains
   end if
 
   ! * allocate LAPACK arrays *
-  f_obj % NRHS = 1_i4b; f_obj % LDX=f_obj % n; f_obj % LDB=f_obj % n ! LAPACK parameters independent of matrix storage type
+
+  ! LAPACK parameters independent of matrix storage type
+  f_obj % NRHS = 1_i4b                         ! only one RHS vector is needed
+  f_obj % LDX=f_obj % n; f_obj % LDB=f_obj % n ! leading dimensions for RHS arrays
 
   ! allocate memory and set LAPACK parameters for choice of matrix storage
   if (f_obj % banded) then ! banded storage
@@ -604,22 +607,24 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
- subroutine SUMMA_refine_Newton_step(f_obj,xvec0,xvec1)
+ subroutine SUMMA_refine_Newton_step(f_obj,compute_step,xvec0,xStep,xvec1)
   ! ** interface to SUMMA's refine_Newton_step subroutine **
   use matrixOper_module,  only: scaleMatrices
   ! object
   class(f_obj_type),intent(inout)   :: f_obj
   ! input
+  logical  ,intent(in)              :: compute_step       ! flag indicating if we are computing the Newton step
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
+  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
-  integer(i4b) :: nBands      ! SUMMA's leading dimension for banded Jacobians
-  integer(i4b) :: mSoil       ! number of soil layers in the solution vector
+  integer(i4b) :: nBands ! SUMMA's leading dimension for banded Jacobians
+  integer(i4b) :: mSoil  ! number of soil layers in the solution vector
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState)       ! Jacobian matrix
   real(rkind)  :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! Jacobian matrix (scaled)
-  real(rkind),dimension(f_obj % in_SS4HG % nState) :: rVecScaled           ! residual vector (scaled)
-  real(rkind),dimension(f_obj % in_SS4HG % nState) :: newtStepScaled       ! full newton step (scaled)
+  real(rkind),dimension(f_obj % in_SS4HG % nState) :: rVecScaled     ! residual vector (scaled)
+  real(rkind),dimension(f_obj % in_SS4HG % nState) :: newtStepScaled ! full newton step (scaled)
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecTrial  ! unrefined guess
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecNew    ! refined guess
   logical(lgt)   :: return_flag
@@ -627,10 +632,10 @@ contains
   character(256) :: cmessage
 
   ! get SUMMA Jacobian from solver Jacobian
-  aJac = 0._rkind
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
     nBands=nrow_banded+subdiag
+    aJac(1:subdiag,1:n) = 0._rkind
     aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
    end associate
   else ! full matrix storage
@@ -647,9 +652,13 @@ contains
 
   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
-  newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-  rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
-  !rVecScaled = f_obj % fScale(:) * real(f_obj % f_vec(:), rkind) ! matches solve_linear_system (equivalent to above line)
+  if (compute_step) then ! if computing the Newton step
+   newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+  else ! if Newton step is provided on input
+   newtStepScaled = (xstep) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+  end if
+  !rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
+  rVecScaled = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -712,7 +721,7 @@ contains
   xvec1 = stateVecNew(:)
 
   ! store non-linear function vector for next Newton iteration
-  f_obj % f_vec = f_obj % resVec(:)
+  f_obj % f_vec = real(f_obj % resVec(:),r8b)
 
   ! update function value for line search
   f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
