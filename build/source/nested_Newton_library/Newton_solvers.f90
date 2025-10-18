@@ -329,13 +329,23 @@ contains
    if (f_obj % banded) then ! banded matrix storage
     ! load banded storage matrix used by LAPACK (stores LU factors on output)
     f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
+    ! scale
+    if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
     call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
     f_obj % AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
+    ! scale
+    if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     call DGESV(f_obj % n,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
+   if (f_obj % scaling) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "LAPACK Error: expert solver not set up for use with custom scaling."
+     end if
+     stop ! fatal error
+   end if
    EQUED='N' ! note: not a parameter because LAPACK may change this value on output
    if (f_obj % banded) then ! banded matrix storage
     call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,&
@@ -346,6 +356,9 @@ contains
    end if
    B=X ! put solution in output vector
   end if
+
+  ! compute descaled solution if needed (not needed for Newton step refinement)
+  if ((f_obj % scaling) .and. (.not.f_obj % refinement)) call f_obj % custom_descaling(B)
 
   ! error control
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver

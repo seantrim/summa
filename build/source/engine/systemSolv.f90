@@ -998,6 +998,10 @@ contains
   nested_Newton % n = nState
 
   ! * interface SUMMA data *
+  ! allocate scaled arrays
+  allocate(nested_Newton % rVecScaled(1:nested_Newton % in_SS4HG % nState))
+  allocate(nested_Newton % aJacScaled(1:nested_Newton % in_SS4HG % nLeadDim,1:nested_Newton % in_SS4HG % nState))
+
   ! allocatable data components that require allocation on assignment
   nested_Newton % model_decisions   = model_decisions   ! model decisions
   nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1)
@@ -1063,6 +1067,9 @@ contains
   ! constraints 
   nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
 
+  ! scaling
+  nested_Newton % scaling     = .true.  ! apply xScale and fScale scaling factors for LAPACK   
+
   ! * Solver Operations *
 
   ! allocate certain components of nested_Newton object
@@ -1108,6 +1115,7 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
+  print *, "niter=",niter ! SJT: --- take out ---
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
@@ -1133,6 +1141,7 @@ contains
   end do 
 
   if (post_massCons) call enforce_mass_conservation ! enforce mass conservation if desired
+  print *, "niter=",niter ! SJT: --- take out ---
  end subroutine Newton_iterations_homegrown
 
  subroutine finalize_systemSolv

@@ -30,6 +30,7 @@ module Newton_functions
    logical      :: converged    ! flag to indicate that the obtained solution meets the convergence criterion
    logical      :: constraints  ! flag to indicate that constraints are to be applied between outer/classical iterations
    logical      :: refinement   ! flag to indicate that refinement is to be applied following outer/classical Newton steps
+   logical      :: scaling      ! flag to indicate that user-specified scaling is to be applied for linear systems
    logical      :: f_eval_flag  ! flag to indicate that the total non-linear function vector is to be computed
    logical      :: f1_eval_flag ! flag to indicate that the non-linear function 1 vector is to be computed
    logical      :: f2_eval_flag ! flag to indicate that the non-linear function 2 vector is to be computed
@@ -113,6 +114,11 @@ module Newton_functions
    real(rkind),allocatable :: fRHS(:)                ! RHS function for ARKODE
    real(rkind),allocatable :: rAdd(:)                ! additional terms in the residual vector
    real(qp),allocatable    :: resVec(:)  ! NOTE: qp  ! residual vector 
+
+   ! scaled arrays
+   real(rkind),allocatable :: rVecScaled(:)   ! scaled residual
+   real(rkind),allocatable :: aJacScaled(:,:) ! scaled Jacobian
+
   contains
    ! ** routines that point to external sources ** !
    ! note: - these procedures are not directly called in the solver
@@ -155,6 +161,8 @@ module Newton_functions
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_refinement   => SUMMA_refine_Newton_step
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
+   procedure :: custom_scaling     => SUMMA_scaling  
+   procedure :: custom_descaling   => SUMMA_descaling  
  
    ! scalar routines
    procedure :: f     => f_diff 
@@ -178,6 +186,7 @@ contains
    f_obj % nested       = .false. ! flag for nested algorithm
    f_obj % constraints  = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
    f_obj % refinement   = .false. ! flag to indicate that refinement is to be applied following outer/classical Newton steps
+   f_obj % scaling      = .false. ! flag to indicate that user-specified scaling is to be applied for linear systems
    f_obj % f_eval_flag  = .true.  ! flag to indicate that the total non-linear function vector is to be computed
    f_obj % f1_eval_flag = .true.  ! flag to indicate that the non-linear function 1 vector is to be computed
    f_obj % f2_eval_flag = .true.  ! flag to indicate that the non-linear function 2 vector is to be computed
@@ -622,8 +631,7 @@ contains
   integer(i4b) :: nBands ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil  ! number of soil layers in the solution vector
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState)       ! Jacobian matrix
-  real(rkind)  :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! Jacobian matrix (scaled)
-  real(rkind),dimension(f_obj % in_SS4HG % nState) :: rVecScaled     ! residual vector (scaled)
+  !real(rkind),dimension(f_obj % in_SS4HG % nState) :: rVecScaled     ! residual vector (scaled)
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: newtStepScaled ! full newton step (scaled)
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecTrial  ! unrefined guess
   real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecNew    ! refined guess
@@ -631,17 +639,48 @@ contains
   integer(i4b)   :: err
   character(256) :: cmessage
 
-  ! get SUMMA Jacobian from solver Jacobian
-  if (f_obj % banded) then ! banded storage
-   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-    nBands=nrow_banded+subdiag
-    aJac(1:subdiag,1:n) = 0._rkind
-    aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+  if (f_obj % scaling) then ! reuse scaled arrays already computed
+
+    newtStepScaled = xstep          ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+
+  else ! scale arrays
+
+   ! get SUMMA Jacobian from solver Jacobian
+   if (f_obj % banded) then ! banded storage
+    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+     nBands=nrow_banded+subdiag
+     aJac(1:subdiag,1:n) = 0._rkind
+     aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+    end associate
+   else ! full matrix storage
+    associate(n => f_obj % n)
+     aJac = f_obj % J(1:n,1:n)
+    end associate
+   end if
+ 
+   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
+   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
+   if (compute_step) then ! if computing the Newton step
+    newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+   else ! if Newton step is provided on input
+    newtStepScaled = (xstep) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+   end if
+   f_obj % rVecScaled = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
+ 
+   associate(&
+    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
+    nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
+    fScale   => f_obj % fScale              , & 
+    xScale   => f_obj % xScale                & 
+   &)
+    call scaleMatrices(ixMatrix,nState,aJac,fScale,xScale,f_obj % aJacScaled,err,cmessage) ! matches solve_linear_system
    end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    aJac = f_obj % J(1:n,1:n)
-   end associate
+   if (err/=0) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
+    end if
+   end if
+
   end if
 
   ! get the number of soil layers in the solution vector
@@ -649,30 +688,6 @@ contains
 
   ! set unrefined guess
   stateVecTrial = xvec0 
-
-  ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
-  ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
-  if (compute_step) then ! if computing the Newton step
-   newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-  else ! if Newton step is provided on input
-   newtStepScaled = (xstep) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-  end if
-  !rVecScaled = f_obj % fScale(:) * real(f_obj % resVec(:), rkind) ! matches solve_linear_system
-  rVecScaled = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
-
-  associate(&
-   ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
-   nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
-   fScale   => f_obj % fScale              , & 
-   xScale   => f_obj % xScale                & 
-  &)
-   call scaleMatrices(ixMatrix,nState,aJac,fScale,xScale,aJacScaled,err,cmessage) ! matches solve_linear_system
-  end associate
-  if (err/=0) then
-   if (f_obj % out_error) then
-    write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
-   end if
-  end if
 
   associate(&
    ! input
@@ -702,12 +717,10 @@ contains
    resVecNew   => f_obj % resVec    , &
    out_SS4HG   => f_obj % out_SS4HG   &  
   &)
-   !print *, mSoil,sum(xvec1),sum(stateVecTrial),sum(newtStepScaled),sum(aJacScaled),sum(rVecScaled),sum(fScale),sum(xScale) !SJT: --- take out ---
-   call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,aJacScaled,rVecScaled,fScale,xScale,&         ! input
-                          &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
-                          &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
-                          &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                        ! output
-   !print *, sum(stateVecNew),sum(fluxVecNew),sum(resSinkNew),sum(resVecNew) !SJT: --- take out ---
+   call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,f_obj % aJacScaled,f_obj % rVecScaled,fScale,xScale,& ! input
+                          &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
+                          &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
+                          &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                ! output
   end associate
 
   ! check for errors in refine_Newton_step call
@@ -727,6 +740,53 @@ contains
   f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
 
  end subroutine SUMMA_refine_Newton_step
+
+ subroutine SUMMA_scaling(f_obj,B)
+  ! ** apply scaling from SUMMA's fScale and xScale vectors to matrix and RHS for LAPACK **
+  use matrixOper_module,  only: scaleMatrices
+  ! input
+  class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
+
+  ! input-output
+  real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! right-hand side vector
+
+  ! local
+  integer(i4b)   :: err
+  character(256) :: cmessage
+
+  ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
+  ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
+  B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
+  f_obj % rVecScaled(:) = -B(:,1) ! save scaled residual for reuse
+
+  associate(&
+   ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
+   nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
+   fScale   => f_obj % fScale              , & 
+   xScale   => f_obj % xScale                & 
+  &)
+   call scaleMatrices(ixMatrix,nState,f_obj % AF,fScale,xScale,f_obj % aJacScaled,err,cmessage)
+  end associate
+  if (err/=0) then
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in SUMMA_scaling: scaleMatrices message="//trim(cmessage); stop
+   end if
+  end if
+
+  f_obj % AF = f_obj % aJacScaled ! load AF matrix for LAPACK
+ end subroutine SUMMA_scaling
+
+ subroutine SUMMA_descaling(f_obj,B)
+  ! ** apply descaling from SUMMA's xScale vector to solution for LAPACK **
+  ! input
+  class(f_obj_type),intent(in) :: f_obj ! nested Newton object
+
+  ! input-output
+  real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! solution side vector
+
+  B(:,1) = B(:,1) * f_obj % xScale(:)
+  
+ end subroutine SUMMA_descaling
 
  function SUMMA_check_convergence_flag(f_obj) result(converged)
   ! ** check convergence flag from out_SS4HG object found during Newton step refinement **
