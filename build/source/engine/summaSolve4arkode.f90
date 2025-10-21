@@ -210,7 +210,6 @@ contains
    ! ODE system variables
    integer(c_long) :: neq              ! # of equations 
    real(c_double)  :: tstart           ! initial time
-   real(c_double)  :: tend             ! final time
    real(c_double)  :: tret(1),tretPrev ! current and previous times in data window
    real(c_double)  :: dt_last(1)       ! last time step
    real(rkind)     :: dt_diff          ! difference from previous timeste
@@ -230,8 +229,6 @@ contains
    integer(c_long) :: nREvals(1)
    integer(c_long) :: nLinSetups(1)
    integer(c_long) :: netFails(1)
-   integer(c_int)  :: qLast(1)
-   integer(c_int)  :: qCur(1)
    real(c_double)  :: hInitUsed(1)
    real(c_double)  :: hLast(1)
    real(c_double)  :: hCur(1)
@@ -304,7 +301,7 @@ contains
 
    ! main solver loop
    call update_ARKODE_solver_loop; if (return_flag) return
-   print *, "summaSolve4arkode A:" ! SJT --- take out ---
+
    ! finalize
    call finalize_ARKODE_solver; if (return_flag) return
   contains
@@ -329,9 +326,10 @@ contains
 
    subroutine initialize_ODE_system_values
     ! *** initialize ODE system values ***
-    tstart  = 0._rkind ! same as IDA
-    tend    = dt_cur   ! end time for solver loop
-    tret(1) = tstart   ! initialize time in data window
+
+    ! initial time for integrator
+    ! note: integrator time is set between 0 and dt_cur
+    tstart  = 0._c_double ! same as IDA
 
     ! define # of equations
     neq = nState
@@ -427,7 +425,7 @@ contains
     if (.not. associated(sunvec_y)) then; err=20_i4b; message=trim(message)//'sunvec = NULL'; return_flag=.true.; return; end if
 
     ! initialize solution vector
-    print *, "summaSolve4arkode A0: sum(stateVecInit)=",sum(stateVecInit) ! SJT --- take out ---
+    !print *, "summaSolve4arkode A0: sum(stateVecInit)=",sum(stateVecInit) ! SJT --- take out ---
     call setInitialCondition(neq, stateVecInit, sunvec_y)
    end subroutine initialize_SUNDIALS_solution_vector 
 
@@ -485,6 +483,10 @@ contains
     ! For the nonlinear solver, ARKODE uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it
     retval = FARKodeSetLinearSolver(arkode_mem, sunls, sunmat_A)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetLinearSolver'; return_flag=.true.; return; end if
+
+    ! set Jacobian function -- using ARKODE's default approximation method
+    retval = FARKodeSetJacFn(arkode_mem, c_null_funptr)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetJacFn'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_memory
 
    subroutine initialize_ARKODE_tolerance_vectors
@@ -601,7 +603,7 @@ contains
         !if (retvalr == ARK_TOO_MUCH_WORK) err = -20_i4b ! exit and reduce the data window time in varSubStep (not implemented) 
         exit
       end if
-      print *, "summaSolve4arkode B: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
+      !print *, "summaSolve4arkode B: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
 
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
       tooMuchMelt = .false.
@@ -800,8 +802,6 @@ contains
     diag_data%var(iLookDIAG%numResEvals)%dat(1) = nREvals(1)
     diag_data%var(iLookDIAG%numLinSolvSetups)%dat(1) = nLinSetups(1)
     diag_data%var(iLookDIAG%numErrTestFails)%dat(1) = netFails(1)
-    !diag_data%var(iLookDIAG%kLast)%dat(1) = qLast(1) ! IDA only -- for variable order
-    !diag_data%var(iLookDIAG%kCur)%dat(1) = qCur(1)   ! IDA only -- for variable order
     diag_data%var(iLookDIAG%hInitUsed)%dat(1) = hInitUsed(1)
     diag_data%var(iLookDIAG%hLast)%dat(1) = hLast(1)
     diag_data%var(iLookDIAG%hCur)%dat(1) = hCur(1)

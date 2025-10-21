@@ -780,16 +780,16 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   real(c_double), value       :: tn          ! current time
   type(N_Vector)              :: sunvec_y    ! solution N_Vector    y
   type(N_Vector)              :: sunvec_f    ! residual N_Vector    f(t,y)
-  type(c_ptr), value          :: user_data   ! user-defined data
+  type(c_ptr)   , value       :: user_data   ! user-defined data
 
   ! pointers to data in SUNDIALS vectors
   type(data4ida), pointer     :: eqns_data   ! equations data
-  real(rkind), pointer        :: stateVec(:) ! solution vector
-  logical(lgt)                :: feasible    ! feasibility of state vector
-  real(rkind), pointer        :: f(:)        ! pointer for RHS function for ARKODE
+  real(rkind)   , pointer     :: stateVec(:) ! solution vector
+  real(rkind)   , pointer     :: f(:)        ! pointer for RHS function for ARKODE
   real(rkind)                 :: fNew        ! function values for line search, not needed here
-  integer(i4b)                :: err         ! error in imposeConstraints
-  character(len=256)          :: message     ! error message of downwind routine
+  logical(lgt)                :: feasible    ! feasibility of state vector
+  !integer(i4b)                :: err         ! error in imposeConstraints
+  !character(len=256)          :: message     ! error message of downwind routine
 
   !======= Internals ============
 

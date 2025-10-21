@@ -272,8 +272,8 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
-  logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: ARKODE_flag=.true.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -729,12 +729,12 @@ contains
                       mLayerCmpress_sum,       & ! intent(inout): sum of compression of the soil matrix
                       ! output
                       ixSaturation,            & ! intent(inout)  index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                      sunSucceeds,             & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
+                      sunSucceeds,             & ! intent(out):   flag to indicate if ARKODE successfully solved the problem in current data step
                       tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
                       stateVecNew,             & ! intent(out):   model state vector
                       balance,                 & ! intent(inout): balance per state
-                      err,cmessage)               ! intent(out):   error control
+                      err,cmessage)              ! intent(out):   error control
   end associate
 
   ! ** finalize operations **
@@ -1115,7 +1115,7 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
-  print *, "niter=",niter ! SJT: --- take out ---
+  !print *, "niter=",niter ! SJT: --- take out ---
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
@@ -1141,7 +1141,7 @@ contains
   end do 
 
   if (post_massCons) call enforce_mass_conservation ! enforce mass conservation if desired
-  print *, "niter=",niter ! SJT: --- take out ---
+  !print *, "niter=",niter ! SJT: --- take out ---
  end subroutine Newton_iterations_homegrown
 
  subroutine finalize_systemSolv
