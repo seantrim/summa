@@ -236,7 +236,7 @@ subroutine systemSolv(&
   real(rkind)                     :: fluxVec0(nState)              ! flux vector (mixed units)
   real(rkind)                     :: dMat(nState)                  ! diagonal matrix (excludes flux derivatives)
   real(qp)                        :: sMul(nState)    ! NOTE: qp    ! multiplier for state vector for the residual calculations
-  real(rkind),allocatable         :: fRHS(:)                       ! RHS function for ARKODE
+  real(rkind)                     :: fRHS(nState)                  ! RHS function for ARKODE
   real(rkind)                     :: rAdd(nState)                  ! additional terms in the residual vector
   logical(lgt)                    :: feasible                      ! feasibility flag
   logical(lgt)                    :: sunSucceeds                   ! flag to indicate if SUNDIALS successfully solved the problem in current data step
@@ -403,9 +403,11 @@ contains
 
   ! compute the initial flux and the residual vector, also gets values needed for the Jacobian matrix 
   associate(ixNumericalMethod => model_decisions(iLookDECISIONS%num_method)%iDecision) ! intent(in): [i4b] choice of numerical solver
-   if (ixNumericalMethod==ida) then
+   !if (ixNumericalMethod==ida) then
+   if ((ixNumericalMethod==ida).and.(.not.ARKODE_flag)) then ! SJT: temporary -- restore OG line above --
      call initial_flux_and_residual_vectors_prime; if (return_flag) return
    else
+     print *, "systemSolv: ARKODE test"
      call initial_flux_and_residual_vectors; if (return_flag) return
    end if
   end associate
@@ -659,6 +661,8 @@ contains
                   rtol,          & ! intent(out): relative tolerances vector (mixed units)
                   err,cmessage)    ! intent(out): error control
   if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! check for errors
+  atol=atol/100._rkind; rtol=rtol/100._rkind ! SJT --- take out ---
+  print *, "systemSolv SWARKODE:",sum(atol),sum(rtol) ! SJT --- take out ---
 
   associate(&
    nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers
@@ -690,6 +694,7 @@ contains
    nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
   &)
    ! iterations and updates to trial state vector, fluxes, and derivatives are done inside ARKODE solver
+   print *, sum(stateVecTrial),sum(fRHS) ! SJT --- take out ---
    call summaSolve4arkode(&
                       dt_cur,                  & ! intent(in):    current stepsize
                       dt,                      & ! intent(in):    data time step
@@ -733,8 +738,10 @@ contains
                       tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
                       stateVecNew,             & ! intent(out):   model state vector
+                      fRHS,                    & ! intent(out):   RHS function values for ARKODE
                       balance,                 & ! intent(inout): balance per state
                       err,cmessage)              ! intent(out):   error control
+   print *, sum(stateVecNew),sum(fRHS) ! SJT --- take out ---
   end associate
 
   ! ** finalize operations **
@@ -812,6 +819,7 @@ contains
    ! * solving F(y,y') = 0 by IDA, y is the state vector and y' is the time derivative vector dy/dt
    !---------------------------
    ! iterations and updates to trial state vector, fluxes, and derivatives are done inside IDA solver
+   print *, sum(stateVecTrial) ! SJT --- take out ---
    call summaSolve4ida(&
                        dt_cur,                  & ! intent(in):    current stepsize
                        dt,                      & ! intent(in):    entire time step for drainage pond rate
@@ -856,6 +864,7 @@ contains
                        stateVecPrime,           & ! intent(inout): derivative of model state vector (y') at the end of the data time step
                        balance,                 & ! intent(inout): balance per state
                        err,cmessage)              ! intent(out):   error control
+   print *, sum(stateVecNew),sum(stateVecPrime) ! SJT --- take out ---
    ! check if IDA is successful, only fail outright in the case of a non-recoverable error
    if ( .not.sunSucceeds ) then
     message=trim(message)//trim(cmessage)

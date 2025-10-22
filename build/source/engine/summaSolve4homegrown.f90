@@ -1028,7 +1028,7 @@ contains
   character(*),intent(out)        :: message                   ! error message
   ! ----------------------------------------------------------------------------------------------------------
   ! local
-  real(rkind),allocatable         :: fRHS(:)                   ! RHS function for ARKODE
+  real(rkind)                     :: fRHS(1:in_SS4HG % nState) ! RHS function for ARKODE (not used here)
   character(len=256)              :: cmessage                  ! error message of downwind routine
   ! ----------------------------------------------------------------------------------------------------------
   ! initialize error control

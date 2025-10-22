@@ -147,20 +147,20 @@ subroutine computResid(&
   type(var_dlength),intent(in)       :: flux_data                 ! model fluxes for a local HRU
   type(var_ilength),intent(in)       :: indx_data                 ! indices defining model states and layers
   ! output
-  real(rkind),allocatable,intent(out) :: fRHS(:)                   ! right-hand-side function for ARKODE
-  real(rkind),intent(out)             :: rAdd(:)                   ! additional (sink) terms on the RHS of the state equation
-  real(qp),intent(out)                :: rVec(:)   ! NOTE: qp      ! residual vector
-  integer(i4b),intent(out)            :: err                       ! error code
-  character(*),intent(out)            :: message                   ! error message
+  real(rkind),intent(out)            :: fRHS(:)                   ! right-hand-side function for ARKODE
+  real(rkind),intent(out)            :: rAdd(:)                   ! additional (sink) terms on the RHS of the state equation
+  real(qp),intent(out)               :: rVec(:)   ! NOTE: qp      ! residual vector
+  integer(i4b),intent(out)           :: err                       ! error code
+  character(*),intent(out)           :: message                   ! error message
   ! --------------------------------------------------------------------------------------------------------------------------------
   ! local variables
   ! --------------------------------------------------------------------------------------------------------------------------------
-  integer(i4b)                        :: iLayer                    ! index of layer within the snow+soil domain
-  integer(i4b),parameter              :: ixVegVolume=1             ! index of the desired vegetation control volumne (currently only one veg layer)
-  real(rkind)                         :: scalarCanopyHydTrial      ! trial value of canopy water content (kg m-2), either liquid water content or total water content
-  real(rkind)                         :: scalarCanopyHyd           ! canopy water content (kg m-2), either liquid water content or total water content
-  real(rkind),dimension(nLayers)      :: mLayerVolFracHydTrial     ! trial vector of volumetric water content (-), either liquid water content or total water content
-  real(rkind),dimension(nLayers)      :: mLayerVolFracHyd          ! vector of volumetric water content (-), either liquid water content or total water content
+  integer(i4b)                       :: iLayer                    ! index of layer within the snow+soil domain
+  integer(i4b),parameter             :: ixVegVolume=1             ! index of the desired vegetation control volumne (currently only one veg layer)
+  real(rkind)                        :: scalarCanopyHydTrial      ! trial value of canopy water content (kg m-2), either liquid water content or total water content
+  real(rkind)                        :: scalarCanopyHyd           ! canopy water content (kg m-2), either liquid water content or total water content
+  real(rkind),dimension(nLayers)     :: mLayerVolFracHydTrial     ! trial vector of volumetric water content (-), either liquid water content or total water content
+  real(rkind),dimension(nLayers)     :: mLayerVolFracHyd          ! vector of volumetric water content (-), either liquid water content or total water content
   ! --------------------------------------------------------------------------------------------------------------------------------
   ! --------------------------------------------------------------------------------------------------------------------------------
   ! link to the necessary variables for the residual computations
@@ -216,7 +216,6 @@ subroutine computResid(&
 
     ! intialize additional terms on the RHS as zero
     rAdd(:) = 0._rkind
-    fRHS    = rAdd ! allocate and initialize right-hand-side function array for ARKODE (fluxes plus source terms)
 
     ! compute energy associated with melt freeze for the vegetation canopy (J m-3)
     if (ixVegNrg/=integerMissing) rAdd(ixVegNrg) = rAdd(ixVegNrg) + LH_fus*( scalarCanopyIceTrial - scalarCanopyIce )/canopyDepth
@@ -319,6 +318,7 @@ subroutine computResid(&
                                       & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
         ! compute the residual
         fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt )
+        !fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) )/dt ) ! SJT: testing
         rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
                                     & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
       end do 

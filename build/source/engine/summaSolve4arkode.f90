@@ -132,6 +132,7 @@ contains
                       tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
                       stateVec,                & ! intent(out):   model state vector
+                      fRHS,                    & ! intent(out):   RHS function values for ARKODE
                       balance,                 & ! intent(inout): balance per state
                       err,message)               ! intent(out):   error control
 
@@ -197,6 +198,7 @@ contains
    integer(i4b),intent(inout)      :: ixSaturation           ! index of the lowest saturated layer
    integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
    real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
+   real(rkind),intent(inout)       :: fRHS(:)            ! model state vector (y)
    logical(lgt),intent(out)        :: arkodeSucceeds         ! flag to indicate if ARKODE is successful
    logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
    !! output: residual terms and balances
@@ -390,7 +392,7 @@ contains
     !allocate( dCompress_dPsiPrev(nSoil) )
     allocate( mLayerCompressPrev(nSoil) ) ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
     allocate( eqns_data%fluxVec(nState) )
-    allocate( eqns_data%fRHS(nState) ); eqns_data%fRHS(:)=0._rkind ! initialize RHS function values to zero (computed in eval8summa4arkode)
+    allocate( eqns_data%fRHS(nState) )    ! ARKODE RHS function values (computed in eval8summa4arkode)
     allocate( eqns_data%resVec(nState) )
     allocate( eqns_data%resSink(nState) )
     allocate( resVecPrev(nState) )
@@ -603,7 +605,7 @@ contains
         !if (retvalr == ARK_TOO_MUCH_WORK) err = -20_i4b ! exit and reduce the data window time in varSubStep (not implemented) 
         exit
       end if
-      !print *, "summaSolve4arkode B: sum(eqns_data%fRHS)=",sum(eqns_data%fRHS) ! SJT: --- take out ---
+      print *, "SS4arkode: ",sum(stateVec),sum(eqns_data%fRHS) ! SJT: --- take out ---
 
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
       tooMuchMelt = .false.
@@ -769,6 +771,7 @@ contains
       deriv_data    = eqns_data%deriv_data
       ixSaturation  = eqns_data%ixSaturation
       indx_data%var(iLookINDEX%numberFluxCalc)%dat(1) = eqns_data%indx_data%var(iLookINDEX%numberFluxCalc)%dat(1) ! only number of flux calculations changes in indx_data
+      fRHS          = eqns_data%fRHS
       err           = eqns_data%err
       message       = eqns_data%message
     end if

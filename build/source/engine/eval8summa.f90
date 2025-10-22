@@ -182,7 +182,7 @@ subroutine eval8summa(&
   ! output: flux and residual vectors
   logical(lgt),intent(out)            :: feasible                ! flag to denote the feasibility of the solution
   real(rkind),intent(out)             :: fluxVec(:)              ! flux vector
-  real(rkind),allocatable,intent(out) :: fRHS(:)                 ! RHS function for ARKODE
+  real(rkind),intent(out)             :: fRHS(:)                 ! RHS function for ARKODE
   real(rkind),intent(out)             :: resSink(:)              ! sink terms on the RHS of the flux equation
   real(qp),intent(out)                :: resVec(:) ! NOTE: qp    ! residual vector
   real(rkind),intent(out)             :: fEval                   ! function evaluation
@@ -678,7 +678,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
   real(rkind), pointer        :: stateVec(:) ! solution vector
   real(rkind), pointer        :: rVec(:)     ! residual vector
   logical(lgt)                :: feasible    ! feasibility of state vector
-  real(rkind),allocatable     :: fRHS(:)     ! RHS function for ARKODE, not needed here
+  real(rkind),allocatable     :: fRHS(:)     ! RHS function for ARKODE (not used here)
   real(rkind)                 :: fNew        ! function values, not needed here
   integer(i4b)                :: err         ! error in imposeConstraints
   character(len=256)          :: message     ! error message of downwind routine
@@ -686,6 +686,9 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
 
   ! get equations data from user-defined data
   call c_f_pointer(user_data, eqns_data)
+
+  ! allocate arrays needed for eval8summa call
+  allocate(fRHS(1:eqns_data%nState))
 
   ! get data arrays from SUNDIALS vectors
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
@@ -850,18 +853,18 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                  ! output: flux and residual vectors
                 feasible,                          & ! intent(out):   flag to denote the feasibility of the solution always true inside SUNDIALS
                 eqns_data%fluxVec,                 & ! intent(out):   flux vector
-                eqns_data%fRHS,                    & ! intent(out):   RHS function for ARKODE
+                f,                                 & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 eqns_data%resVec,                  & ! intent(out):   residual vector
                 fNew,                              & ! intent(out):   new function evaluation
                 eqns_data%err,eqns_data%message)     ! intent(out):   error control
 
-  ! assign RHS values to pointer variable
-  f=eqns_data%fRHS(1:eqns_data%nState) 
-
   ! check for errors  
   if (eqns_data%err > 0) then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; end if
   if (eqns_data%err < 0) then; eqns_data%message=trim(eqns_data%message); ierr=1; return; end if
+
+  ! save RHS values
+  eqns_data%fRHS(1:eqns_data%nState) = f 
 
   ! return success
   ierr = 0
@@ -980,7 +983,7 @@ subroutine imposeConstraints(model_decisions,indx_data, prog_data, mpar_data, st
   
     ! identify which constraints to impose
     select case(ixNumericalMethod)
-    case(ida); err=20; message=trim(message)//'should not be imposing constraints for IDA solver'; return
+      case(ida); err=20; message=trim(message)//'should not be imposing constraints for IDA solver'; return
       case(kinsol)
         small_delTemp       = .true.      ! flag to constain temperature change to be less than zMaxTempIncrement
         zMaxTempIncrement   = 10._rkind   ! maximum temperature increment (K)

@@ -485,6 +485,7 @@ subroutine summaSolve4ida(&
         !if(retvalr==-1) err = -20 ! max iterations failure, exit and reduce the data window time in varSubStep
         exit
       end if
+      print *, "SS4ida:",sum(stateVec),sum(stateVecPrime) ! SJT: --- take out ---
     
       tooMuchMelt = .false.
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
