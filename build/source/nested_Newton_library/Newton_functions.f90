@@ -868,7 +868,6 @@ contains
                     f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
                     f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
                     .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
-                    !f_obj % firstSplitOper,            & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
                     f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                     f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                     ! input: state vectors

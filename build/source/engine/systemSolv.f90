@@ -272,8 +272,8 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
-  logical(lgt),parameter :: ARKODE_flag=.true.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -407,7 +407,6 @@ contains
    if ((ixNumericalMethod==ida).and.(.not.ARKODE_flag)) then ! SJT: temporary -- restore OG line above --
      call initial_flux_and_residual_vectors_prime; if (return_flag) return
    else
-     print *, "systemSolv: ARKODE test"
      call initial_flux_and_residual_vectors; if (return_flag) return
    end if
   end associate
@@ -661,8 +660,6 @@ contains
                   rtol,          & ! intent(out): relative tolerances vector (mixed units)
                   err,cmessage)    ! intent(out): error control
   if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! check for errors
-  atol=atol/100._rkind; rtol=rtol/100._rkind ! SJT --- take out ---
-  print *, "systemSolv SWARKODE:",sum(atol),sum(rtol) ! SJT --- take out ---
 
   associate(&
    nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers
@@ -694,7 +691,7 @@ contains
    nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
   &)
    ! iterations and updates to trial state vector, fluxes, and derivatives are done inside ARKODE solver
-   print *, sum(stateVecTrial),sum(fRHS) ! SJT --- take out ---
+   !print *, sum(stateVecTrial),sum(fRHS) ! SJT --- take out ---
    call summaSolve4arkode(&
                       dt_cur,                  & ! intent(in):    current stepsize
                       dt,                      & ! intent(in):    data time step
@@ -741,7 +738,7 @@ contains
                       fRHS,                    & ! intent(out):   RHS function values for ARKODE
                       balance,                 & ! intent(inout): balance per state
                       err,cmessage)              ! intent(out):   error control
-   print *, sum(stateVecNew),sum(fRHS) ! SJT --- take out ---
+   !print *, sum(stateVecNew),sum(fRHS) ! SJT --- take out ---
   end associate
 
   ! ** finalize operations **
@@ -819,7 +816,7 @@ contains
    ! * solving F(y,y') = 0 by IDA, y is the state vector and y' is the time derivative vector dy/dt
    !---------------------------
    ! iterations and updates to trial state vector, fluxes, and derivatives are done inside IDA solver
-   print *, sum(stateVecTrial) ! SJT --- take out ---
+   !print *, sum(stateVecTrial) ! SJT --- take out ---
    call summaSolve4ida(&
                        dt_cur,                  & ! intent(in):    current stepsize
                        dt,                      & ! intent(in):    entire time step for drainage pond rate
@@ -864,7 +861,7 @@ contains
                        stateVecPrime,           & ! intent(inout): derivative of model state vector (y') at the end of the data time step
                        balance,                 & ! intent(inout): balance per state
                        err,cmessage)              ! intent(out):   error control
-   print *, sum(stateVecNew),sum(stateVecPrime) ! SJT --- take out ---
+   !print *, sum(stateVecNew),sum(stateVecPrime) ! SJT --- take out ---
    ! check if IDA is successful, only fail outright in the case of a non-recoverable error
    if ( .not.sunSucceeds ) then
     message=trim(message)//trim(cmessage)
@@ -1026,7 +1023,7 @@ contains
 
   ! data components that are not allocatable
   nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
-  nested_Newton % feasible       = feasible      ! feasibility flag (output from eval8summa)
+  nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
 
   nested_Newton % lookup_data = lookup_data  ! lookup tables
   nested_Newton % flux_init   = flux_init    ! model fluxes at the start of the time step

@@ -35,17 +35,13 @@ contains
   logical      :: exit_flag                      ! exit flag
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
-  integer(i4b) :: M                              ! # of rows/columns for linear system
 
   ! initialize convergence flag
   f_obj % converged = .false.
 
-  ! initialize LAPACK parameters
-  M=f_obj % n 
-
   f_obj % inner = .false. ! classical iterations only
   exit_flag=.false.
-  f_obj % xk = f_obj % x0 ! initialize
+  f_obj % xk = f_obj % x0(:) ! initialize
   do k=0,f_obj % kmax
    if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ! compute non-linear function vector (f_obj % f_vec)
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
@@ -57,7 +53,7 @@ contains
    if (f_obj % refinement) then
     call f_obj % apply_refinement(.false.,f_obj % xk,B(:,1),f_obj % xkp1) ! apply Newton step refinement to obtain next guess
    else
-    f_obj % xkp1 = f_obj % xk+B(:,1) ! update guess based on unrefined Newton step
+    f_obj % xkp1 = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
    end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
@@ -68,7 +64,7 @@ contains
    end if
 
    if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk,f_obj % xkp1) ! apply constraints without interfering with the convergence criterion
-   f_obj % xk = f_obj % xkp1 ! prep for next iteration - can probably evaluate in place
+   f_obj % xk = f_obj % xkp1(:) ! prep for next iteration - can probably evaluate in place
   end do
   ! final output
   if (exit_flag.eqv..true.) then
@@ -88,7 +84,7 @@ contains
    end if
   end if
 
-  f_obj % x1 = f_obj % xkp1
+  f_obj % x1 = f_obj % xkp1(:)
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
 
  end subroutine Newton_vector
@@ -109,11 +105,11 @@ contains
  
   l_total=0
   exit_outer=.false.
-  f_obj % xk0=f_obj % x0 ! initial guess
+  f_obj % xk0=f_obj % x0(:) ! initial guess
   outer: do k=0,f_obj % kmax
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
    exit_inner=.false.
-   f_obj % xkp1l = f_obj % xk0 !initial guess for inner iterations
+   f_obj % xkp1l = f_obj % xk0(:) !initial guess for inner iterations
    f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
@@ -132,7 +128,7 @@ contains
     ! print exact convergence error
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
-    f_obj % xkp1l = f_obj % xkp1lp1 ! set up next inner iteration
+    f_obj % xkp1l = f_obj % xkp1lp1(:) ! set up next inner iteration
    end do inner
    if (l.gt.f_obj % lmax) then
     if (f_obj % out_warning) then
@@ -162,7 +158,7 @@ contains
    end if
 
    if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk0,f_obj % xkp1lp1) ! apply constraints without interfering with the convergence criterion
-   f_obj % xk0 = f_obj % xkp1lp1
+   f_obj % xk0 = f_obj % xkp1lp1(:)
   end do outer
 
   ! outer iterations counts 
@@ -184,7 +180,7 @@ contains
    end if
   end if
 
-  f_obj % x1 = f_obj % xkp1lp1
+  f_obj % x1 = f_obj % xkp1lp1(:)
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then
@@ -306,10 +302,10 @@ contains
  end function matrix_vector_product
 
  subroutine linear_solve(f_obj,A,B,tol)
-  ! *** Solve Ax=B -- x stored in B on output -- M is the # of rows/columns of A *** 
+  ! *** Solve Ax=B -- x stored in B on output *** 
   type(f_obj_type),intent(inout) :: f_obj                  ! nested Newton object
   ! LAPACK Variables
-  real(r8b),allocatable,intent(in) :: A(:,:)               ! input matrix
+  real(r8b),intent(in)    :: A(:,:)                        ! input matrix
   real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
