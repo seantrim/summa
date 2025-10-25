@@ -1021,10 +1021,6 @@ contains
   nested_Newton % rAdd              = rAdd              ! additional terms in the residual vector
   nested_Newton % resVec            = resVec            ! residual vector    
 
-  ! data components that are not allocatable
-  nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
-  nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
-
   nested_Newton % lookup_data = lookup_data  ! lookup tables
   nested_Newton % flux_init   = flux_init    ! model fluxes at the start of the time step
   nested_Newton % type_data   = type_data    ! type of vegetation and soil
@@ -1039,6 +1035,9 @@ contains
   nested_Newton % flux_data  =  flux_temp  ! flux variables for a local HRU (flux_temp used for summaSolve4homegrown so used here)
   nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
 
+  ! data components that are not allocatable
+  nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
+  nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
   
   ! * Nested Newton solver options *
 
@@ -1082,11 +1081,11 @@ contains
   call nested_Newton % allocate_memory()
 
   ! store initial non-linear function values based on the initial call to eval8summa
-  nested_Newton % f_vec = real(nested_Newton % resVec(:),r8b)
+  nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
   nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
 
   ! set up initial guess
-  nested_Newton % x1=stateVecTrial(1:nState)  ! initialize solution from previous time step
+  nested_Newton % x1(:) = stateVecTrial(:)  ! initialize solution from previous time step
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
   ! call solver

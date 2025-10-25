@@ -45,7 +45,6 @@ module Newton_functions
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
    integer(i4b) :: KL,KU             ! # of subdiagonals and superdiagonals for LAPACK
-   integer(i4b) :: NRHS              ! # of right-hand-side vectors for LAPACK
    real(r8b),allocatable    :: WORK(:),AF(:,:)            ! LAPACK arrays
    real(r8b),allocatable    :: x0(:),x1(:)                ! initial and final root estimates for vector algorithms
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
@@ -223,24 +222,9 @@ contains
    end if
   end associate
 
-  ! allocate Jacobian arrays
-  if (f_obj % banded) then ! banded storage
-    f_obj % nrow_banded = f_obj % subdiag + f_obj % superdiag + 1_i4b
-    f_obj % nrow = f_obj % nrow_banded
-  else
-    f_obj % nrow = f_obj % n
-  end if
-  if (f_obj % nested) then
-   allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
-           &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n))
-  else
-   allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n))
-  end if
-
   ! * allocate LAPACK arrays *
 
   ! LAPACK parameters independent of matrix storage type
-  f_obj % NRHS = 1_i4b                         ! only one RHS vector is needed
   f_obj % LDX=f_obj % n; f_obj % LDB=f_obj % n ! leading dimensions for RHS arrays
 
   ! allocate memory and set LAPACK parameters for choice of matrix storage
@@ -253,6 +237,20 @@ contains
    f_obj % LDA = f_obj % n; f_obj % LDAF = f_obj % n
    allocate(f_obj % AF(1:f_obj % n,1:f_obj % n))
    if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(f_obj % WORK(1:4_i4b*f_obj % n))
+  end if
+
+  ! allocate Jacobian arrays
+  if (f_obj % banded) then ! banded storage
+    f_obj % nrow_banded = f_obj % subdiag + f_obj % superdiag + 1_i4b
+    f_obj % nrow = f_obj % nrow_banded
+  else
+    f_obj % nrow = f_obj % n
+  end if
+  if (f_obj % nested) then
+   allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
+           &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n))
+  else
+   allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n))
   end if
 
  end subroutine f_allocate_memory
@@ -630,11 +628,10 @@ contains
   ! local
   integer(i4b) :: nBands ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil  ! number of soil layers in the solution vector
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState)       ! Jacobian matrix
-  !real(rkind),dimension(f_obj % in_SS4HG % nState) :: rVecScaled     ! residual vector (scaled)
-  real(rkind),dimension(f_obj % in_SS4HG % nState) :: newtStepScaled ! full newton step (scaled)
-  real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecTrial  ! unrefined guess
-  real(rkind),dimension(f_obj % in_SS4HG % nState) :: stateVecNew    ! refined guess
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! Jacobian matrix
+  real(rkind)  :: newtStepScaled(1:f_obj % in_SS4HG % nState)                 ! full newton step (scaled)
+  real(rkind)  :: stateVecTrial(1:f_obj % in_SS4HG % nState)                  ! unrefined guess
+  real(rkind)  :: stateVecNew(1:f_obj % in_SS4HG % nState)                    ! refined guess
   logical(lgt)   :: return_flag
   integer(i4b)   :: err
   character(256) :: cmessage
@@ -659,11 +656,11 @@ contains
    ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
    ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
    if (compute_step) then ! if computing the Newton step
-    newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+    newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
    else ! if Newton step is provided on input
-    newtStepScaled = xstep / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+    newtStepScaled(:) = xstep(:) / f_obj % xScale(:)              ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
    end if
-   f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
+   f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:)   ! matches solve_linear_system
  
    associate(&
     ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -685,7 +682,7 @@ contains
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
 
   ! set unrefined guess
-  stateVecTrial = xvec0 
+  stateVecTrial(:) = xvec0(:) 
 
   associate(&
    ! input
@@ -729,7 +726,7 @@ contains
   end if
 
   ! store refined guess
-  xvec1 = stateVecNew(:)
+  xvec1(:) = stateVecNew(:)
 
   ! store non-linear function vector for next Newton iteration
   f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
@@ -746,7 +743,7 @@ contains
   class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
 
   ! input-output
-  real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! right-hand side vector
+  real(r8b),intent(inout) :: B(1:f_obj % n,1:1) ! right-hand side vector
 
   ! local
   integer(i4b)   :: err
@@ -780,7 +777,7 @@ contains
   class(f_obj_type),intent(in) :: f_obj ! nested Newton object
 
   ! input-output
-  real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! solution side vector
+  real(r8b),intent(inout) :: B(1:f_obj % n,1:1) ! solution side vector
 
   B(:,1) = B(:,1) * f_obj % xScale(:)
   

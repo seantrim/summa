@@ -47,7 +47,7 @@ contains
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
    ! begin LAPACK operations
-   B(:,1)=-f_obj % f_vec ! initialize right-side vector used by LAPACK
+   B(:,1)=-f_obj % f_vec(:) ! initialize right-side vector used by LAPACK
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
 
    if (f_obj % refinement) then
@@ -119,8 +119,8 @@ contains
 
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
-    B(:,1) = f_obj % f2_vec - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
-    &- f_obj % f1_vec + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
+    B(:,1) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
+          &- f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
@@ -306,19 +306,20 @@ contains
   type(f_obj_type),intent(inout) :: f_obj                  ! nested Newton object
   ! LAPACK Variables
   real(r8b),intent(in)    :: A(:,:)                        ! input matrix
-  real(r8b),intent(inout) :: B(1:f_obj % n,1:f_obj % NRHS) ! right-hand side / solution vector
+  real(r8b),intent(inout) :: B(1:f_obj % n,1:1) ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
   character(1),parameter :: FACT='E'               ! option for matrix factoring (equilibrate matrix prior to factoring)
   character(1),parameter :: TRANS='N'              ! option for matrix transposition (no transposition)
   character(1)           :: EQUED                  ! specifies equilibration type (no initial equilibration)
+  integer(i4b),parameter :: NRHS = 1_i4b           ! # of right-hand-side vectors
   integer(i4b) :: INFO                             ! error code
   integer(i4b) :: IPIV(1:f_obj % n)                ! pivot index vector
   integer(i4b) :: IWORK(1:f_obj % n)               ! work integer array
   real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)     ! row and column scale factors for A
   real(r8b) :: RCOND                               ! estimate of condition number reciprocal
-  real(r8b) :: X(1:f_obj % n,1:f_obj % NRHS)             ! solution to original (unscaled) system
-  real(r8b) :: FERR(1:f_obj % NRHS),BERR(1:f_obj % NRHS) ! forward and backward error estimates (single right-hand side assumed)
+  real(r8b) :: X(1:f_obj % n,1:1)                  ! solution to original (unscaled) system
+  real(r8b) :: FERR(1:1),BERR(1:1)                 ! forward and backward error estimates (single right-hand side assumed)
 
   ! begin LAPACK operations
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
@@ -328,12 +329,12 @@ contains
     ! scale
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
-    call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
+    call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
     f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
-    call DGESV(f_obj % n,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
+    call DGESV(f_obj % n,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % scaling) then
@@ -344,13 +345,13 @@ contains
    end if
    EQUED='N' ! note: not a parameter because LAPACK may change this value on output
    if (f_obj % banded) then ! banded matrix storage
-    call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,&
+    call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,&
                &IPIV,EQUED,RA,CA,B,f_obj % LDB,X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
    else ! full matrix storage
-    call DGESVX(FACT,TRANS,f_obj % n,f_obj % NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,IPIV,EQUED,RA,CA,B,f_obj % LDB,&
+    call DGESVX(FACT,TRANS,f_obj % n,NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,IPIV,EQUED,RA,CA,B,f_obj % LDB,&
                &X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
    end if
-   B=X ! put solution in output vector
+   B(:,:)=X(:,:) ! put solution in output vector
   end if
 
   ! compute descaled solution if needed (not needed for Newton step refinement)
