@@ -41,7 +41,7 @@ contains
 
   f_obj % inner = .false. ! classical iterations only
   exit_flag=.false.
-  f_obj % xk = f_obj % x0(:) ! initialize
+  f_obj % xk(:) = f_obj % x0(:) ! initialize
   do k=0,f_obj % kmax
    if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ! compute non-linear function vector (f_obj % f_vec)
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
@@ -53,7 +53,7 @@ contains
    if (f_obj % refinement) then
     call f_obj % apply_refinement(.false.,f_obj % xk,B(:,1),f_obj % xkp1) ! apply Newton step refinement to obtain next guess
    else
-    f_obj % xkp1 = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
+    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
    end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
@@ -64,7 +64,7 @@ contains
    end if
 
    if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk,f_obj % xkp1) ! apply constraints without interfering with the convergence criterion
-   f_obj % xk = f_obj % xkp1(:) ! prep for next iteration - can probably evaluate in place
+   f_obj % xk(:) = f_obj % xkp1(:) ! prep for next iteration - can probably evaluate in place
   end do
   ! final output
   if (exit_flag.eqv..true.) then
@@ -84,7 +84,7 @@ contains
    end if
   end if
 
-  f_obj % x1 = f_obj % xkp1(:)
+  f_obj % x1(:) = f_obj % xkp1(:)
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
 
  end subroutine Newton_vector
@@ -105,15 +105,15 @@ contains
  
   l_total=0
   exit_outer=.false.
-  f_obj % xk0=f_obj % x0(:) ! initial guess
+  f_obj % xk0(:)=f_obj % x0(:) ! initial guess
   outer: do k=0,f_obj % kmax
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
    exit_inner=.false.
-   f_obj % xkp1l = f_obj % xk0(:) !initial guess for inner iterations
+   f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
    f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
-    f_obj % Jdiff = f_obj % J1(:,:) - f_obj % J2(:,:)
+    f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
     if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
     if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
 
@@ -122,13 +122,13 @@ contains
     B(:,1) = f_obj % f2_vec - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
     &- f_obj % f1_vec + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
-    f_obj % xkp1lp1=B(:,1) ! update guess
+    f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
     ! print exact convergence error
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
-    f_obj % xkp1l = f_obj % xkp1lp1(:) ! set up next inner iteration
+    f_obj % xkp1l(:) = f_obj % xkp1lp1(:) ! set up next inner iteration
    end do inner
    if (l.gt.f_obj % lmax) then
     if (f_obj % out_warning) then
@@ -158,7 +158,7 @@ contains
    end if
 
    if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk0,f_obj % xkp1lp1) ! apply constraints without interfering with the convergence criterion
-   f_obj % xk0 = f_obj % xkp1lp1(:)
+   f_obj % xk0(:) = f_obj % xkp1lp1(:)
   end do outer
 
   ! outer iterations counts 
@@ -180,7 +180,7 @@ contains
    end if
   end if
 
-  f_obj % x1 = f_obj % xkp1lp1(:)
+  f_obj % x1(:) = f_obj % xkp1lp1(:)
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then
@@ -272,7 +272,7 @@ contains
   ! *** Compute matrix vector product y=A*x ***
   ! input
   type(f_obj_type),intent(in) :: f_obj        ! class object containing solver options
-  real(r8b),allocatable,intent(in) :: A(:,:)  ! input matrix 
+  real(r8b),intent(in) :: A(:,:)  ! input matrix 
   real(r8b),intent(in) :: x(1:f_obj % n)              ! input vector
 
   ! output
@@ -330,7 +330,7 @@ contains
     ! solve 
     call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
-    f_obj % AF=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
+    f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     call DGESV(f_obj % n,f_obj % NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve

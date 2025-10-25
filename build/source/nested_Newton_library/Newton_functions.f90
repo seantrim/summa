@@ -653,9 +653,7 @@ contains
      aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
     end associate
    else ! full matrix storage
-    associate(n => f_obj % n)
-     aJac = f_obj % J(1:n,1:n)
-    end associate
+    aJac(:,:) = f_obj % J(:,:)
    end if
  
    ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
@@ -663,9 +661,9 @@ contains
    if (compute_step) then ! if computing the Newton step
     newtStepScaled = (xvec1 - xvec0) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
    else ! if Newton step is provided on input
-    newtStepScaled = (xstep) / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+    newtStepScaled = xstep / f_obj % xScale ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
    end if
-   f_obj % rVecScaled = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
+   f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
  
    associate(&
     ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
@@ -734,7 +732,7 @@ contains
   xvec1 = stateVecNew(:)
 
   ! store non-linear function vector for next Newton iteration
-  f_obj % f_vec = real(f_obj % resVec(:),r8b)
+  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
 
   ! update function value for line search
   f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
@@ -773,7 +771,7 @@ contains
    end if
   end if
 
-  f_obj % AF = f_obj % aJacScaled ! load AF matrix for LAPACK
+  f_obj % AF(:,:) = f_obj % aJacScaled(:,:) ! load AF matrix for LAPACK
  end subroutine SUMMA_scaling
 
  subroutine SUMMA_descaling(f_obj,B)
@@ -968,9 +966,7 @@ contains
     f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
-   associate(n => f_obj % n)
-    f_obj % J = aJac(1:n,1:n)
-   end associate
+   f_obj % J(:,:) = aJac(:,:)
   end if
 
  end subroutine SUMMA_computJacob
@@ -985,7 +981,7 @@ contains
   !       - perhaps introducing logical flags in eval8summa to isolate the required operations would boost efficiency 
   call f_obj % SUMMA_eval8summa(xvec)
 
-  f_obj % f_vec = real(f_obj % resVec,r8b)
+  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
   
  end subroutine f_SUMMA_vec
 
