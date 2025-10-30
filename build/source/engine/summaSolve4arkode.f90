@@ -131,8 +131,8 @@ contains
                       arkodeSucceeds,          & ! intent(out):   flag to indicate if IDA successfully solved the problem in current data step
                       tooMuchMelt,             & ! intent(inout): lag to denote that there was too much melt
                       nSteps,                  & ! intent(out):   number of time steps taken in solver
-                      stateVec,                & ! intent(out):   model state vector
-                      fRHS,                    & ! intent(out):   RHS function values for ARKODE
+                      stateVec,                & ! intent(inout): model state vector
+                      fRHS,                    & ! intent(inout): RHS function values for ARKODE
                       balance,                 & ! intent(inout): balance per state
                       err,message)               ! intent(out):   error control
 
@@ -198,7 +198,7 @@ contains
    integer(i4b),intent(inout)      :: ixSaturation           ! index of the lowest saturated layer
    integer(i4b),intent(out)        :: nSteps                 ! number of time steps taken in solver
    real(rkind),intent(inout)       :: stateVec(:)            ! model state vector (y)
-   real(rkind),intent(inout)       :: fRHS(:)            ! model state vector (y)
+   real(rkind),intent(inout)       :: fRHS(:)                ! right-hand-side function values for ARKODE
    logical(lgt),intent(out)        :: arkodeSucceeds         ! flag to indicate if ARKODE is successful
    logical(lgt),intent(inout)      :: tooMuchMelt            ! flag to denote that there was too much melt
    !! output: residual terms and balances
@@ -246,15 +246,15 @@ contains
    !real(rkind),allocatable :: dCompress_dPsiPrev(:) ! previous derivative value soil compression
 
    ! option variables
-   logical(lgt)   :: use_fdJac ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
+   logical(lgt) :: use_fdJac ! flag to use finite difference Jacobian, controlled by decision fDerivMeth
 
    ! logical flags
    logical(lgt) :: tinystep    ! if step goes below small size
    logical(lgt) :: feasible    ! feasibility flag
 
    ! return variables
-   logical(lgt)    :: return_flag    ! logical flag for control of return statements
-   integer(c_int)  :: retval,retvalr ! return values for SUNDIALS procedures
+   logical(lgt)   :: return_flag    ! logical flag for control of return statements
+   integer(c_int) :: retval,retvalr ! return values for SUNDIALS procedures
 
    ! indices
    integer(i4b) :: i    ! loop index
@@ -354,7 +354,6 @@ contains
     eqns_data%firstSplitOper = .false. ! already called for initial data window
     eqns_data%computeVegFlux = computeVegFlux
     eqns_data%scalarSolution = scalarSolution
-    eqns_data%deriv_data     = deriv_data
     eqns_data%lookup_data    = lookup_data
     eqns_data%type_data      = type_data
     eqns_data%attr_data      = attr_data
@@ -365,6 +364,7 @@ contains
     eqns_data%indx_data      = indx_data
     eqns_data%diag_data      = diag_data
     eqns_data%flux_data      = flux_data
+    eqns_data%deriv_data     = deriv_data
     eqns_data%ixSaturation   = ixSaturation
 
     ! allocate space and fill
@@ -374,6 +374,7 @@ contains
     eqns_data%rtol = rtol ! allocate on assignment
     eqns_data%sMul = sMul ! allocate on assignment
     eqns_data%dMat = dMat ! allocate on assignment
+    eqns_data%fRHS = fRHS ! ARKODE RHS function values (computed in eval8summa4arkode)
 
     ! allocate space for the to save previous fluxes
     call allocLocal(flux_meta(:),flux_prev,nSnow,nSoil,err,cmessage)
@@ -391,8 +392,7 @@ contains
     !allocate( eqns_data%mLayerMatricHeadTrial(nSoil) )
     !allocate( dCompress_dPsiPrev(nSoil) )
     allocate( mLayerCompressPrev(nSoil) ) ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
-    allocate( eqns_data%fluxVec(nState) )
-    allocate( eqns_data%fRHS(nState) )    ! ARKODE RHS function values (computed in eval8summa4arkode)
+    allocate( eqns_data%fluxVec(nState) ) ! this?
     allocate( eqns_data%resVec(nState) )
     allocate( eqns_data%resSink(nState) )
     allocate( resVecPrev(nState) )
@@ -427,7 +427,6 @@ contains
     if (.not. associated(sunvec_y)) then; err=20_i4b; message=trim(message)//'sunvec = NULL'; return_flag=.true.; return; end if
 
     ! initialize solution vector
-    !print *, "summaSolve4arkode A0: sum(stateVecInit)=",sum(stateVecInit) ! SJT --- take out ---
     call setInitialCondition(neq, stateVecInit, sunvec_y)
    end subroutine initialize_SUNDIALS_solution_vector 
 
@@ -568,9 +567,9 @@ contains
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return_flag=.true.; return; end if
 
-!    ! activate fixed ARKODE internal steps --------- SJT: testing ---------
-!    retval = FARKodeSetFixedStep(arkode_mem, dt_cur/100._rkind)
-!    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetFixedStep'; return_flag=.true.; return; end if
+    ! activate fixed ARKODE internal steps --------- SJT: testing ---------
+    retval = FARKodeSetFixedStep(arkode_mem, dt_cur/10000._rkind)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetFixedStep'; return_flag=.true.; return; end if
 
     ! the following is based on the looping strategy from summaSolve4ida
     tinystep = .false.
@@ -592,6 +591,7 @@ contains
       eqns_data%firstSplitOper = .false. ! already called for initial data window
 
       ! call ARKodeEvolve, advance solver just one internal step
+      print *, "SS4arkode A: ",tret,sum(stateVec),sum(eqns_data%fRHS),sum(eqns_data%fluxVec),sum(eqns_data%resSink) ! SJT: --- take out ---
       retvalr = FARKodeEvolve(arkode_mem, dt_cur, sunvec_y, tret, ARK_ONE_STEP)
       ! early return if ARKodeEvolve failed
       if( retvalr < 0_c_int )then ! all failures are captured using negative return values
@@ -605,7 +605,7 @@ contains
         !if (retvalr == ARK_TOO_MUCH_WORK) err = -20_i4b ! exit and reduce the data window time in varSubStep (not implemented) 
         exit
       end if
-      print *, "SS4arkode: ",sum(stateVec),sum(eqns_data%fRHS) ! SJT: --- take out ---
+      print *, "SS4arkode B: ",tret,sum(stateVec),sum(eqns_data%fRHS),sum(eqns_data%fluxVec),sum(eqns_data%resSink) ! SJT: --- take out ---
 
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
       tooMuchMelt = .false.
@@ -757,7 +757,7 @@ contains
       !endif
 
     end do
-
+    stop ! SJT: --- take out ---
    end subroutine update_ARKODE_solver_loop
 
    subroutine finalize_ARKODE_solver

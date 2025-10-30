@@ -475,6 +475,7 @@ subroutine summaSolve4ida(&
       eqns_data%firstSplitOper = .false. ! already called for initial data window
 
       ! call IDASolve, advance solver just one internal step
+      print *, "SS4ida A:",tret,sum(stateVec),sum(stateVecPrime),sum(eqns_data%fluxVec),sum(eqns_data%resSink) ! SJT: --- take out ---
       retvalr = FIDASolve(ida_mem, dt_cur, tret, sunvec_y, sunvec_yp, IDA_ONE_STEP)
       ! early return if IDASolve failed
       if( retvalr < 0 )then
@@ -485,7 +486,7 @@ subroutine summaSolve4ida(&
         !if(retvalr==-1) err = -20 ! max iterations failure, exit and reduce the data window time in varSubStep
         exit
       end if
-      print *, "SS4ida:",sum(stateVec),sum(stateVecPrime) ! SJT: --- take out ---
+      print *, "SS4ida B:",tret,sum(stateVec),sum(stateVecPrime),sum(eqns_data%fluxVec),sum(eqns_data%resSink) ! SJT: --- take out ---
     
       tooMuchMelt = .false.
       ! loop through non-missing energy state variables in the snow domain to see if need to merge
