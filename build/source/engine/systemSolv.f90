@@ -1018,6 +1018,7 @@ contains
   nested_Newton % sMul              = sMul              ! multiplier for state vector for the residual calculation 
 
   nested_Newton % fluxVec0          = fluxVec0          ! flux vector (mixed units)
+  nested_Newton % fRHS              = fRHS              ! ARKODE function values
   nested_Newton % rAdd              = rAdd              ! additional terms in the residual vector
   nested_Newton % resVec            = resVec            ! residual vector    
 
@@ -1038,51 +1039,90 @@ contains
   ! data components that are not allocatable
   nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
   nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
+
   
-  ! * Nested Newton solver options *
-
-  ! Newton iteration type
-  nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
-
-  ! set method for computing relative convergence error
-   ! 'strict' uses two consecutive iterations and is extremely conservative
-   !     |--> (actually computes the convergence error of the previous iteration)
-   ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
-  nested_Newton % convergence = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
-
-  ! solver output
-  call nested_Newton % solver_output('silent') ! standard output used by default 
-
   ! define maximum number of iterations
   maxiter = nint(mpar_data%var(iLookPARAM%maxiter)%dat(1))
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution) - 1_i4b ! subtract one because iteration loop index starts at zero in NN solver
 
-  ! set tolerance values
-  ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-  call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+  ! * Nested Newton solver options *
 
-  ! Linear system solver choice
-  nested_Newton % linear_system_solver = "LAPACK_standard"
+  ! Newton iteration type
+  nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
-  ! Newton step refinement
-  nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
+  ! allocate certain components of the nested_Newton object
+  call nested_Newton % allocate_memory()
 
-  ! constraints 
-  nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
+  if (nested_Newton % nested) then ! nested iterations
+   ! set method for computing relative convergence error
+    ! 'strict' uses two consecutive iterations and is extremely conservative
+    !     |--> (actually computes the convergence error of the previous iteration)
+    ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
+   nested_Newton % convergence = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
-  ! scaling
-  nested_Newton % scaling     = .true.  ! apply xScale and fScale scaling factors for LAPACK   
+   ! solver output
+   call nested_Newton % solver_output('verbose') ! standard output used by default 
+
+   ! set tolerance values
+   ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
+   call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+
+   ! Linear system solver choice
+   nested_Newton % linear_system_solver = "LAPACK_expert"
+
+   ! Newton step refinement
+   nested_Newton % refinement  = .false.  ! apply refine_Newton_step following outer/classical iterations
+
+   ! constraints 
+   nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
+
+   ! scaling
+   nested_Newton % scaling     = .false.  ! apply xScale and fScale scaling factors for LAPACK   
+
+  else ! classical iterations
+   ! set method for computing relative convergence error
+    ! 'strict' uses two consecutive iterations and is extremely conservative
+    !     |--> (actually computes the convergence error of the previous iteration)
+    ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
+   nested_Newton % convergence = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+
+   ! solver output
+   call nested_Newton % solver_output('silent') ! standard output used by default 
+
+   ! set tolerance values
+   ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
+   call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+
+   ! Linear system solver choice
+   nested_Newton % linear_system_solver = "LAPACK_standard"
+
+   ! Newton step refinement
+   nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
+
+   ! constraints 
+   nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
+
+   ! scaling
+   nested_Newton % scaling     = .true.  ! apply xScale and fScale scaling factors for LAPACK   
+  end if
 
   ! * Solver Operations *
 
-  ! allocate certain components of nested_Newton object
-  call nested_Newton % allocate_memory()
-
-  ! store initial non-linear function values based on the initial call to eval8summa
-  nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
-  nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
+  if (nested_Newton % nested) then ! nested iterations
+   ! store initial non-linear function values based on the initial call to eval8summa
+   nested_Newton % f1_vec(:) = real(nested_Newton % resVec(:),r8b)
+   nested_Newton % f2_vec(:) = 0._rkind
+   nested_Newton % f1_eval_flag = .true. 
+   nested_Newton % f2_eval_flag = .true. 
+   nested_Newton % J1_eval_flag = .true. 
+   nested_Newton % J2_eval_flag = .true. 
+  else ! classical iterations
+   ! store initial non-linear function values based on the initial call to eval8summa
+   nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
+   nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
+  end if
 
   ! set up initial guess
   nested_Newton % x1(:) = stateVecTrial(:)  ! initialize solution from previous time step
