@@ -51,7 +51,7 @@ contains
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
 
    if (f_obj % refinement) then
-    call f_obj % apply_refinement(.false.,f_obj % xk,B(:,1),f_obj % xkp1) ! apply Newton step refinement to obtain next guess
+    call f_obj % apply_refinement(.false.,f_obj % J,f_obj % xk,B(:,1),f_obj % xkp1,f_obj % f_vec) ! apply Newton step refinement to obtain next guess
    else
     f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
    end if
@@ -99,6 +99,7 @@ contains
   logical      :: exit_outer,exit_inner 
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
+  real(r8b)    :: f2mJ2xk0(1:f_obj % n)             ! right-hand side / solution vector
 
   ! initialize convergence flag
   f_obj % converged = .false.
@@ -107,22 +108,26 @@ contains
   exit_outer=.false.
   f_obj % xk0(:)=f_obj % x0(:) ! initial guess
   outer: do k=0,f_obj % kmax
+
+   if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
+   f2mJ2xk0(:) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)
    exit_inner=.false.
    f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
    f_obj % inner=.true. ! inner iterations for next loop
+
    inner: do l=0,f_obj % lmax ! inner iterations
+    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
-    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
-    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
 
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
-    B(:,1) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)&
-          &- f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
+    B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
+
+    if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % J1,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f1_vec) 
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
     ! print exact convergence error
@@ -130,6 +135,7 @@ contains
     if (exit_inner) exit inner
     f_obj % xkp1l(:) = f_obj % xkp1lp1(:) ! set up next inner iteration
    end do inner
+
    if (l.gt.f_obj % lmax) then
     if (f_obj % out_warning) then
      write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of inner iterations&
@@ -145,7 +151,9 @@ contains
     l_total=l_total+l
    end if
 
-   if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % xk0,B(:,1),f_obj % xkp1lp1) ! apply Newton step refinement (may need to apply to inner iterations)
+   ! apply Newton step refinement (may need to apply to inner iterations)
+   !if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % J2,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f2_vec) 
+   !if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f_vec) 
 
    f_obj % inner=.false.
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)

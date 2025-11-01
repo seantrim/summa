@@ -613,21 +613,23 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
- subroutine SUMMA_refine_Newton_step(f_obj,compute_step,xvec0,xStep,xvec1)
+ subroutine SUMMA_refine_Newton_step(f_obj,compute_step,J,xvec0,xStep,xvec1,fvec)
   ! ** interface to SUMMA's refine_Newton_step subroutine **
   use matrixOper_module,  only: scaleMatrices
   ! object
   class(f_obj_type),intent(inout)   :: f_obj
   ! input
   logical  ,intent(in)              :: compute_step       ! flag indicating if we are computing the Newton step
+  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
   real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
+  real(r8b),intent(inout)           :: fvec(1:f_obj % n)  ! non-linear function vector
   ! local
   integer(i4b) :: nBands ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil  ! number of soil layers in the solution vector
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! Jacobian matrix
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA Jacobian matrix
   real(rkind)  :: newtStepScaled(1:f_obj % in_SS4HG % nState)                 ! full newton step (scaled)
   real(rkind)  :: stateVecTrial(1:f_obj % in_SS4HG % nState)                  ! unrefined guess
   real(rkind)  :: stateVecNew(1:f_obj % in_SS4HG % nState)                    ! refined guess
@@ -646,10 +648,12 @@ contains
     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
      nBands=nrow_banded+subdiag
      aJac(1:subdiag,1:n) = 0._rkind
-     aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+     !aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+     aJac(subdiag+1:nBands,1:n) = J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
     end associate
    else ! full matrix storage
-    aJac(:,:) = f_obj % J(:,:)
+    !aJac(:,:) = f_obj % J(:,:)
+    aJac(:,:) = J(:,:)
    end if
  
    ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
@@ -728,7 +732,8 @@ contains
   xvec1(:) = stateVecNew(:)
 
   ! store non-linear function vector for next Newton iteration
-  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+  fvec(:) = real(f_obj % resVec(:),r8b)
 
   ! update function value for line search
   f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew

@@ -272,7 +272,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1052,9 +1052,6 @@ contains
   ! Newton iteration type
   nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
-  ! allocate certain components of the nested_Newton object
-  call nested_Newton % allocate_memory()
-
   if (nested_Newton % nested) then ! nested iterations
    ! set method for computing relative convergence error
     ! 'strict' uses two consecutive iterations and is extremely conservative
@@ -1073,7 +1070,7 @@ contains
    nested_Newton % linear_system_solver = "LAPACK_expert"
 
    ! Newton step refinement
-   nested_Newton % refinement  = .false.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
 
    ! constraints 
    nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
@@ -1110,14 +1107,19 @@ contains
 
   ! * Solver Operations *
 
+  ! allocate certain components of the nested_Newton object
+  call nested_Newton % allocate_memory()
+
   if (nested_Newton % nested) then ! nested iterations
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f1_vec(:) = real(nested_Newton % resVec(:),r8b)
-   nested_Newton % f2_vec(:) = 0._rkind
    nested_Newton % f1_eval_flag = .true. 
-   nested_Newton % f2_eval_flag = .true. 
    nested_Newton % J1_eval_flag = .true. 
-   nested_Newton % J2_eval_flag = .true. 
+
+   nested_Newton % f2_vec(:) = 0._rkind
+   nested_Newton % J2(:,:) = 0._rkind
+   nested_Newton % f2_eval_flag = .false. 
+   nested_Newton % J2_eval_flag = .false. 
   else ! classical iterations
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
