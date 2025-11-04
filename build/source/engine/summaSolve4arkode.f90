@@ -220,9 +220,11 @@ contains
    ! SUNDIALS variables
    type(c_ptr)                             :: ctx        ! SUNDIALS context for the simulation
    type(N_Vector), pointer                 :: sunvec_y   ! sundials vector
-   type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix
+   type(SUNMatrix), pointer                :: sunmat_A   ! sundials matrix for Jacobian system
+   type(SUNMatrix), pointer                :: sunmat_M   ! sundials matrix for mass system
    integer(c_long)                         :: mu, lu     ! in banded matrix mode in SUNDIALS type
-   type(SUNLinearSolver), pointer          :: sunls      ! sundials linear solver
+   type(SUNLinearSolver), pointer          :: sunls_A    ! sundials linear solver for Jacobian system
+   type(SUNLinearSolver), pointer          :: sunls_M    ! sundials linear solver for mass system
    type(SUNAdaptController), pointer       :: sunCtrl    ! time step controller
    type(c_ptr)                             :: arkode_mem ! ARKODE memory
 
@@ -288,6 +290,9 @@ contains
 
    ! create ARKODE memory variable: attach user data and matrix objects 
    call initialize_ARKODE_memory; if (return_flag) return
+
+   ! set up ARKODE mass matrix solver 
+   call initialize_ARKODE_mass_matrix_solver; if (return_flag) return
 
    ! initialize tolerance vectors for ARKODE
    call initialize_ARKODE_tolerance_vectors; if (return_flag) return
@@ -448,22 +453,38 @@ contains
     select case(ixMatrix)
       case(ixBandMatrix)
         mu = ku; lu = kl;
-        ! Create banded SUNMatrix for use in linear solves
+        ! Create banded SUNMatrix for use in linear solves for Jacobian system
         sunmat_A => FSUNBandMatrix(neq, mu, lu, ctx)
-        if (.not. associated(sunmat_A)) then; err=20_i4b; message=trim(message)//'sunmat = NULL'; return_flag=.true.; return; end if
+        if (.not. associated(sunmat_A)) then; err=20_i4b; message=trim(message)//'sunmat_A = NULL'; return_flag=.true.; return; end if
 
-        ! Create banded SUNLinearSolver object
-        sunls => FSUNLinSol_Band(sunvec_y, sunmat_A, ctx)
-        if (.not. associated(sunls)) then; err=20_i4b; message=trim(message)//'sunls = NULL'; return_flag=.true.; return; end if
+        ! Create banded SUNMatrix for use in linear solves for mass system
+        sunmat_M => FSUNBandMatrix(neq, mu, lu, ctx)
+        if (.not. associated(sunmat_M)) then; err=20_i4b; message=trim(message)//'sunmat_M = NULL'; return_flag=.true.; return; end if
+
+        ! Create banded SUNLinearSolver object for Jacobian system
+        sunls_A => FSUNLinSol_Band(sunvec_y, sunmat_A, ctx)
+        if (.not. associated(sunls_A)) then; err=20_i4b; message=trim(message)//'sunls_A = NULL'; return_flag=.true.; return; end if
+
+        ! Create banded SUNLinearSolver object for mass system
+        sunls_M => FSUNLinSol_Band(sunvec_y, sunmat_M, ctx)
+        if (.not. associated(sunls_M)) then; err=20_i4b; message=trim(message)//'sunls_M = NULL'; return_flag=.true.; return; end if
 
       case(ixFullMatrix)
-        ! Create dense SUNMatrix for use in linear solves
+        ! Create dense SUNMatrix for use in linear solves for Jacobian system
         sunmat_A => FSUNDenseMatrix(neq, neq, ctx)
-        if (.not. associated(sunmat_A)) then; err=20_i4b; message=trim(message)//'sunmat = NULL'; return_flag=.true.; return; end if
+        if (.not. associated(sunmat_A)) then; err=20_i4b; message=trim(message)//'sunmat_A = NULL'; return_flag=.true.; return; end if
 
-        ! Create dense SUNLinearSolver object
-        sunls => FSUNLinSol_Dense(sunvec_y, sunmat_A, ctx)
-        if (.not. associated(sunls)) then; err=20_i4b; message=trim(message)//'sunls = NULL'; return_flag=.true.; return; end if
+        ! Create dense SUNMatrix for use in linear solves for mass system
+        sunmat_M => FSUNDenseMatrix(neq, neq, ctx)
+        if (.not. associated(sunmat_M)) then; err=20_i4b; message=trim(message)//'sunmat_M = NULL'; return_flag=.true.; return; end if
+
+        ! Create dense SUNLinearSolver object for Jacobian system
+        sunls_A => FSUNLinSol_Dense(sunvec_y, sunmat_A, ctx)
+        if (.not. associated(sunls_A)) then; err=20_i4b; message=trim(message)//'sunls_A = NULL'; return_flag=.true.; return; end if
+
+        ! Create dense SUNLinearSolver object for mass system
+        sunls_M => FSUNLinSol_Dense(sunvec_y, sunmat_M, ctx)
+        if (.not. associated(sunls_M)) then; err=20_i4b; message=trim(message)//'sunls_M = NULL'; return_flag=.true.; return; end if
 
         ! check
       case default; err=20_i4b; message=trim(message)//'error in type of matrix'; return_flag=.true.; return
@@ -482,13 +503,27 @@ contains
 
     ! Attach the matrix and linear solver
     ! For the nonlinear solver, ARKODE uses a Newton SUNNonlinearSolver-- it is not necessary to create and attach it
-    retval = FARKodeSetLinearSolver(arkode_mem, sunls, sunmat_A)
+    retval = FARKodeSetLinearSolver(arkode_mem, sunls_A, sunmat_A)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetLinearSolver'; return_flag=.true.; return; end if
 
     ! set Jacobian function -- using ARKODE's default approximation method
     retval = FARKodeSetJacFn(arkode_mem, c_null_funptr)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetJacFn'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_memory
+
+   subroutine initialize_ARKODE_mass_matrix_solver
+    ! *** initialize ARKODE mass matrix solver ***
+
+    ! attach mass matrix and corresponding linear solver to ARKODE memory
+    !ARKodeSetMassLinearSolver(void *arkode_mem, SUNLinearSolver LS, SUNMatrix M, sunbooleantype time_dep)
+    retval = FARKodeSetMassLinearSolver(arkode_mem, sunls_M, sunmat_M, SUNFALSE)
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetMassLinearSolver'; return_flag=.true.; return; end if
+
+    ! set mass matrix function
+!    !ARKodeSetMassFn(void *arkode_mem, ARKLsMassFn mass) 
+!    retval = FARKodeSetMassFn(arkode_mem, massMatrix4arkode) 
+!    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetMassFn'; return_flag=.true.; return; end if
+   end subroutine initialize_ARKODE_mass_matrix_solver
 
    subroutine initialize_ARKODE_tolerance_vectors
     ! *** initialize ARKODE tolerance vectors ***
@@ -567,9 +602,9 @@ contains
     retval = FARKodeSetStopTime(arkode_mem, dt_cur)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetStopTime'; return_flag=.true.; return; end if
 
-    ! activate fixed ARKODE internal steps --------- SJT: testing ---------
-    retval = FARKodeSetFixedStep(arkode_mem, dt_cur/10000._rkind)
-    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetFixedStep'; return_flag=.true.; return; end if
+!    ! activate fixed ARKODE internal steps --------- SJT: testing ---------
+!    retval = FARKodeSetFixedStep(arkode_mem, dt_cur/10000._rkind)
+!    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetFixedStep'; return_flag=.true.; return; end if
 
     ! the following is based on the looping strategy from summaSolve4ida
     tinystep = .false.
@@ -811,7 +846,7 @@ contains
     diag_data%var(iLookDIAG%tCur)%dat(1) = tCur(1)
 
     call FARKodeFree(arkode_mem)
-    retval = FSUNLinSolFree(sunls)
+    retval = FSUNLinSolFree(sunls_A)
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'unable to free the linear solver'; return_flag=.true.; return; end if
     call FSUNMatDestroy(sunmat_A)
     call FN_VDestroy(sunvec_y)
