@@ -40,6 +40,7 @@ module summaSolve4arkode_module
  USE globalData,only: ixBandMatrix   ! named variable for the band diagonal matrix
  USE globalData,only: ku             ! number of super-diagonal bands
  USE globalData,only: kl             ! number of sub-diagonal bands
+ USE globalData,only: nBands         ! length of the leading dimension of the band diagonal matrix
  
  !! global metadata
  USE globalData,only:flux_meta       ! metadata on the model fluxes
@@ -397,7 +398,7 @@ contains
     !allocate( eqns_data%mLayerMatricHeadTrial(nSoil) )
     !allocate( dCompress_dPsiPrev(nSoil) )
     allocate( mLayerCompressPrev(nSoil) ) ! note: added for soil compressibility sum calculation for ARKODE (without primed variables)
-    allocate( eqns_data%fluxVec(nState) ) ! this?
+    allocate( eqns_data%fluxVec(nState) ) 
     allocate( eqns_data%resVec(nState) )
     allocate( eqns_data%resSink(nState) )
     allocate( resVecPrev(nState) )
@@ -520,9 +521,9 @@ contains
     if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetMassLinearSolver'; return_flag=.true.; return; end if
 
     ! set mass matrix function
-!    !ARKodeSetMassFn(void *arkode_mem, ARKLsMassFn mass) 
-!    retval = FARKodeSetMassFn(arkode_mem, massMatrix4arkode) 
-!    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetMassFn'; return_flag=.true.; return; end if
+    !ARKodeSetMassFn(void *arkode_mem, ARKLsMassFn mass) 
+    retval = FARKodeSetMassFn(arkode_mem, c_funloc(massMatrix4arkode)) 
+    if (retval /= 0_c_int) then; err=20_i4b; message=trim(message)//'error in FARKodeSetMassFn'; return_flag=.true.; return; end if
    end subroutine initialize_ARKODE_mass_matrix_solver
 
    subroutine initialize_ARKODE_tolerance_vectors
@@ -792,7 +793,7 @@ contains
       !endif
 
     end do
-    stop ! SJT: --- take out ---
+    !stop ! SJT: --- take out ---
    end subroutine update_ARKODE_solver_loop
 
    subroutine finalize_ARKODE_solver
@@ -905,6 +906,66 @@ contains
 
  end subroutine summaSolve4arkode
 
+ ! **********************************************************************************************************
+ ! public function  massMatrix4arkode: the interface for the ARKODE mass matrix M (M*dy/dt = fE(t,y) + fI(t,y))
+ ! **********************************************************************************************************
+ ! Return values:
+ !    0 = success,
+ !    1 = recoverable error,
+ !   -1 = non-recoverable error
+ ! ----------------------------------------------------------------
+ integer(c_int) function massMatrix4arkode(tn, sunmat_M, user_data, &
+                                          sunvec_t1, sunvec_t2, sunvec_t3) result(ierr) bind(C, name='massMatrix4arkode')
+
+   !======= Inclusions ===========
+   use, intrinsic :: iso_c_binding
+   use fsundials_core_mod                ! Fortran interface to SUNContext
+   use fnvector_serial_mod               ! Fortran interface to serial N_Vector
+   use fsunmatrix_dense_mod              ! Fortran interface to dense SUNMatrix
+   use fsunmatrix_band_mod               ! Fortran interface to banded SUNMatrix
+   use type4ida
+
+   !======= Declarations =========
+   implicit none
+
+   ! calling variables
+   real(c_double), value :: tn         ! current time
+   type(SUNMatrix)       :: sunmat_M   ! Jacobian SUNMatrix
+   type(c_ptr), value    :: user_data  ! user-defined data
+   type(N_Vector)        :: sunvec_t1  ! temporary N_Vectors
+   type(N_Vector)        :: sunvec_t2
+   type(N_Vector)        :: sunvec_t3
+
+   ! pointers to data in SUNDIALS vectors
+   real(rkind), pointer          :: M(:,:)         ! Jacobian matrix
+   type(data4ida), pointer       :: eqns_data      ! equations data
+
+   ! indices
+   integer(i4b) :: i
+
+   ! get equations data from user-defined data
+   call c_f_pointer(user_data, eqns_data)
+
+   ! get data arrays from SUNDIALS vectors
+   if (eqns_data%ixMatrix==ixBandMatrix) then ! banded storage
+    M(1:nBands, 1:eqns_data%nState) => FSUNBandMatrix_Data(sunmat_M)
+    do i = 1,eqns_data%nState
+     M(kl+ku+1,i) = 1._rkind
+    end do
+   else if (eqns_data%ixMatrix==ixFullMatrix) then ! dense storage
+    M(1:eqns_data%nState, 1:eqns_data%nState) => FSUNDenseMatrix_Data(sunmat_M)
+    do i = 1,eqns_data%nState
+     M(i,i) = 1._rkind
+    end do
+   else ! matrix type not supported -- non-recoverable error
+    ierr = -1; return
+   end if
+
+
+   ! return success
+   ierr = 0
+   return
+ end function massMatrix4arkode
 
 end module summaSolve4arkode_module
 
