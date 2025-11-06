@@ -1634,7 +1634,7 @@ subroutine coupled_em(&
 
   end associate canopy  ! end association to canopy parameters
 
-  ! overwrite flux data with timestep-average value for all flux_mean vars, hard-coded to not happen
+  ! overwrite flux data with timestep-average value for all flux_mean vars, hard-coded to happen
   if(.not.backwardsCompatibility)then
     do iVar=1,size(flux_mean%var)
       flux_data%var(averageFlux_meta(iVar)%ixParent)%dat = flux_mean%var(iVar)%dat

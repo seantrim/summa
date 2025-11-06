@@ -144,7 +144,6 @@ contains
 
  ! check have the correct number of HRUs
  if ((iRunMode==iRunModeFull).and.(nHRU_file/=nHRU)) then
-    print*, ' nHRU_file = ', nHRU_file, ' nHRU = ', nHRU
   message=trim(message)//'incorrect number of HRUs in file '//trim(infile)
   err=20; return
  endif
