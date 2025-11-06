@@ -272,8 +272,8 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
-  logical(lgt),parameter :: ARKODE_flag=.true.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
   call initialize_systemSolv; if (return_flag) return ! initialize variables and allocate arrays -- return if error
@@ -1057,23 +1057,26 @@ contains
     ! 'strict' uses two consecutive iterations and is extremely conservative
     !     |--> (actually computes the convergence error of the previous iteration)
     ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
-   nested_Newton % convergence = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+   nested_Newton % convergence       = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+   nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
    ! solver output
-   call nested_Newton % solver_output('verbose') ! standard output used by default 
+   call nested_Newton % solver_output('minimal') ! standard output used by default 
 
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-   call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+   call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_expert"
 
    ! Newton step refinement
-   nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement        = .false. ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement_inner  = .true.  ! apply refine_Newton_step following inner iterations
 
    ! constraints 
-   nested_Newton % constraints = .false. ! apply imposeConstraints between outer/classical iterations
+   nested_Newton % constraints       = .false. ! apply imposeConstraints between outer/classical iterations
+   nested_Newton % constraints_inner = .false. ! apply imposeConstraints between outer/classical iterations
 
    ! scaling
    nested_Newton % scaling     = .false.  ! apply xScale and fScale scaling factors for LAPACK   
@@ -1112,12 +1115,12 @@ contains
 
   if (nested_Newton % nested) then ! nested iterations
    ! store initial non-linear function values based on the initial call to eval8summa
-   nested_Newton % f1_vec(:) = real(nested_Newton % resVec(:),r8b)
-   nested_Newton % f1_eval_flag = .true. 
+   nested_Newton % f1_vec(:)    = real(nested_Newton % resVec(:),r8b)
+   nested_Newton % f1_eval_flag = .false. ! computed in Newton step refinement 
    nested_Newton % J1_eval_flag = .true. 
 
-   nested_Newton % f2_vec(:) = 0._rkind
-   nested_Newton % J2(:,:) = 0._rkind
+   nested_Newton % f2_vec(:)    = 0._rkind
+   nested_Newton % J2(:,:)      = 0._rkind
    nested_Newton % f2_eval_flag = .false. 
    nested_Newton % J2_eval_flag = .false. 
   else ! classical iterations

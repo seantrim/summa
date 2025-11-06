@@ -106,6 +106,7 @@ contains
  
   l_total=0
   exit_outer=.false.
+  f_obj % inner=.false.        ! start with outer iterations
   f_obj % xk0(:)=f_obj % x0(:) ! initial guess
   outer: do k=0,f_obj % kmax
 
@@ -114,8 +115,8 @@ contains
    f2mJ2xk0(:) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)
    exit_inner=.false.
    f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
-   f_obj % inner=.true. ! inner iterations for next loop
 
+   f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
     if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
@@ -127,12 +128,17 @@ contains
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
-    if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % J1,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f1_vec) 
+    if (f_obj % refinement_inner) then
+     call f_obj % apply_refinement(.true.,f_obj % J1,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f1_vec) 
+    end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
     ! print exact convergence error
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
+    if (f_obj % constraints_inner) then
+     call f_obj % apply_constraints(f_obj % xkp1l,f_obj % xkp1lp1) ! apply constraints without interfering with the convergence criterion
+    end if
     f_obj % xkp1l(:) = f_obj % xkp1lp1(:) ! set up next inner iteration
    end do inner
 
@@ -151,11 +157,12 @@ contains
     l_total=l_total+l
    end if
 
-   ! apply Newton step refinement (may need to apply to inner iterations)
-   !if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % J2,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f2_vec) 
-   !if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f_vec) 
-
    f_obj % inner=.false.
+
+   ! apply Newton step refinement
+   !if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % J2,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f2_vec) 
+   if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f_vec) 
+
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
@@ -200,19 +207,26 @@ contains
  subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag)
   ! *** Check residual vector for potential loop exit ***
   type(f_obj_type),intent(inout) :: f_obj 
-  integer(i4b),intent(in) :: iteration   ! interation count
-  real(r8b),intent(in)    :: xkp1(1:f_obj % n)  ! current root estimate
-  real(r8b),intent(in)    :: xk(1:f_obj % n)    ! previous root estimate
-  logical,intent(inout)   :: exit_flag   ! exit flag
-  real(r8b),intent(out)   :: R_est       ! estimated R for current iteration (computed in the previous call)
+  integer(i4b),intent(in)  :: iteration   ! interation count
+  real(r8b),intent(in)     :: xkp1(1:f_obj % n)  ! current root estimate
+  real(r8b),intent(in)     :: xk(1:f_obj % n)    ! previous root estimate
+  logical,intent(inout)    :: exit_flag   ! exit flag
+  real(r8b),intent(out)    :: R_est       ! estimated R for current iteration (computed in the previous call)
   ! local variables
-  real(r8b)               :: tol         ! tolerance
-  real(r8b)               :: R(-1:1)     ! maximum residual array (two previous exact values and prediction for next iteration)
-  integer(i4b)            :: i                  ! index for residual vector
-  real(r8b)               :: R_vec(1:f_obj % n) ! residual vector
-  real(r8b)               :: b                  ! exponent used for convergence error estimation 
+  real(r8b)                :: tol         ! tolerance
+  real(r8b)                :: R(-1:1)     ! maximum residual array (two previous exact values and prediction for next iteration)
+  integer(i4b)             :: i                  ! index for residual vector
+  real(r8b)                :: R_vec(1:f_obj % n) ! residual vector
+  real(r8b)                :: b                  ! exponent used for convergence error estimation 
+  character(:),allocatable :: convergence        ! convergence option string that adapts to inner and outer/classical iterations
 
-  if (f_obj % convergence.eq.'custom') then ! use custom convergence criterion
+  if (f_obj % inner) then ! inner iterations
+   convergence = f_obj % convergence_inner
+  else                    ! outer iterations
+   convergence = f_obj % convergence
+  end if
+
+  if (convergence.eq.'custom') then ! use custom convergence criterion
    exit_flag = f_obj % custom_convergence()
    if (exit_flag)  return  ! set exit flag if criterion is satisfied
   else
@@ -241,9 +255,9 @@ contains
    end if
 
    R(0)=maxval(R_vec) ! actual worst case residual for input iteration
-   if (f_obj % convergence.eq.'strict') then ! strict estimate
+   if (convergence.eq.'strict') then ! strict estimate
     R(1)=R(0) ! estimated residual for iteration+1
-   else if (f_obj % convergence.eq.'predictive') then
+   else if (convergence.eq.'predictive') then
     if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
      R(1)=R(0) ! estimated residual for iteration+1   
     else ! compute prediction based on power function

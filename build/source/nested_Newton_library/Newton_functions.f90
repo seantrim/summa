@@ -24,19 +24,21 @@ module Newton_functions
  ! ***** Parent Type ***** !
  type, public :: f_obj_base
    ! ** Default data components used by the Newton solvers ** !
-   logical      :: banded       ! flag for banded Jacobians
-   logical      :: nested       ! flag for nested algorithm
-   logical      :: inner        ! flag to indicate the execution of inner iterations
-   logical      :: converged    ! flag to indicate that the obtained solution meets the convergence criterion
-   logical      :: constraints  ! flag to indicate that constraints are to be applied between outer/classical iterations
-   logical      :: refinement   ! flag to indicate that refinement is to be applied following outer/classical Newton steps
-   logical      :: scaling      ! flag to indicate that user-specified scaling is to be applied for linear systems
-   logical      :: f_eval_flag  ! flag to indicate that the total non-linear function vector is to be computed
-   logical      :: f1_eval_flag ! flag to indicate that the non-linear function 1 vector is to be computed
-   logical      :: f2_eval_flag ! flag to indicate that the non-linear function 2 vector is to be computed
-   logical      :: J_eval_flag  ! flag to indicate that the total Jacobian is to be computed
-   logical      :: J1_eval_flag ! flag to indicate that Jacobian 1 is to be computed
-   logical      :: J2_eval_flag ! flag to indicate that Jacobian 2 is to be computed
+   logical      :: banded            ! flag for banded Jacobians
+   logical      :: nested            ! flag for nested algorithm
+   logical      :: inner             ! flag to indicate the execution of inner iterations
+   logical      :: converged         ! flag to indicate that the obtained solution meets the convergence criterion
+   logical      :: constraints       ! flag to indicate that constraints are to be applied between outer/classical iterations
+   logical      :: constraints_inner ! flag to indicate that constraints are to be applied between inner iterations
+   logical      :: refinement        ! flag to indicate that refinement is to be applied following outer/classical iterations
+   logical      :: refinement_inner  ! flag to indicate that refinement is to be applied following inner iterations
+   logical      :: scaling           ! flag to indicate that user-specified scaling is to be applied for linear systems
+   logical      :: f_eval_flag       ! flag to indicate that the total non-linear function vector is to be computed
+   logical      :: f1_eval_flag      ! flag to indicate that the non-linear function 1 vector is to be computed
+   logical      :: f2_eval_flag      ! flag to indicate that the non-linear function 2 vector is to be computed
+   logical      :: J_eval_flag       ! flag to indicate that the total Jacobian is to be computed
+   logical      :: J1_eval_flag      ! flag to indicate that Jacobian 1 is to be computed
+   logical      :: J2_eval_flag      ! flag to indicate that Jacobian 2 is to be computed
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
@@ -59,7 +61,8 @@ module Newton_functions
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
-   character(:),allocatable :: convergence   ! string for convergence control option
+   character(:),allocatable :: convergence          ! string for convergence control option for outer/classical iterations
+   character(:),allocatable :: convergence_inner    ! string for convergence control option for inner iterations
    character(:),allocatable :: linear_system_solver ! string for selecting solver for linear systems
    ! solver output
    character(:),allocatable :: output ! string for solver output control option
@@ -180,17 +183,19 @@ contains
   use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
   class(f_obj_base),intent(inout) :: f_obj
 
-   f_obj % banded       = .false. ! flag for banded Jacobians
-   f_obj % nested       = .false. ! flag for nested algorithm
-   f_obj % constraints  = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
-   f_obj % refinement   = .false. ! flag to indicate that refinement is to be applied following outer/classical Newton steps
-   f_obj % scaling      = .false. ! flag to indicate that user-specified scaling is to be applied for linear systems
-   f_obj % f_eval_flag  = .true.  ! flag to indicate that the total non-linear function vector is to be computed
-   f_obj % f1_eval_flag = .true.  ! flag to indicate that the non-linear function 1 vector is to be computed
-   f_obj % f2_eval_flag = .true.  ! flag to indicate that the non-linear function 2 vector is to be computed
-   f_obj % J_eval_flag  = .true.  ! flag to indicate that the total Jacobian is to be computed
-   f_obj % J1_eval_flag = .true.  ! flag to indicate that Jacobian 1 is to be computed
-   f_obj % J2_eval_flag = .true.  ! flag to indicate that Jacobian 2 is to be computed
+   f_obj % banded            = .false. ! flag for banded Jacobians
+   f_obj % nested            = .false. ! flag for nested algorithm
+   f_obj % constraints       = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
+   f_obj % constraints_inner = .false. ! flag to indicate that constraints are to be applied between inner iterations
+   f_obj % refinement        = .false. ! flag to indicate that refinement is to be applied following outer/classical iterations
+   f_obj % refinement_inner  = .false. ! flag to indicate that refinement is to be applied following inner iterations
+   f_obj % scaling           = .false. ! flag to indicate that user-specified scaling is to be applied for linear systems
+   f_obj % f_eval_flag       = .true.  ! flag to indicate that the total non-linear function vector is to be computed
+   f_obj % f1_eval_flag      = .true.  ! flag to indicate that the non-linear function 1 vector is to be computed
+   f_obj % f2_eval_flag      = .true.  ! flag to indicate that the non-linear function 2 vector is to be computed
+   f_obj % J_eval_flag       = .true.  ! flag to indicate that the total Jacobian is to be computed
+   f_obj % J1_eval_flag      = .true.  ! flag to indicate that Jacobian 1 is to be computed
+   f_obj % J2_eval_flag      = .true.  ! flag to indicate that Jacobian 2 is to be computed
 
    f_obj % kmax        = 100_i4b ! max # of classical/outer iterations
    f_obj % lmax        = 100_i4b ! max # inner iterations
@@ -198,10 +203,12 @@ contains
    f_obj % tol         = 1.e-8   ! tolerance for classical/outer iterations
    f_obj % tol_inner   = 1.e-8   ! tolerance for inner iterations
 
-   f_obj % linear_system_solver = "LAPACK_expert" ! string for control of linear system solver
-   f_obj % convergence = "strict"                 ! string for convergence criterion method for solver
-   f_obj % output      = "production"             ! string for solver output control option
-   f_obj % unit        = stdout                   ! file unit number for solver output
+   f_obj % linear_system_solver = "LAPACK_expert"          ! string for control of linear system solver
+   f_obj % convergence          = "strict"                 ! string for convergence criterion method for solver
+   f_obj % convergence_inner    = "strict"                 ! string for convergence criterion method for solver
+   f_obj % output               = "production"             ! string for solver output control option
+   
+   f_obj % unit                 = stdout                   ! file unit number for solver output
 
  end subroutine f_set_defaults
  
