@@ -129,7 +129,9 @@ contains
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     if (f_obj % refinement_inner) then
-     call f_obj % apply_refinement(.true.,f_obj % J1,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f1_vec) 
+     call f_obj % apply_refinement(.true.,f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f_vec)
+     if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1lp1) ! ensure we have f1_vec value for refined solution
+     !if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xkp1lp1) ! assume f2_vec does not change during inner iterations
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
@@ -160,8 +162,11 @@ contains
    f_obj % inner=.false.
 
    ! apply Newton step refinement
-   !if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % J2,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f2_vec) 
-   if (f_obj % refinement) call f_obj % apply_refinement(.true.,f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f_vec) 
+   if (f_obj % refinement) then
+    call f_obj % apply_refinement(.true.,f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f_vec) 
+    if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1lp1) ! ensure we have f1_vec value for refined solution
+    if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xkp1lp1) ! ensure we have f2_vec value for refined solution
+   end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
@@ -361,7 +366,7 @@ contains
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % scaling) then
      if (f_obj % out_error) then
-      write(f_obj % unit,*) "LAPACK Error: expert solver not set up for use with custom scaling."
+      write(f_obj % unit,*) "LAPACK Error: expert solver does not currently support custom scaling."
      end if
      stop ! fatal error
    end if

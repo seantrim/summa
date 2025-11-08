@@ -1061,7 +1061,7 @@ contains
    nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
    ! solver output
-   call nested_Newton % solver_output('minimal') ! standard output used by default 
+   call nested_Newton % solver_output('silent') ! standard output used by default 
 
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
@@ -1069,7 +1069,7 @@ contains
    nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
 
    ! Linear system solver choice
-   nested_Newton % linear_system_solver = "LAPACK_expert"
+   nested_Newton % linear_system_solver = "LAPACK_standard"
 
    ! Newton step refinement
    nested_Newton % refinement        = .false. ! apply refine_Newton_step following outer/classical iterations
@@ -1080,7 +1080,7 @@ contains
    nested_Newton % constraints_inner = .false. ! apply imposeConstraints between outer/classical iterations
 
    ! scaling
-   nested_Newton % scaling     = .false.  ! apply xScale and fScale scaling factors for LAPACK   
+   nested_Newton % scaling     = .true.  ! apply xScale and fScale scaling factors for LAPACK   
 
   else ! classical iterations
    ! set method for computing relative convergence error

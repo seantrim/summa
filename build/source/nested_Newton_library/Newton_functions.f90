@@ -646,7 +646,14 @@ contains
 
   if (f_obj % scaling) then ! reuse scaled arrays already computed
 
-    newtStepScaled = xstep          ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+   ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+   if (compute_step) then
+    ! assume xvec1 is already scaled on input (e.g., from LAPACK solution for nested iterations)
+    newtStepScaled = xvec1(:) - xvec0(:)/f_obj % xScale(:) 
+   else
+    ! assume xstep is already scaled on input
+    newtStepScaled = xstep(:) 
+   end if
 
   else ! scale arrays
 
@@ -655,11 +662,9 @@ contains
     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
      nBands=nrow_banded+subdiag
      aJac(1:subdiag,1:n) = 0._rkind
-     !aJac(subdiag+1:nBands,1:n) = f_obj % J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
      aJac(subdiag+1:nBands,1:n) = J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
     end associate
    else ! full matrix storage
-    !aJac(:,:) = f_obj % J(:,:)
     aJac(:,:) = J(:,:)
    end if
  
@@ -670,8 +675,12 @@ contains
    else ! if Newton step is provided on input
     newtStepScaled(:) = xstep(:) / f_obj % xScale(:)              ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
    end if
-   f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:)   ! matches solve_linear_system
- 
+   if (f_obj % nested) then
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:) - f_obj % f2_vec(:)) ! matches solve_linear_system
+   else
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:)   ! matches solve_linear_system
+   end if 
+
    associate(&
     ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
     nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
@@ -763,7 +772,11 @@ contains
   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
   B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
-  f_obj % rVecScaled(:) = -B(:,1) ! save scaled residual for reuse
+  if (f_obj % nested) then ! nested iterations
+   f_obj % rVecScaled(:) = (f_obj % f1_vec(:) - f_obj % f2_vec(:)) * f_obj % fScale(:) ! compute scaled residual for Newton step refinement
+  else ! classical iterations
+   f_obj % rVecScaled(:) = -B(:,1) ! save scaled residual for reuse in Newton step refinement
+  end if
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
