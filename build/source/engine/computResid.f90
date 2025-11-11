@@ -33,6 +33,7 @@ USE var_lookup,only:iLookPROG       ! named variables for structure elements
 USE var_lookup,only:iLookDIAG       ! named variables for structure elements
 USE var_lookup,only:iLookFLUX       ! named variables for structure elements
 USE var_lookup,only:iLookINDEX      ! named variables for structure elements
+USE var_lookup,only:iLookDERIV      ! named variables for structure elements
 
 ! access the global print flag
 USE globalData,only:globalPrintFlag
@@ -107,6 +108,7 @@ subroutine computResid(&
                       diag_data,                 & ! intent(in):  model diagnostic variables for a local HRU
                       flux_data,                 & ! intent(in):  model fluxes for a local HRU
                       indx_data,                 & ! intent(in):  index data
+                      deriv_data,                & ! intent(in):  derivatives in model fluxes w.r.t. relevant state variables
                       ! output
                       fRHS,                      & ! intent(out): right-hand-side function for ARKODE
                       rAdd,                      & ! intent(out): additional (sink) terms on the RHS of the state equation
@@ -146,6 +148,7 @@ subroutine computResid(&
   type(var_dlength),intent(in)       :: diag_data                 ! diagnostic variables for a local HRU
   type(var_dlength),intent(in)       :: flux_data                 ! model fluxes for a local HRU
   type(var_ilength),intent(in)       :: indx_data                 ! indices defining model states and layers
+  type(var_dlength),intent(in)       :: deriv_data                ! derivatives in model fluxes w.r.t. relevant state variables
   ! output
   real(rkind),intent(out)            :: fRHS(:)                   ! right-hand-side function for ARKODE
   real(rkind),intent(out)            :: rAdd(:)                   ! additional (sink) terms on the RHS of the state equation
@@ -187,6 +190,8 @@ subroutine computResid(&
     mLayerDepth             => prog_data%var(iLookPROG%mLayerDepth)%dat               ,& ! intent(in): [dp(:)]  depth of each layer in the snow-soil sub-domain (m)
     ! model fluxes (sink terms in the soil domain)
     mLayerTranspire         => flux_data%var(iLookFLUX%mLayerTranspire)%dat           ,& ! intent(in): [dp]     transpiration loss from each soil layer (m s-1)
+    dCompress_dPsi          => deriv_data%var(iLookDERIV%dCompress_dPsi)%dat          ,& ! intent(in): [dp(:)] derivative in compressibility w.r.t. matric head (m-1)
+    mLayerdPsi_dTheta       => deriv_data%var(iLookDERIV%mLayerdPsi_dTheta)%dat       ,& ! intent(in): [dp(:)] derivative in the soil water characteristic w.r.t. theta
     mLayerBaseflow          => flux_data%var(iLookFLUX%mLayerBaseflow)%dat            ,& ! intent(in): [dp(:)]  baseflow from each soil layer (m s-1)
     mLayerCompress          => diag_data%var(iLookDIAG%mLayerCompress)%dat            ,& ! intent(in): [dp(:)]  change in storage associated with compression of the soil matrix (-)
     ! number of state variables of a specific type
@@ -316,9 +321,18 @@ subroutine computResid(&
                                       & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
         mLayerVolFracHyd(iLayer)      = merge(mLayerVolFracWat(iLayer),      mLayerVolFracLiq(iLayer),&
                                       & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
+        ! note: the following operations for fRHS assume that rAdd is from soil only -- confirm indexing for all cases
         ! compute the residual
-        fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt )
-        !fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) )/dt ) ! SJT: testing
+        !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt
+        ! expand rAdd/dt: 
+        !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) )&
+        !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow)&
+        !                            & - mLayerCompress(iLayer)
+        ! note: mLayerCompress = fRHS * mLayerdPsi_dTheta* dCompress_dPsi
+        ! isolating fRHS: 
+        fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )&
+                                    & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) )&
+                                    & / (1._rkind + mLayerdPsi_dTheta(iLayer) * dCompress_dPsi(iLayer))
         rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
                                     & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
       end do 

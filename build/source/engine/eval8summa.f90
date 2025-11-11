@@ -631,6 +631,7 @@ subroutine eval8summa(&
                       diag_data,                  & ! intent(in):  model diagnostic variables for a local HRU
                       flux_data,                  & ! intent(in):  model fluxes for a local HRU
                       indx_data,                  & ! intent(in):  index data
+                      deriv_data,                 & ! intent(in):  derivative data
                       ! output
                       fRHS,                       & ! intent(out): RHS function for ARKODE
                       resSink,                    & ! intent(out): additional (sink) terms on the RHS of the state equation
