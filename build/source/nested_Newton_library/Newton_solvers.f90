@@ -129,6 +129,7 @@ contains
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     if (f_obj % refinement_inner) then
+     !!!!call f_obj % apply_refinement(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f1_vec)
      call f_obj % apply_refinement(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f_vec)
      if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1lp1) ! ensure we have f1_vec value for refined solution
      !if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xkp1lp1) ! assume f2_vec does not change during inner iterations
@@ -323,8 +324,16 @@ contains
   if (f_obj % banded) then ! banded storage
    call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
   else ! full matrix storage
-   !y=matmul(A,x)
-   call DGEMV(TRANS,f_obj % n,f_obj % n,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
+   if (f_obj % matrix_vector == "matmul") then
+    y=matmul(A,x)
+   else if (f_obj % matrix_vector == "BLAS") then
+    call DGEMV(TRANS,f_obj % n,f_obj % n,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
+   else
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in matrix_vector_product: unsupported option."
+    end if
+    stop ! fatal error
+   end if
   end if
  end function matrix_vector_product
 

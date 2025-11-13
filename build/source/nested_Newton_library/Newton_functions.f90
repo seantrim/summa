@@ -64,6 +64,7 @@ module Newton_functions
    character(:),allocatable :: convergence          ! string for convergence control option for outer/classical iterations
    character(:),allocatable :: convergence_inner    ! string for convergence control option for inner iterations
    character(:),allocatable :: linear_system_solver ! string for selecting solver for linear systems
+   character(:),allocatable :: matrix_vector        ! string for selecting method for matrix-vector products
    ! solver output
    character(:),allocatable :: output ! string for solver output control option
    integer(i4b) :: unit        ! file unit number for solver output
@@ -204,6 +205,7 @@ contains
    f_obj % tol_inner   = 1.e-8   ! tolerance for inner iterations
 
    f_obj % linear_system_solver = "LAPACK_expert"          ! string for control of linear system solver
+   f_obj % matrix_vector        = "BLAS"                   ! string for selecting matrix-vector product method
    f_obj % convergence          = "strict"                 ! string for convergence criterion method for solver
    f_obj % convergence_inner    = "strict"                 ! string for convergence criterion method for solver
    f_obj % output               = "production"             ! string for solver output control option

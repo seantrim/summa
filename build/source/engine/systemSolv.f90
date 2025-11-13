@@ -1071,6 +1071,9 @@ contains
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
 
+   ! Matrix-Vector products (for full matrix storage)
+   nested_Newton % matrix_vector        = "BLAS" 
+
    ! Newton step refinement
    nested_Newton % refinement        = .false. ! apply refine_Newton_step following outer/classical iterations
    nested_Newton % refinement_inner  = .true.  ! apply refine_Newton_step following inner iterations
