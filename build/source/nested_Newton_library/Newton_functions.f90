@@ -620,13 +620,12 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
- subroutine SUMMA_refine_Newton_step(f_obj,compute_step,J,xvec0,xStep,xvec1,fvec)
+ subroutine SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1,fvec)
   ! ** interface to SUMMA's refine_Newton_step subroutine **
   use matrixOper_module,  only: scaleMatrices
   ! object
   class(f_obj_type),intent(inout)   :: f_obj
   ! input
-  logical  ,intent(in)              :: compute_step       ! flag indicating if we are computing the Newton step
   real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
   real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
@@ -647,7 +646,7 @@ contains
   if (f_obj % scaling) then ! reuse scaled arrays already computed
 
    ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-   if (compute_step) then
+   if (f_obj % nested) then
     ! assume xvec1 is already scaled on input (e.g., from LAPACK solution for nested iterations)
     newtStepScaled = xvec1(:) - xvec0(:)/f_obj % xScale(:) 
    else
@@ -670,16 +669,13 @@ contains
  
    ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
    ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
-   if (compute_step) then ! if computing the Newton step
+   if (f_obj % nested) then ! if computing the Newton step
     newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-   else ! if Newton step is provided on input
-    newtStepScaled(:) = xstep(:) / f_obj % xScale(:)              ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-   end if
-   if (f_obj % nested) then
     f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:) - f_obj % f2_vec(:)) ! matches solve_linear_system
-   else
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:)   ! matches solve_linear_system
-   end if 
+   else ! if Newton step is provided on input
+    newtStepScaled(:) = xstep(:) / f_obj % xScale(:)             ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
+   end if
 
    associate(&
     ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
