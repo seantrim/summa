@@ -161,7 +161,9 @@ module Newton_functions
    procedure :: J1_eval => Jacobian_f1_SUMMA_vec ! solver
    procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
-   procedure :: apply_refinement   => SUMMA_refine_Newton_step
+   procedure :: apply_refinement_classical   => SUMMA_refine_Newton_step_classical
+   procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
+   procedure :: apply_refinement_outer       => SUMMA_refine_Newton_step_outer
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
    procedure :: custom_descaling   => SUMMA_descaling  
@@ -622,7 +624,7 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
- subroutine SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1,fvec)
+ subroutine SUMMA_refine_Newton_step_classical(f_obj,J,xvec0,xStep,xvec1)
   ! ** interface to SUMMA's refine_Newton_step subroutine **
   use matrixOper_module,  only: scaleMatrices
   ! object
@@ -633,7 +635,85 @@ contains
   real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
-  real(r8b),intent(inout)           :: fvec(1:f_obj % n)  ! non-linear function vector
+
+  call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
+
+  ! store non-linear function vector for next Newton iteration
+  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+
+  ! update function value for line search
+  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
+
+ end subroutine SUMMA_refine_Newton_step_classical
+
+ subroutine SUMMA_refine_Newton_step_inner(f_obj,J,xvec0,xStep,xvec1)
+  ! ** interface to SUMMA's refine_Newton_step subroutine **
+  use matrixOper_module,  only: scaleMatrices
+  ! object
+  class(f_obj_type),intent(inout)   :: f_obj
+  ! input
+  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
+  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
+  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  ! input-output
+  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
+  ! local
+  logical,parameter :: trivial_decomposition = .true.
+
+  call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
+
+  ! store non-linear function vector for next Newton iteration
+  if (trivial_decomposition) then
+   f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b) ! trivial decomposition (f2=0)
+  else
+   if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec1) ! non-trivial decomposition (assume f2_vec does not change during inner iterations)
+  end if
+
+  ! update function value for line search
+  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
+
+ end subroutine SUMMA_refine_Newton_step_inner
+
+ subroutine SUMMA_refine_Newton_step_outer(f_obj,J,xvec0,xStep,xvec1)
+  ! ** interface to SUMMA's refine_Newton_step subroutine **
+  use matrixOper_module,  only: scaleMatrices
+  ! object
+  class(f_obj_type),intent(inout)   :: f_obj
+  ! input
+  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
+  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
+  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  ! input-output
+  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
+  ! local
+  logical,parameter :: trivial_decomposition = .true.
+
+  call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
+
+  ! store non-linear function vector for next Newton iteration
+  if (trivial_decomposition) then
+   f_obj % f2_vec(:) = real(f_obj % resVec(:),r8b) ! trivial decomposition (f1=0)
+  else
+   if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec1) ! non-trivial decomposition
+   if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xvec1) ! non-trivial decomposition
+  end if
+
+  ! update function value for line search
+  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
+
+ end subroutine SUMMA_refine_Newton_step_outer
+
+ subroutine SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
+  ! ** interface to SUMMA's refine_Newton_step subroutine **
+  use matrixOper_module,  only: scaleMatrices
+  ! object
+  class(f_obj_type),intent(inout)   :: f_obj
+  ! input
+  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
+  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
+  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  ! input-output
+  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
   integer(i4b) :: nBands ! SUMMA's leading dimension for banded Jacobians
   integer(i4b) :: mSoil  ! number of soil layers in the solution vector
@@ -744,13 +824,6 @@ contains
 
   ! store refined guess
   xvec1(:) = stateVecNew(:)
-
-  ! store non-linear function vector for next Newton iteration
-  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
-  fvec(:) = real(f_obj % resVec(:),r8b)
-
-  ! update function value for line search
-  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
 
  end subroutine SUMMA_refine_Newton_step
 

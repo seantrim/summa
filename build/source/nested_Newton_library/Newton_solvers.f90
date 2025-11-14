@@ -51,7 +51,7 @@ contains
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
 
    if (f_obj % refinement) then
-    call f_obj % apply_refinement(f_obj % J,f_obj % xk,B(:,1),f_obj % xkp1,f_obj % f_vec) ! apply Newton step refinement to obtain next guess
+    call f_obj % apply_refinement_classical(f_obj % J,f_obj % xk,B(:,1),f_obj % xkp1) ! apply Newton step refinement to obtain next guess
    else
     f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
    end if
@@ -129,10 +129,7 @@ contains
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     if (f_obj % refinement_inner) then
-     !!!!call f_obj % apply_refinement(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f1_vec)
-     call f_obj % apply_refinement(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1,f_obj % f_vec)
-     if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1lp1) ! ensure we have f1_vec value for refined solution
-     !if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xkp1lp1) ! assume f2_vec does not change during inner iterations
+     call f_obj % apply_refinement_inner(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
@@ -164,9 +161,7 @@ contains
 
    ! apply Newton step refinement
    if (f_obj % refinement) then
-    call f_obj % apply_refinement(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1,f_obj % f_vec) 
-    if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1lp1) ! ensure we have f1_vec value for refined solution
-    if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xkp1lp1) ! ensure we have f2_vec value for refined solution
+    call f_obj % apply_refinement_outer(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1) 
    end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)

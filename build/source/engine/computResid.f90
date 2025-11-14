@@ -321,7 +321,7 @@ subroutine computResid(&
                                       & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
         mLayerVolFracHyd(iLayer)      = merge(mLayerVolFracWat(iLayer),      mLayerVolFracLiq(iLayer),&
                                       & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
-        ! note: the following operations for fRHS assume that rAdd is from soil only -- confirm indexing for all cases
+        ! note: the following operations for fRHS assume that rAdd is from soil only -- SJT: confirm indexing for all cases
         ! compute the residual
         !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt
         ! expand rAdd/dt: 
