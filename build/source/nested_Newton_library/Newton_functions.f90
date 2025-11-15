@@ -1126,7 +1126,7 @@ contains
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
 
   ! compute derivatives based on current guess
-  call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
+  !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
 
   ! assemble Jacobian using the computed derivatives
   call f_obj % SUMMA_computJacob(aJac)
