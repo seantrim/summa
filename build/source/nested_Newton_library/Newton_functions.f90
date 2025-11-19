@@ -6,7 +6,7 @@ module Newton_functions
  use nrtype,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
  use eval8summa_module, only: eval8summa,imposeConstraints           ! SUMMA's eval8summa and imposeConstraints routines
  use computJacob_module,only: computJacob                            ! SUMMA's computJacob routine 
- use summaSolve4homegrown_module,only: refine_Newton_step, checkConv ! SUMMA's refine_Newton_step and checkConv procedures
+ use summaSolve4homegrown_module,only: refine_Newton_step,checkConv ! SUMMA's refine_Newton_step and checkConv procedures
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
  use data_types,only: in_type_summaSolve4homegrown,&           ! objects for SUMMA's summaSolve4homegrown routine
                      &io_type_summaSolve4homegrown,&
@@ -18,6 +18,7 @@ module Newton_functions
  use var_lookup,only: iLookDECISIONS          ! named variables for elements of the SUMMA decision structure
  use var_lookup,only: iLookINDEX              ! named variables for SUMMA structure elements
  use mDecisions_module,only:qbaseTopmodel     ! SUMMA groundwater parameterization model decision
+ use stateFilter_module,only: split_select_type
  implicit none
  private
 
@@ -1057,6 +1058,7 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
 
+  type(split_select_type) :: split_select
   ! use split_select_type object to specify the desired split
  
   ! apply initialize operations from opSplitting to generate logical masks (probably skip save/restore operations)

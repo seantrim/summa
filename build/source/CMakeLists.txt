@@ -121,6 +121,7 @@ set(SOLVER
     ${ENGINE_DIR}/diagn_evar.f90
     ${ENGINE_DIR}/eval8summa.f90
     ${ENGINE_DIR}/groundwatr.f90
+    ${ENGINE_DIR}/stateFilter.f90
     ${ENGINE_DIR}/opSplittin.f90
     ${ENGINE_DIR}/run_oneGRU.f90
     ${ENGINE_DIR}/run_oneHRU.f90
