@@ -1052,6 +1052,30 @@ contains
 
  end subroutine SUMMA_computJacob
 
+ subroutine f_mass_SUMMA_vec(f_obj,xvec)
+  ! *** Compute SUMMA's vector non-linear function for mass ***
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+
+  ! use split_select_type object to specify the desired split
+ 
+  ! apply initialize operations from opSplitting to generate logical masks (probably skip save/restore operations)
+
+  ! follow interface from opSplittin --> varSubtep --> systemSolv to get input arrays for eval8summa
+
+  ! call eval8summa to get non-linear function values for mass state type
+
+  ! remaining non-linear function values are zero
+
+ end subroutine f_mass_SUMMA_vec
+
+ subroutine f_energy_SUMMA_vec(f_obj,xvec)
+  ! *** Compute SUMMA's vector non-linear function for energy ***
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+
+ end subroutine f_energy_SUMMA_vec
+
  subroutine f_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function ***
   class(f_obj_type),intent(inout) :: f_obj
