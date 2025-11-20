@@ -56,31 +56,31 @@ implicit none
 private
 
 ! named variables for the coupling method
-integer(i4b),parameter  :: fullyCoupled=1             ! 1st try: fully coupled solution
-integer(i4b),parameter  :: stateTypeSplit=2           ! 2nd try: separate solutions for each state type
+integer(i4b),parameter,public  :: fullyCoupled=1   ! 1st try: fully coupled solution
+integer(i4b),parameter,public  :: stateTypeSplit=2 ! 2nd try: separate solutions for each state type
 
 ! named variables for the state variable split
-integer(i4b),parameter  :: nrgSplit=1                 ! order in sequence for the energy operation
-integer(i4b),parameter  :: massSplit=2                ! order in sequence for the mass operation
+integer(i4b),parameter,public  :: nrgSplit=1       ! order in sequence for the energy operation
+integer(i4b),parameter,public  :: massSplit=2      ! order in sequence for the mass operation
 
 ! named variables for the domain type split
-integer(i4b),parameter  :: vegSplit=1                 ! order in sequence for the vegetation split
-integer(i4b),parameter  :: snowSplit=2                ! order in sequence for the snow split
-integer(i4b),parameter  :: soilSplit=3                ! order in sequence for the soil split
-integer(i4b),parameter  :: aquiferSplit=4             ! order in sequence for the aquifer split
+integer(i4b),parameter,public  :: vegSplit=1       ! order in sequence for the vegetation split
+integer(i4b),parameter,public  :: snowSplit=2      ! order in sequence for the snow split
+integer(i4b),parameter,public  :: soilSplit=3      ! order in sequence for the soil split
+integer(i4b),parameter,public  :: aquiferSplit=4   ! order in sequence for the aquifer split
 
 ! named variables for the solution method
-integer(i4b),parameter  :: vector=1                   ! vector solution method
-integer(i4b),parameter  :: scalar=2                   ! scalar solution method
-integer(i4b),parameter  :: nSolutions=2               ! number of solution methods
+integer(i4b),parameter,public  :: vector=1         ! vector solution method
+integer(i4b),parameter,public  :: scalar=2         ! scalar solution method
+integer(i4b),parameter,public  :: nSolutions=2     ! number of solution methods
 
 ! named variables for the switch between states and domains
-integer(i4b),parameter  :: fullDomain=1               ! full domain (veg+snow+soil)
-integer(i4b),parameter  :: subDomain=2                ! sub domain (veg, snow, soil, and aquifer separately)
+integer(i4b),parameter,public  :: fullDomain=1     ! full domain (veg+snow+soil)
+integer(i4b),parameter,public  :: subDomain=2      ! sub domain (veg, snow, soil, and aquifer separately)
 
-!! maximum number of possible splits
-!integer(i4b),parameter  :: nStateTypes=2              ! number of state types (energy, water)
-!integer(i4b),parameter  :: nDomains=4                 ! number of domains (vegetation, snow, soil, and aquifer)
+! maximum number of possible splits
+integer(i4b),parameter,public  :: nStateTypes=2    ! number of state types (energy, water)
+integer(i4b),parameter,public  :: nDomains=4       ! number of domains (vegetation, snow, soil, and aquifer)
 
 ! class definitions
 

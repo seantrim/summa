@@ -79,42 +79,40 @@ USE mDecisions_module,only:       &
                     kinsol       ,& ! SUNDIALS backward Euler solution using Kinsol
                     ida             ! SUNDIALS solution using IDA
 
-
 ! split_select_type (includes access to stateFilter procedure)
-USE stateFilter_module,only:split_select_type
-                    
+USE stateFilter_module,only: split_select_type
+
+! named variables for the coupling method
+USE stateFilter_module,only: fullyCoupled             ! 1st try: fully coupled solution
+USE stateFilter_module,only: stateTypeSplit           ! 2nd try: separate solutions for each state type
+
+! named variables for the state variable split
+USE stateFilter_module,only: nrgSplit                 ! order in sequence for the energy operation
+USE stateFilter_module,only: massSplit                ! order in sequence for the mass operation
+
+! named variables for the domain type split
+USE stateFilter_module,only: vegSplit                 ! order in sequence for the vegetation split
+USE stateFilter_module,only: snowSplit                ! order in sequence for the snow split
+USE stateFilter_module,only: soilSplit                ! order in sequence for the soil split
+USE stateFilter_module,only: aquiferSplit             ! order in sequence for the aquifer split
+
+! named variables for the solution method
+USE stateFilter_module,only: vector                   ! vector solution method
+USE stateFilter_module,only: scalar                   ! scalar solution method
+USE stateFilter_module,only: nSolutions               ! number of solution methods
+
+! named variables for the switch between states and domains
+USE stateFilter_module,only: fullDomain               ! full domain (veg+snow+soil)
+USE stateFilter_module,only: subDomain                ! sub domain (veg, snow, soil, and aquifer separately)
+
+! maximum number of possible splits
+USE stateFilter_module,only: nStateTypes              ! number of state types (energy, water)
+USE stateFilter_module,only: nDomains                 ! number of domains (vegetation, snow, soil, and aquifer)
 
 ! safety: set private unless specified otherwise
 implicit none
 private
 public::opSplittin
-
-! named variables for the coupling method
-integer(i4b),parameter  :: fullyCoupled=1             ! 1st try: fully coupled solution
-integer(i4b),parameter  :: stateTypeSplit=2           ! 2nd try: separate solutions for each state type
-
-! named variables for the state variable split
-integer(i4b),parameter  :: nrgSplit=1                 ! order in sequence for the energy operation
-integer(i4b),parameter  :: massSplit=2                ! order in sequence for the mass operation
-
-! named variables for the domain type split
-integer(i4b),parameter  :: vegSplit=1                 ! order in sequence for the vegetation split
-integer(i4b),parameter  :: snowSplit=2                ! order in sequence for the snow split
-integer(i4b),parameter  :: soilSplit=3                ! order in sequence for the soil split
-integer(i4b),parameter  :: aquiferSplit=4             ! order in sequence for the aquifer split
-
-! named variables for the solution method
-integer(i4b),parameter  :: vector=1                   ! vector solution method
-integer(i4b),parameter  :: scalar=2                   ! scalar solution method
-integer(i4b),parameter  :: nSolutions=2               ! number of solution methods
-
-! named variables for the switch between states and domains
-integer(i4b),parameter  :: fullDomain=1               ! full domain (veg+snow+soil)
-integer(i4b),parameter  :: subDomain=2                ! sub domain (veg, snow, soil, and aquifer separately)
-
-! maximum number of possible splits
-integer(i4b),parameter  :: nStateTypes=2              ! number of state types (energy, water)
-integer(i4b),parameter  :: nDomains=4                 ! number of domains (vegetation, snow, soil, and aquifer)
 
 contains
 
