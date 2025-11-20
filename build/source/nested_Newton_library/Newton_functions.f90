@@ -1055,13 +1055,45 @@ contains
 
  subroutine f_mass_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function for mass ***
+  ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
+  use stateFilter_module,only: stateTypeSplit,massSplit,fullDomain,vector
+  ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+  ! local variables
+  type(split_select_type)         :: split_select       ! split select object
+  character(LEN=256)              :: message            ! total error message
+  character(LEN=256)              :: cmessage           ! error message of downwind routine
+  integer(i4b)                    :: err                ! error code of downwind routine
+  logical(lgt) :: return_flag
 
-  type(split_select_type) :: split_select
+  ! * initialize operations for split_select object *
+
+  associate(nstate => f_obj % in_SS4HG % nState)
+   ! initialize total # of state variables
+   split_select % nState = nState 
+
+   ! allocate data components
+   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
+  end associate
+
   ! use split_select_type object to specify the desired split
+  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
+  split_select % ixCoupling = stateTypeSplit    ! splitting is used
+  split_select % iStateTypeSplit = massSplit    ! mass state variable type
+  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
+  !split_select % iDomainSplit =                ! only used for sub-domain splitting
+  split_select % ixSolution = vector            ! vector split (not scalar)
+  !split_select % iStateSplit =                 ! only used for scalar splits
+
  
-  ! apply initialize operations from opSplitting to generate logical masks (probably skip save/restore operations)
+  ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
+  ! from update_stateMask in opSplittin
+  call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
+  !nSubset = split_select % nSubset; stateMask = split_select % stateMask
+  !if (return_flag) return
+
+
 
   ! follow interface from opSplittin --> varSubtep --> systemSolv to get input arrays for eval8summa
 
@@ -1073,8 +1105,31 @@ contains
 
  subroutine f_energy_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function for energy ***
+  use stateFilter_module,only: stateTypeSplit,nrgSplit,fullDomain,vector
+  ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+  ! local variables
+  type(split_select_type)         :: split_select       ! split select object
+
+  ! * initialize operations for split_select object *
+
+  associate(nstate => f_obj % in_SS4HG % nState)
+   ! initialize total # of state variables
+   split_select % nState = nState 
+
+   ! allocate data components
+   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
+  end associate
+
+  ! use split_select_type object to specify the desired split
+  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
+  split_select % ixCoupling = stateTypeSplit    ! splitting is used
+  split_select % iStateTypeSplit = nrgSplit     ! energy state variable type
+  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
+  !split_select % iDomainSplit =                ! only used for sub-domain splitting
+  split_select % ixSolution = vector            ! vector split (not scalar)
+  !split_select % iStateSplit =                 ! only used for scalar splits
 
  end subroutine f_energy_SUMMA_vec
 
