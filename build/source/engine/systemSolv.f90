@@ -272,7 +272,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1136,6 +1136,13 @@ contains
   ! set up initial guess
   nested_Newton % x1(:) = stateVecTrial(:)  ! initialize solution from previous time step
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
+
+!!!!!!!!!!!!!!!! SJT: Start Test Block --- take out
+  print *, "systemSolv A00:"
+  call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
+
+  stop
+!!!!!!!!!!!!!!!! SJT: End Test Block --- take out
 
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
