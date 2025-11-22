@@ -1061,6 +1061,8 @@ contains
   use stateFilter_module,only: massSplit,nrgSplit
   use stateFilter_module,only: fullDomain,subDomain
   use stateFilter_module,only: vector,scalar
+  use indexState_module ,only: indexSplit                             ! get state indices from stateMask
+  use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
@@ -1071,7 +1073,14 @@ contains
   integer(i4b)                    :: err                ! error code of downwind routine
   logical(lgt)                    :: return_flag
 
+  type(in_type_indexSplit)  :: in_indexSplit  ! indexSplit arguments
+  type(out_type_indexSplit) :: out_indexSplit
+
+  type(var_ilength) :: indx_data_split ! indices defining model states and layers for selected split 
+
   ! * initialize operations for split_select object *
+
+  indx_data_split = f_obj % indx_data ! using temporary copy on indx_data so that fully-coupled version is not overwritten
 
   associate(nstate => f_obj % in_SS4HG % nState)
    ! initialize total # of state variables
@@ -1093,10 +1102,29 @@ contains
 
   ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
   ! from update_stateMask in opSplittin
-  call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
+  call split_select % get_stateMask(indx_data_split,err,cmessage,message,return_flag)
   split_select % stateMask(:) = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask
-  !nSubset = split_select % nSubset; stateMask = .not.(split_select % stateMask)
-  !if (return_flag) return
+  if (return_flag) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+    end if
+  end if
+
+  ! * indexSplit *
+  associate(&
+   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+   nLayers        => f_obj % in_SS4HG % nLayers         & ! intent(in): total number of layers
+  &)   
+   call in_indexSplit % initialize(nSnow,nSoil,nLayers,split_select % nSubset)
+  end associate
+  call indexSplit(in_indexSplit,split_select % stateMask,indx_data_split,out_indexSplit) ! update indx_data based on stateMask
+  call out_indexSplit % finalize(err,cmessage)
+  if (err/=0_i4b) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: indexSplit message="//trim(cmessage); stop
+    end if
+  end if
 
 !!!! SJT: start test block ---- take out ----
   print *, split_select % nState
@@ -1115,7 +1143,12 @@ contains
 
  subroutine f_energy_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function for energy ***
-  use stateFilter_module,only: stateTypeSplit,nrgSplit,fullDomain,vector
+  use stateFilter_module,only: fullyCoupled,stateTypeSplit
+  use stateFilter_module,only: massSplit,nrgSplit
+  use stateFilter_module,only: fullDomain,subDomain
+  use stateFilter_module,only: vector,scalar
+  use indexState_module ,only: indexSplit                             ! get state indices from stateMask
+  use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
@@ -1126,7 +1159,11 @@ contains
   integer(i4b)                    :: err                ! error code of downwind routine
   logical(lgt)                    :: return_flag
 
+  type(var_ilength) :: indx_data_split ! indices defining model states and layers for selected split 
+
   ! * initialize operations for split_select object *
+
+  indx_data_split = f_obj % indx_data ! using temporary copy on indx_data so that fully-coupled version is not overwritten
 
   associate(nstate => f_obj % in_SS4HG % nState)
    ! initialize total # of state variables
@@ -1147,8 +1184,13 @@ contains
 
   ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
   ! from update_stateMask in opSplittin
-  call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
-  !nSubset = split_select % nSubset; stateMask = .not.(split_select % stateMask)
+  call split_select % get_stateMask(indx_data_split,err,cmessage,message,return_flag)
+  !nSubset = split_select % nSubset; stateMask = split_select % stateMask
+  if (return_flag) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in f_energy_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+    end if
+  end if
 
  end subroutine f_energy_SUMMA_vec
 
