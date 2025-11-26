@@ -168,7 +168,8 @@ module Newton_functions
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
    procedure :: custom_descaling   => SUMMA_descaling  
-   procedure :: f_mass_SUMMA_vec ! SJT: testing ----- take out -----
+   procedure :: f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
+   procedure :: f_energy_SUMMA_vec ! SJT: testing ----- take out -----
  
    ! scalar routines
    procedure :: f     => f_diff 
@@ -1063,20 +1064,22 @@ contains
   use stateFilter_module,only: vector,scalar
   use indexState_module ,only: indexSplit                             ! get state indices from stateMask
   use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
+  use getVectorz_module ,only: popStateVec                            ! populate the state vector
+
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+
   ! local variables
-  type(split_select_type)         :: split_select       ! split select object
-  character(LEN=256)              :: message            ! total error message
-  character(LEN=256)              :: cmessage           ! error message of downwind routine
-  integer(i4b)                    :: err                ! error code of downwind routine
+  type(split_select_type)         :: split_select    ! split select object
+  type(in_type_indexSplit)        :: in_indexSplit   ! indexSplit arguments
+  type(out_type_indexSplit)       :: out_indexSplit
+  type(var_ilength)               :: indx_data_split ! indices defining model states and layers for selected split 
+  real(rkind),allocatable         :: stateVecTrial(:)   ! trial state vector for split
+  character(LEN=256)              :: message         ! total error message
+  character(LEN=256)              :: cmessage        ! error message of downwind routine
+  integer(i4b)                    :: err             ! error code of downwind routine
   logical(lgt)                    :: return_flag
-
-  type(in_type_indexSplit)  :: in_indexSplit  ! indexSplit arguments
-  type(out_type_indexSplit) :: out_indexSplit
-
-  type(var_ilength) :: indx_data_split ! indices defining model states and layers for selected split 
 
   ! * initialize operations for split_select object *
 
@@ -1103,12 +1106,24 @@ contains
   ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
   ! from update_stateMask in opSplittin
   call split_select % get_stateMask(indx_data_split,err,cmessage,message,return_flag)
-  split_select % stateMask(:) = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask
   if (return_flag) then
     if (f_obj % out_error) then
      write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: stateFilter message="//trim(cmessage); stop
     end if
   end if
+
+  ! transform variables for energy split into mass split
+  split_select % stateMask(:) = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask
+  split_select % nSubset = split_select % nState -split_select % nSubset ! count for new stateMask
+
+  !!!! SJT: start test block ---- take out ----
+  print *, "Mass:"
+  print *, split_select % nState
+  print *, split_select % nSubset
+  print *, split_select % stateMask(:)
+  print *, indx_data_split%var(iLookINDEX%ixStateType)%dat
+  print *, indx_data_split%var(iLookINDEX%ixAllState)%dat
+  !!!! SJT: end test block ---- take out ----
 
   ! * indexSplit *
   associate(&
@@ -1126,16 +1141,88 @@ contains
     end if
   end if
 
-!!!! SJT: start test block ---- take out ----
-  print *, split_select % nState
-  print *, split_select % nSubset
-  print *, split_select % stateMask(:)
-  print *, f_obj % indx_data%var(iLookINDEX%ixStateType)%dat
-!!!! SJT: end test block ---- take out ----
 
   ! follow interface from opSplittin --> varSubtep --> systemSolv to get input arrays for eval8summa
 
+
   ! call eval8summa to get non-linear function values for mass state type
+  ! update
+  associate(&
+   nState => split_select % nSubset, &
+   enthalpyStateVec => .false.       & ! flag to use enthalpy as a state variable -------------- FIX THIS ------------------
+  &)
+
+   ! allocate trial state vector for split
+   allocate(stateVecTrial(1:nState))   
+
+   ! initialize state vectors
+   call popStateVec(&
+                   ! input
+                   nState,           & ! intent(in):  number of desired state variables
+                   enthalpyStateVec, & ! intent(in):  flag to use enthalpy as a state variable
+                   f_obj % prog_data,        & ! intent(in):  model prognostic variables for a local HRU
+                   f_obj % diag_data,        & ! intent(in):  model diagnostic variables for a local HRU
+                   indx_data_split,  & ! intent(in):  indices defining model states and layers
+                   ! output
+                   stateVecTrial,    & ! intent(out): initial model state vector (mixed units)
+                   err,cmessage)       ! intent(out): error control
+   !if(err/=0)then; message=trim(message)//trim(cmessage); return; endif  ! (check for errors)
+
+   ! evaluate residual vector for mass split
+   call eval8summa(&
+                    ! input: model control
+                    f_obj % in_SS4HG % dt_cur,         & ! intent(in):    current stepsize
+                    f_obj % in_SS4HG % dt,             & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
+                    f_obj % in_SS4HG % nSnow,          & ! intent(in):    number of snow layers
+                    f_obj % in_SS4HG % nSoil,          & ! intent(in):    number of soil layers
+                    f_obj % in_SS4HG % nLayers,        & ! intent(in):    number of layers
+                    nState,                            & ! intent(in):    number of state variables in the current subset
+                    .false.,                           & ! intent(in):    not inside Sundials solver
+                    f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
+                    f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
+                    .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
+                    f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
+                    ! input: state vectors
+                    stateVecTrial,                   & ! intent(in):    model state vector
+                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
+                    f_obj % sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                    ! input: data structures
+                    f_obj % model_decisions,         & ! intent(in):    model decisions
+                    f_obj % lookup_data,             & ! intent(in):    lookup tables
+                    f_obj % type_data,               & ! intent(in):    type of vegetation and soil
+                    f_obj % attr_data,               & ! intent(in):    spatial attributes
+                    f_obj % mpar_data,               & ! intent(in):    model parameters
+                    f_obj % forc_data,               & ! intent(in):    model forcing data
+                    f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
+                    f_obj % prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                    ! input-output: data structures
+                    indx_data_split,                 & ! intent(inout): index data
+                    f_obj % diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                    f_obj % flux_data,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                    f_obj % deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                    ! input-output: baseflow
+                    f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                    f_obj % dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    ! output
+                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                    f_obj % fluxVec0,                & ! intent(out):   flux vector
+                    f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
+                    f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                    f_obj % resVec,                  & ! intent(out):   residual vector
+                    f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
+                    f_obj % out_SS4HG % err,         & ! intent(out): error code
+                    f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
+  end associate
+
+  ! finalize
+  associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
+   if (err /= 0) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(message); stop
+    end if
+   end if
+  end associate
 
   ! remaining non-linear function values are zero
 
@@ -1152,14 +1239,17 @@ contains
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
+
   ! local variables
-  type(split_select_type)         :: split_select       ! split select object
-  character(LEN=256)              :: message            ! total error message
-  character(LEN=256)              :: cmessage           ! error message of downwind routine
-  integer(i4b)                    :: err                ! error code of downwind routine
+  type(split_select_type)         :: split_select    ! split select object
+  type(in_type_indexSplit)        :: in_indexSplit   ! indexSplit arguments
+  type(out_type_indexSplit)       :: out_indexSplit
+  type(var_ilength)               :: indx_data_split ! indices defining model states and layers for selected split 
+  character(LEN=256)              :: message         ! total error message
+  character(LEN=256)              :: cmessage        ! error message of downwind routine
+  integer(i4b)                    :: err             ! error code of downwind routine
   logical(lgt)                    :: return_flag
 
-  type(var_ilength) :: indx_data_split ! indices defining model states and layers for selected split 
 
   ! * initialize operations for split_select object *
 
@@ -1185,10 +1275,34 @@ contains
   ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
   ! from update_stateMask in opSplittin
   call split_select % get_stateMask(indx_data_split,err,cmessage,message,return_flag)
-  !nSubset = split_select % nSubset; stateMask = split_select % stateMask
   if (return_flag) then
     if (f_obj % out_error) then
      write(f_obj % unit,*) "Error in f_energy_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+    end if
+  end if
+
+  !!!! SJT: start test block ---- take out ----
+  print *, "Energy:"
+  print *, split_select % nState
+  print *, split_select % nSubset
+  print *, split_select % stateMask(:)
+  print *, indx_data_split%var(iLookINDEX%ixStateType)%dat
+  print *, indx_data_split%var(iLookINDEX%ixAllState)%dat
+  !!!! SJT: end test block ---- take out ----
+
+  ! * indexSplit *
+  associate(&
+   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+   nLayers        => f_obj % in_SS4HG % nLayers         & ! intent(in): total number of layers
+  &)   
+   call in_indexSplit % initialize(nSnow,nSoil,nLayers,split_select % nSubset)
+  end associate
+  call indexSplit(in_indexSplit,split_select % stateMask,indx_data_split,out_indexSplit) ! update indx_data based on stateMask
+  call out_indexSplit % finalize(err,cmessage)
+  if (err/=0_i4b) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in f_energy_SUMMA_vec: indexSplit message="//trim(cmessage); stop
     end if
   end if
 

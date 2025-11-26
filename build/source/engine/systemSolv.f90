@@ -1140,6 +1140,7 @@ contains
 !!!!!!!!!!!!!!!! SJT: Start Test Block --- take out
   print *, "systemSolv A00:"
   call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
+  call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
 
   stop
 !!!!!!!!!!!!!!!! SJT: End Test Block --- take out
