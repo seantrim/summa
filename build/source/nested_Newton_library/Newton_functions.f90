@@ -1055,7 +1055,7 @@ contains
 
  end subroutine SUMMA_computJacob
 
- subroutine f_mass_SUMMA_vec(f_obj,xvec)
+ subroutine f_mass_SUMMA_vec(f_obj,xvec,mass_state_type)
   ! *** Compute SUMMA's vector non-linear function for mass ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
   use stateFilter_module,only: fullyCoupled,stateTypeSplit
@@ -1066,10 +1066,14 @@ contains
   use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
   use getVectorz_module ,only: popStateVec                            ! populate the state vector
   use getVectorz_module ,only: getScaling                             ! scale factors for residual and solution vectors
+  use mDecisions_module ,only: closedForm                             ! use temperature with closed form heat capacity
+  use mDecisions_module ,only: ida                                    ! use IDA solver
+
 
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  logical,intent(in)              :: mass_state_type   ! perform transformations from energy split to mass split 
 
   ! local variables
   type(split_select_type)         :: split_select      ! split select object
@@ -1085,10 +1089,12 @@ contains
   real(rkind),allocatable         :: fRHS_split(:)     ! RHS function for ARKODE for split
   real(rkind),allocatable         :: rAdd_split(:)     ! additional (sink) terms on the RHS of the state equation for split
   real(rkind),allocatable         :: resVec_split(:)   ! residual vector for split
+  logical(lgt)                    :: enthalpyStateVec  ! flag to use enthalpy as a state variable (ida)
   character(LEN=256)              :: message           ! total error message
   character(LEN=256)              :: cmessage          ! error message of downwind routine
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
+
 
   ! * initialize operations for split_select object *
 
@@ -1123,9 +1129,10 @@ contains
   end if
 
   ! transform variables for energy split into mass split
-  split_select % stateMask(:) = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask
-  split_select % nSubset = split_select % nState - split_select % nSubset ! count for new stateMask
-
+  if (mass_state_type) then
+   split_select % stateMask(:) = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask
+   split_select % nSubset = split_select % nState - split_select % nSubset ! count for new stateMask
+  end if
 
   ! * indexSplit *
   associate(&
@@ -1143,15 +1150,12 @@ contains
     end if
   end if
 
-
-  ! follow interface from opSplittin --> varSubtep --> systemSolv to get input arrays for eval8summa
-
-
   ! call eval8summa to get non-linear function values for mass state type
   ! update
   associate(&
-   nState => split_select % nSubset, &
-   enthalpyStateVec => .false.       & ! flag to use enthalpy as a state variable -------------- FIX THIS ------------------
+   nState            => split_select % nSubset                                      ,& ! # of state variables in split
+   ixNumericalMethod => f_obj % model_decisions(iLookDECISIONS%num_method)%iDecision,& ! intent(in): [i4b] choice of numerical solver
+   ixNrgConserv      => f_obj % model_decisions(iLookDECISIONS%nrgConserv)%iDecision & ! intent(in): [i4b] choice of variable in either energy backward Euler residual or IDA state variable
   &)
 
    ! allocate arrays for split
@@ -1165,6 +1169,8 @@ contains
    allocate(fRHS_split(1:nState)    ) ! RHS function for ARKODE
    allocate(rAdd_split(1:nState)    ) ! additional (sink) terms on the RHS of the state equation
    allocate(resVec_split(1:nState)  ) ! residual vector
+
+   enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
 
    ! initialize state vectors
    call popStateVec(&
@@ -1248,17 +1254,19 @@ contains
   end associate
 
   ! remaining non-linear function values are zero
+  f_obj % f1_vec(:) = 0._r8b
+  f_obj % f1_vec(:) = unpack(resVec_split,split_select % stateMask,f_obj % f1_vec)
 
-  ! recover original data structures
+  ! recover original data structures --------------- SJT: maybe put this after computJacob ----------------
   f_obj % indx_data = indx_data_save ! using temporary copy on indx_data so that fully-coupled version is not overwritten
 
   !!!! SJT: start test block ---- take out ----
-  print *, "Mass:"
+  print *, "mass_state_type =",mass_state_type
   print *, split_select % nState
   print *, split_select % nSubset
   print *, split_select % stateMask(:)
-  print *, f_obj % indx_data%var(iLookINDEX%ixStateType)%dat
-  print *, f_obj % indx_data%var(iLookINDEX%ixAllState)%dat
+  print *, resVec_split
+  print *, f_obj % f1_vec
   print *, sum(resVec_split)
   !!!! SJT: end test block ---- take out ----
  end subroutine f_mass_SUMMA_vec
