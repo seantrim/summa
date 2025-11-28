@@ -96,7 +96,7 @@ module Newton_functions
    type(var_dlength) :: bvar_data                    ! model variables for the local basin
 
 
-   type(var_ilength) :: indx_data                    ! indices defining model states and layers
+   type(var_ilength) :: indx_data,indx_data1,indx_data2 ! indices defining model states and layers
    type(var_dlength) :: prog_data                    ! prognostic variables for a local HRU
    type(var_dlength) :: diag_data                    ! diagnostic variables for a local HRU
    type(var_dlength) :: flux_data                    ! temporary flux variables for a local HRU
@@ -122,6 +122,9 @@ module Newton_functions
    ! scaled arrays
    real(rkind),allocatable :: rVecScaled(:)   ! scaled residual
    real(rkind),allocatable :: aJacScaled(:,:) ! scaled Jacobian
+
+   ! variables to handle state type non-linear function decompositions
+   logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
 
   contains
    ! ** routines that point to external sources ** !
@@ -1055,7 +1058,67 @@ contains
 
  end subroutine SUMMA_computJacob
 
- subroutine f_mass_SUMMA_vec(f_obj,xvec,mass_state_type)
+ subroutine f_mass_SUMMA_vec(f_obj,xvec)
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  ! local
+  logical,parameter               :: mass_state_type = .true. ! perform transformations from energy split to mass split 
+  real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
+
+  ! initialize data structures
+  f_obj % indx_data1 = f_obj % indx_data ! ensure that fully-coupled indx_data is not overwritten
+
+  ! compute residual for split
+  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,f_obj % indx_data1,f_obj % stateMask1,resVec_split)
+
+  ! remaining non-linear function values are zero
+  f_obj % f1_vec(:) = 0._r8b
+  f_obj % f1_vec(:) = unpack(resVec_split,f_obj % stateMask1,f_obj % f1_vec)
+
+  !!!! SJT: start test block ---- take out ----
+  print *, "mass_state_type =",mass_state_type
+  !print *, split_select % nState
+  !print *, split_select % nSubset
+  print *, f_obj % stateMask1(:)
+  print *, resVec_split
+  print *, f_obj % f1_vec
+  print *, sum(resVec_split)
+  !!!! SJT: end test block ---- take out ----
+ end subroutine f_mass_SUMMA_vec
+
+ subroutine f_energy_SUMMA_vec(f_obj,xvec)
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  ! local
+  logical,parameter               :: mass_state_type = .false. ! perform transformations from energy split to mass split 
+  real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
+
+  ! initialize data structures
+  f_obj % indx_data2 = f_obj % indx_data ! ensure that fully-coupled indx_data is not overwritten
+
+  ! compute residual for split
+  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,f_obj % indx_data2,f_obj % stateMask2,resVec_split)
+
+  ! remaining non-linear function values are zero
+  f_obj % f2_vec(:) = 0._r8b
+  f_obj % f2_vec(:) = unpack(-resVec_split,f_obj % stateMask2,f_obj % f2_vec) ! note: sign change for f2 so that f=f1-f2
+
+  !!!! SJT: start test block ---- take out ----
+  print *, "mass_state_type =",mass_state_type
+  !print *, split_select % nState
+  !print *, split_select % nSubset
+  print *, f_obj % stateMask2(:)
+  print *, resVec_split
+  print *, f_obj % f2_vec
+  print *, sum(resVec_split)
+  !!!! SJT: end test block ---- take out ----
+ end subroutine f_energy_SUMMA_vec
+
+ subroutine f_state_SUMMA_vec(f_obj,xvec,mass_state_type,indx_data,stateMask,resVec_split)
   ! *** Compute SUMMA's vector non-linear function for mass ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
   use stateFilter_module,only: fullyCoupled,stateTypeSplit
@@ -1069,17 +1132,18 @@ contains
   use mDecisions_module ,only: closedForm                             ! use temperature with closed form heat capacity
   use mDecisions_module ,only: ida                                    ! use IDA solver
 
-
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  logical,intent(in)              :: mass_state_type   ! perform transformations from energy split to mass split 
+  real(r8b),intent(in)            :: xvec(1:f_obj % n)    ! current guess
+  logical,intent(in)              :: mass_state_type      ! perform transformations from energy split to mass split 
+  type(var_ilength),intent(inout)      :: indx_data       ! indices defining model states and layers for selected split 
+  logical(lgt),allocatable,intent(out) :: stateMask(:)    ! logical mask array for split
+  real(rkind),allocatable,intent(out)  :: resVec_split(:) ! residual vector for split
 
   ! local variables
   type(split_select_type)         :: split_select      ! split select object
   type(in_type_indexSplit)        :: in_indexSplit     ! indexSplit arguments
   type(out_type_indexSplit)       :: out_indexSplit
-  type(var_ilength)               :: indx_data_save    ! indices defining model states and layers for selected split 
   real(rkind),allocatable         :: stateVecTrial(:)  ! trial state vector for split
   real(rkind),allocatable         :: fScale_split(:)   ! residual vector scale factors for split
   real(rkind),allocatable         :: xScale_split(:)   ! solution vector scale factors for split
@@ -1088,7 +1152,6 @@ contains
   real(rkind),allocatable         :: fluxVec0_split(:) ! flux vector for split
   real(rkind),allocatable         :: fRHS_split(:)     ! RHS function for ARKODE for split
   real(rkind),allocatable         :: rAdd_split(:)     ! additional (sink) terms on the RHS of the state equation for split
-  real(rkind),allocatable         :: resVec_split(:)   ! residual vector for split
   logical(lgt)                    :: enthalpyStateVec  ! flag to use enthalpy as a state variable (ida)
   character(LEN=256)              :: message           ! total error message
   character(LEN=256)              :: cmessage          ! error message of downwind routine
@@ -1097,9 +1160,6 @@ contains
 
 
   ! * initialize operations for split_select object *
-
-  ! save original data structures
-  indx_data_save = f_obj % indx_data ! using temporary copy on indx_data so that fully-coupled version is not overwritten
 
   associate(nstate => f_obj % in_SS4HG % nState)
    ! initialize total # of state variables
@@ -1121,17 +1181,19 @@ contains
 
   ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
   ! from update_stateMask in opSplittin
-  call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
+  call split_select % get_stateMask(indx_data,err,cmessage,message,return_flag)
   if (return_flag) then
     if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: stateFilter message="//trim(cmessage); stop
     end if
   end if
 
   ! transform variables for energy split into mass split
   if (mass_state_type) then
-   split_select % stateMask(:) = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask
+   stateMask = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask --- allocate on assignment
    split_select % nSubset = split_select % nState - split_select % nSubset ! count for new stateMask
+  else
+   stateMask = split_select % stateMask ! no transformation --- allocate on assignment
   end if
 
   ! * indexSplit *
@@ -1142,11 +1204,11 @@ contains
   &)   
    call in_indexSplit % initialize(nSnow,nSoil,nLayers,split_select % nSubset)
   end associate
-  call indexSplit(in_indexSplit,split_select % stateMask,f_obj % indx_data,out_indexSplit) ! update indx_data based on stateMask
+  call indexSplit(in_indexSplit,stateMask,indx_data,out_indexSplit) ! update indx_data based on stateMask
   call out_indexSplit % finalize(err,cmessage)
   if (err/=0_i4b) then
     if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: indexSplit message="//trim(cmessage); stop
+     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: indexSplit message="//trim(cmessage); stop
     end if
   end if
 
@@ -1179,21 +1241,21 @@ contains
                    enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
                    f_obj % prog_data,  & ! intent(in):  model prognostic variables for a local HRU
                    f_obj % diag_data,  & ! intent(in):  model diagnostic variables for a local HRU
-                   f_obj % indx_data,  & ! intent(in):  indices defining model states and layers
+                   indx_data,          & ! intent(in):  indices defining model states and layers
                    ! output
                    stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
                    err,cmessage)         ! intent(out): error control
    if (err/=0_i4b) then
      if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: popStateVec message="//trim(cmessage); stop
+      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
      end if
    end if
 
    ! compute scale factors
-   call getScaling(f_obj % diag_data,f_obj % indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
+   call getScaling(f_obj % diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
    if (err/=0_i4b) then
      if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in f_mass_SUMMA_vec: getScaling message="//trim(cmessage); stop
+      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: getScaling message="//trim(cmessage); stop
      end if
    end if
 
@@ -1226,7 +1288,7 @@ contains
                     f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
                     f_obj % prog_data,               & ! intent(in):    model prognostic variables for a local HRU
                     ! input-output: data structures
-                    f_obj % indx_data,               & ! intent(inout): index data
+                    indx_data,                       & ! intent(inout): index data
                     f_obj % diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
                     f_obj % flux_data,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
                     f_obj % deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
@@ -1248,108 +1310,12 @@ contains
   associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
    if (err /= 0) then
     if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error f_mass_SUMMA_vec: eval8summa message="//trim(message); stop
+     write(f_obj % unit,*) "Error f_state_SUMMA_vec: eval8summa message="//trim(message); stop
     end if
    end if
   end associate
 
-  ! remaining non-linear function values are zero
-  f_obj % f1_vec(:) = 0._r8b
-  f_obj % f1_vec(:) = unpack(resVec_split,split_select % stateMask,f_obj % f1_vec)
-
-  ! recover original data structures --------------- SJT: maybe put this after computJacob ----------------
-  f_obj % indx_data = indx_data_save ! using temporary copy on indx_data so that fully-coupled version is not overwritten
-
-  !!!! SJT: start test block ---- take out ----
-  print *, "mass_state_type =",mass_state_type
-  print *, split_select % nState
-  print *, split_select % nSubset
-  print *, split_select % stateMask(:)
-  print *, resVec_split
-  print *, f_obj % f1_vec
-  print *, sum(resVec_split)
-  !!!! SJT: end test block ---- take out ----
- end subroutine f_mass_SUMMA_vec
-
- subroutine f_energy_SUMMA_vec(f_obj,xvec)
-  ! *** Compute SUMMA's vector non-linear function for energy ***
-  use stateFilter_module,only: fullyCoupled,stateTypeSplit
-  use stateFilter_module,only: massSplit,nrgSplit
-  use stateFilter_module,only: fullDomain,subDomain
-  use stateFilter_module,only: vector,scalar
-  use indexState_module ,only: indexSplit                             ! get state indices from stateMask
-  use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
-
-  ! local variables
-  type(split_select_type)         :: split_select    ! split select object
-  type(in_type_indexSplit)        :: in_indexSplit   ! indexSplit arguments
-  type(out_type_indexSplit)       :: out_indexSplit
-  type(var_ilength)               :: indx_data_split ! indices defining model states and layers for selected split 
-  character(LEN=256)              :: message         ! total error message
-  character(LEN=256)              :: cmessage        ! error message of downwind routine
-  integer(i4b)                    :: err             ! error code of downwind routine
-  logical(lgt)                    :: return_flag
-
-
-  ! * initialize operations for split_select object *
-
-  indx_data_split = f_obj % indx_data ! using temporary copy on indx_data so that fully-coupled version is not overwritten
-
-  associate(nstate => f_obj % in_SS4HG % nState)
-   ! initialize total # of state variables
-   split_select % nState = nState 
-
-   ! allocate data components
-   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
-  end associate
-
-  ! use split_select_type object to specify the desired split
-  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
-  split_select % ixCoupling = stateTypeSplit    ! splitting is used
-  split_select % iStateTypeSplit = nrgSplit     ! energy state variable type
-  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
-  !split_select % iDomainSplit =                ! only used for sub-domain splitting
-  split_select % ixSolution = vector            ! vector split (not scalar)
-  !split_select % iStateSplit =                 ! only used for scalar splits
-
-  ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
-  ! from update_stateMask in opSplittin
-  call split_select % get_stateMask(indx_data_split,err,cmessage,message,return_flag)
-  if (return_flag) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_energy_SUMMA_vec: stateFilter message="//trim(cmessage); stop
-    end if
-  end if
-
-  !!!! SJT: start test block ---- take out ----
-  print *, "Energy:"
-  print *, split_select % nState
-  print *, split_select % nSubset
-  print *, split_select % stateMask(:)
-  print *, indx_data_split%var(iLookINDEX%ixStateType)%dat
-  print *, indx_data_split%var(iLookINDEX%ixAllState)%dat
-  !!!! SJT: end test block ---- take out ----
-
-  ! * indexSplit *
-  associate(&
-   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
-   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
-   nLayers        => f_obj % in_SS4HG % nLayers         & ! intent(in): total number of layers
-  &)   
-   call in_indexSplit % initialize(nSnow,nSoil,nLayers,split_select % nSubset)
-  end associate
-  call indexSplit(in_indexSplit,split_select % stateMask,indx_data_split,out_indexSplit) ! update indx_data based on stateMask
-  call out_indexSplit % finalize(err,cmessage)
-  if (err/=0_i4b) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_energy_SUMMA_vec: indexSplit message="//trim(cmessage); stop
-    end if
-  end if
-
- end subroutine f_energy_SUMMA_vec
+ end subroutine f_state_SUMMA_vec
 
  subroutine f_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function ***

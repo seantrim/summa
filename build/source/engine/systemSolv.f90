@@ -1142,9 +1142,10 @@ contains
   call nested_Newton % f1_vec_eval(stateVecTrial(:))
   print *, nested_Newton % f1_vec
   print *, "f =",sum(nested_Newton % f1_vec)
-  call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:),.true.)
-  call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:),.false.)
-
+  call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
+  call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
+  print *, "f1-f2="
+  print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
   stop
 !!!!!!!!!!!!!!!! SJT: End Test Block --- take out
 
