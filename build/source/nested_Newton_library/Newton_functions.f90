@@ -96,13 +96,13 @@ module Newton_functions
    type(var_dlength) :: bvar_data                    ! model variables for the local basin
 
 
-   type(var_ilength) :: indx_data,indx_data1,indx_data2 ! indices defining model states and layers
-   type(var_dlength) :: prog_data                    ! prognostic variables for a local HRU
-   type(var_dlength) :: diag_data                    ! diagnostic variables for a local HRU
-   type(var_dlength) :: flux_data                    ! temporary flux variables for a local HRU
-   type(var_dlength) :: deriv_data                   ! derivatives in model fluxes w.r.t. relevant state variables
-   real(rkind),allocatable :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
-   real(rkind),allocatable :: dMat(:)                ! diagonal matrix (excludes flux derivatives) 
+   type(var_ilength) :: indx_data,indx_data1,indx_data2    ! indices defining model states and layers
+   type(var_dlength) :: prog_data                          ! prognostic variables for a local HRU
+   type(var_dlength) :: diag_data,diag_data1,diag_data2    ! diagnostic variables for a local HRU
+   type(var_dlength) :: flux_data,flux_data1,flux_data2    ! temporary flux variables for a local HRU
+   type(var_dlength) :: deriv_data,deriv_data1,deriv_data2 ! derivatives in model fluxes w.r.t. relevant state variables
+   real(rkind),allocatable :: dBaseflow_dMatric(:,:),dBaseflow_dMatric1(:,:),dBaseflow_dMatric2(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+   real(rkind),allocatable :: dMat(:),dMat1(:),dMat2(:)    ! diagonal matrix (excludes flux derivatives) 
 
    type(in_type_summaSolve4homegrown)  :: in_SS4HG   ! summaSolve4homegrown input object: model control variables and previous function evaluation
    type(io_type_summaSolve4homegrown)  :: io_SS4HG   ! summaSolve4homegrown io object: model control variables and previous function evaluation
@@ -173,7 +173,8 @@ module Newton_functions
    procedure :: custom_descaling   => SUMMA_descaling  
    procedure :: f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
    procedure :: f_energy_SUMMA_vec ! SJT: testing ----- take out -----
- 
+   procedure :: Jacobian_f_mass_SUMMA_vec ! SJT: testing ----- take out -----
+
    ! scalar routines
    procedure :: f     => f_diff 
    procedure :: dfdx  => dfdx_diff 
@@ -1008,10 +1009,19 @@ contains
   end associate
  end subroutine SUMMA_eval8summa
 
- subroutine SUMMA_computJacob(f_obj,aJac)
+ subroutine SUMMA_computJacob(f_obj,&
+                             &indx_data,diag_data,flux_data,deriv_data,&
+                             &dMat,dBaseflow_dMatric,&
+                             &aJac)
   ! ** Interface for SUMMA's computJacob subroutine **
   ! arguments
   class(f_obj_inputs),intent(inout) :: f_obj
+  type(var_ilength),intent(in)      :: indx_data              ! indices defining model states and layers for selected split 
+  type(var_dlength),intent(in)      :: diag_data              ! diagnostic variables for a local HRU
+  type(var_dlength),intent(in)      :: flux_data              ! flux data
+  type(var_dlength),intent(in)      :: deriv_data             ! derivative data
+  real(rkind)      ,intent(in)      :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
+  real(rkind)      ,intent(in)      :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
   real(rkind),intent(out)           :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
 
   ! local variables
@@ -1034,12 +1044,7 @@ contains
 
    ! update
    associate(&
-    indx_data         => f_obj % indx_data,&         ! indices defining model states and layers
-    prog_data         => f_obj % prog_data,&         ! prognostic variables for a local HRU
-    diag_data         => f_obj % diag_data,&         ! diagnostic variables for a local HRU
-    deriv_data        => f_obj % deriv_data,&        ! derivatives in model fluxes w.r.t. relevant state variables
-    dBaseflow_dMatric => f_obj % dBaseflow_dMatric,& ! derivative in baseflow w.r.t. matric head (s-1)
-    dMat              => f_obj % dMat&               ! diagonal matrix (excludes flux derivatives) 
+    prog_data         => f_obj % prog_data&         ! prognostic variables for a local HRU
    &)
     call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,aJac,out_computJacob)
    end associate
@@ -1067,11 +1072,16 @@ contains
   logical,parameter               :: mass_state_type = .true. ! perform transformations from energy split to mass split 
   real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
 
-  ! initialize data structures
-  f_obj % indx_data1 = f_obj % indx_data ! ensure that fully-coupled indx_data is not overwritten
+  ! initialize data structures (ensure that fully-coupled structures are not overwritten)
+  f_obj % indx_data1  = f_obj % indx_data 
+  f_obj % diag_data1  = f_obj % diag_data 
+  f_obj % flux_data1  = f_obj % flux_data 
+  f_obj % deriv_data1 = f_obj % deriv_data 
 
   ! compute residual for split
-  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,f_obj % indx_data1,f_obj % stateMask1,resVec_split)
+  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
+                        &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
+                        &f_obj % stateMask1,f_obj % dMat1,f_obj % dBaseflow_dMatric1,resVec_split)
 
   ! remaining non-linear function values are zero
   f_obj % f1_vec(:) = 0._r8b
@@ -1097,11 +1107,16 @@ contains
   logical,parameter               :: mass_state_type = .false. ! perform transformations from energy split to mass split 
   real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
 
-  ! initialize data structures
-  f_obj % indx_data2 = f_obj % indx_data ! ensure that fully-coupled indx_data is not overwritten
+  ! initialize data structures (ensure that fully-coupled structures are not overwritten)
+  f_obj % indx_data2  = f_obj % indx_data
+  f_obj % diag_data2  = f_obj % diag_data 
+  f_obj % flux_data2  = f_obj % flux_data 
+  f_obj % deriv_data2 = f_obj % deriv_data 
 
   ! compute residual for split
-  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,f_obj % indx_data2,f_obj % stateMask2,resVec_split)
+  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
+                        &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
+                        &f_obj % stateMask2,f_obj % dMat2,f_obj % dBaseflow_dMatric2,resVec_split)
 
   ! remaining non-linear function values are zero
   f_obj % f2_vec(:) = 0._r8b
@@ -1118,8 +1133,10 @@ contains
   !!!! SJT: end test block ---- take out ----
  end subroutine f_energy_SUMMA_vec
 
- subroutine f_state_SUMMA_vec(f_obj,xvec,mass_state_type,indx_data,stateMask,resVec_split)
-  ! *** Compute SUMMA's vector non-linear function for mass ***
+ subroutine f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
+                             &indx_data,diag_data,flux_data,deriv_data,&
+                             &stateMask,dMat_split,dBaseflow_dMatric,resVec_split)
+  ! *** Compute SUMMA's vector non-linear function for mass or energy state variables ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
   use stateFilter_module,only: fullyCoupled,stateTypeSplit
   use stateFilter_module,only: massSplit,nrgSplit
@@ -1134,11 +1151,16 @@ contains
 
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n)    ! current guess
-  logical,intent(in)              :: mass_state_type      ! perform transformations from energy split to mass split 
-  type(var_ilength),intent(inout)      :: indx_data       ! indices defining model states and layers for selected split 
-  logical(lgt),allocatable,intent(out) :: stateMask(:)    ! logical mask array for split
-  real(rkind),allocatable,intent(out)  :: resVec_split(:) ! residual vector for split
+  real(r8b)        ,intent(in)    :: xvec(1:f_obj % n)    ! current guess
+  logical          ,intent(in)    :: mass_state_type      ! perform transformations from energy split to mass split 
+  type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
+  type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
+  type(var_dlength),intent(inout) :: flux_data            ! flux data
+  type(var_dlength),intent(inout) :: deriv_data           ! derivative data
+  logical(lgt),allocatable,intent(out) :: stateMask(:)           ! logical mask array for split
+  real(rkind),allocatable ,intent(out) :: dMat_split(:)          ! diagonal matrix (no flux derivatives) for split
+  real(rkind),allocatable ,intent(out) :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+  real(rkind),allocatable ,intent(out) :: resVec_split(:)        ! residual vector for split
 
   ! local variables
   type(split_select_type)         :: split_select      ! split select object
@@ -1147,7 +1169,6 @@ contains
   real(rkind),allocatable         :: stateVecTrial(:)  ! trial state vector for split
   real(rkind),allocatable         :: fScale_split(:)   ! residual vector scale factors for split
   real(rkind),allocatable         :: xScale_split(:)   ! solution vector scale factors for split
-  real(rkind),allocatable         :: dMat_split(:)     ! diagonal matrix (no flux derivatives) for split
   real(qp)   ,allocatable         :: sMul_split(:)     ! state vector multipliers for split
   real(rkind),allocatable         :: fluxVec0_split(:) ! flux vector for split
   real(rkind),allocatable         :: fRHS_split(:)     ! RHS function for ARKODE for split
@@ -1240,7 +1261,7 @@ contains
                    nState,             & ! intent(in):  number of desired state variables
                    enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
                    f_obj % prog_data,  & ! intent(in):  model prognostic variables for a local HRU
-                   f_obj % diag_data,  & ! intent(in):  model diagnostic variables for a local HRU
+                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
                    indx_data,          & ! intent(in):  indices defining model states and layers
                    ! output
                    stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
@@ -1252,7 +1273,7 @@ contains
    end if
 
    ! compute scale factors
-   call getScaling(f_obj % diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
+   call getScaling(diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
    if (err/=0_i4b) then
      if (f_obj % out_error) then
       write(f_obj % unit,*) "Error in f_state_SUMMA_vec: getScaling message="//trim(cmessage); stop
@@ -1289,12 +1310,12 @@ contains
                     f_obj % prog_data,               & ! intent(in):    model prognostic variables for a local HRU
                     ! input-output: data structures
                     indx_data,                       & ! intent(inout): index data
-                    f_obj % diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
-                    f_obj % flux_data,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
-                    f_obj % deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                    diag_data,                       & ! intent(inout): model diagnostic variables for a local HRU
+                    flux_data,                       & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                    deriv_data,                      & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                     ! input-output: baseflow
                     f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                    f_obj % dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
                     ! output
                     f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                     fluxVec0_split,                  & ! intent(out):   flux vector
@@ -1367,7 +1388,9 @@ contains
   !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
 
   ! assemble Jacobian using the computed derivatives
-  call f_obj % SUMMA_computJacob(aJac)
+  call f_obj % SUMMA_computJacob(f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+                                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+                                &aJac)
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
@@ -1383,6 +1406,7 @@ contains
 
  subroutine Jacobian_f1_SUMMA_vec(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian **
+  ! Note: for trivial decomposition with f2=0 such that f1=f
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1394,7 +1418,9 @@ contains
   !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
 
   ! assemble Jacobian using the computed derivatives
-  call f_obj % SUMMA_computJacob(aJac)
+  call f_obj % SUMMA_computJacob(f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+                                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+                                &aJac)
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
@@ -1419,4 +1445,37 @@ contains
 
  end subroutine Jacobian_f2_zero_vec
 
+ subroutine Jacobian_f_mass_SUMMA_vec(f_obj,xvec)
+  ! ** Compute SUMMA's Jacobian for mass **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  ! local variables
+  integer(i4b) :: nBands                                                      ! SUMMA's leading dimension for banded Jacobians
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+
+  ! compute derivatives based on current guess
+  !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
+
+  ! assemble Jacobian using the computed derivatives
+  call f_obj % SUMMA_computJacob(f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
+                                &f_obj % dMat1,f_obj % dBaseflow_dMatric1,&
+                                &aJac)
+
+  !! SJT: testing --- take out ---
+  print *, "sum(aJac_mass)=",sum(aJac) 
+
+! SJT: update the following taking proper sizes into account
+! SJT: n probably refers to nSubset from the split (found from size(dMat) in computJacob)
+!  ! store Jacobian used in solver
+!  if (f_obj % banded) then ! banded storage
+!   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+!    nBands=nrow_banded+subdiag
+!    f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+!   end associate
+!  else ! full matrix storage
+!   f_obj % J1(:,:) = aJac(:,:)
+!  end if
+
+ end subroutine Jacobian_f_mass_SUMMA_vec
 end module Newton_functions

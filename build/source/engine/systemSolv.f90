@@ -1140,9 +1140,13 @@ contains
 !!!!!!!!!!!!!!!! SJT: Start Test Block --- take out
   print *, "systemSolv A00:"
   call nested_Newton % f1_vec_eval(stateVecTrial(:))
+  call nested_Newton % J1_eval(stateVecTrial(:))
   print *, nested_Newton % f1_vec
-  print *, "f =",sum(nested_Newton % f1_vec)
+  print *, "sum(f) =",sum(nested_Newton % f1_vec)
+  print *, "sum(J) =",sum(nested_Newton % J1)
+  nested_Newton % f1_vec(:) = 0._rkind ! reset f1 values for testing purposes
   call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
+  call nested_Newton % Jacobian_f_mass_SUMMA_vec(stateVecTrial(:))
   call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
   print *, "f1-f2="
   print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
