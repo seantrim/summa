@@ -1148,6 +1148,7 @@ contains
   call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
   call nested_Newton % Jacobian_f_mass_SUMMA_vec(stateVecTrial(:))
   call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
+  call nested_Newton % Jacobian_f_energy_SUMMA_vec(stateVecTrial(:))
   print *, "f1-f2="
   print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
   stop

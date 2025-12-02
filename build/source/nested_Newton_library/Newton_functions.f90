@@ -124,6 +124,8 @@ module Newton_functions
    real(rkind),allocatable :: aJacScaled(:,:) ! scaled Jacobian
 
    ! variables to handle state type non-linear function decompositions
+   integer(i4b)             :: nLeadDim1,nLeadDim2
+   integer(i4b)             :: nSubset1,nSubset2
    logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
 
   contains
@@ -173,7 +175,8 @@ module Newton_functions
    procedure :: custom_descaling   => SUMMA_descaling  
    procedure :: f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
    procedure :: f_energy_SUMMA_vec ! SJT: testing ----- take out -----
-   procedure :: Jacobian_f_mass_SUMMA_vec ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f_energy_SUMMA_vec ! SJT: testing ----- take out -----
 
    ! scalar routines
    procedure :: f     => f_diff 
@@ -1022,7 +1025,7 @@ contains
   type(var_dlength),intent(in)      :: deriv_data             ! derivative data
   real(rkind)      ,intent(in)      :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
   real(rkind)      ,intent(in)      :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
-  real(rkind),intent(out)           :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  real(rkind)      ,intent(out)     :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
 
   ! local variables
   type(in_type_computJacob)  :: in_computJacob  ! computJacob input object
@@ -1071,26 +1074,36 @@ contains
   ! local
   logical,parameter               :: mass_state_type = .true. ! perform transformations from energy split to mass split 
   real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
+  integer(i4b)                    :: nBands          ! # of bands for SUMMA's Jacobian
 
   ! initialize data structures (ensure that fully-coupled structures are not overwritten)
   f_obj % indx_data1  = f_obj % indx_data 
   f_obj % diag_data1  = f_obj % diag_data 
   f_obj % flux_data1  = f_obj % flux_data 
   f_obj % deriv_data1 = f_obj % deriv_data 
+  f_obj % dBaseflow_dMatric1 = f_obj % dBaseflow_dMatric ! allocate
 
   ! compute residual for split
   call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
                         &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
-                        &f_obj % stateMask1,f_obj % dMat1,f_obj % dBaseflow_dMatric1,resVec_split)
+                        &f_obj % nSubset1,f_obj % stateMask1,f_obj % dMat1,f_obj % dBaseflow_dMatric1,resVec_split)
 
   ! remaining non-linear function values are zero
   f_obj % f1_vec(:) = 0._r8b
   f_obj % f1_vec(:) = unpack(resVec_split,f_obj % stateMask1,f_obj % f1_vec)
 
+  ! get leading dimension for Jacobians
+  if (f_obj % banded) then
+   nBands=f_obj % nrow_banded + f_obj% subdiag
+   f_obj % nLeadDim1 = nBands  
+  else
+   f_obj % nLeadDim1 = f_obj % nSubset1 
+  end if
+
   !!!! SJT: start test block ---- take out ----
   print *, "mass_state_type =",mass_state_type
   !print *, split_select % nState
-  !print *, split_select % nSubset
+  print *, f_obj % nLeadDim1,f_obj % nSubset1,size(f_obj % dMat1)
   print *, f_obj % stateMask1(:)
   print *, resVec_split
   print *, f_obj % f1_vec
@@ -1106,21 +1119,31 @@ contains
   ! local
   logical,parameter               :: mass_state_type = .false. ! perform transformations from energy split to mass split 
   real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
+  integer(i4b)                    :: nBands          ! # of bands for SUMMA's Jacobian
 
   ! initialize data structures (ensure that fully-coupled structures are not overwritten)
   f_obj % indx_data2  = f_obj % indx_data
   f_obj % diag_data2  = f_obj % diag_data 
   f_obj % flux_data2  = f_obj % flux_data 
   f_obj % deriv_data2 = f_obj % deriv_data 
+  f_obj % dBaseflow_dMatric2 = f_obj % dBaseflow_dMatric ! allocate
 
   ! compute residual for split
   call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
                         &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
-                        &f_obj % stateMask2,f_obj % dMat2,f_obj % dBaseflow_dMatric2,resVec_split)
+                        &f_obj % nSubset2,f_obj % stateMask2,f_obj % dMat2,f_obj % dBaseflow_dMatric2,resVec_split)
 
   ! remaining non-linear function values are zero
   f_obj % f2_vec(:) = 0._r8b
   f_obj % f2_vec(:) = unpack(-resVec_split,f_obj % stateMask2,f_obj % f2_vec) ! note: sign change for f2 so that f=f1-f2
+
+  ! get leading dimension for Jacobians
+  if (f_obj % banded) then
+   nBands=f_obj % nrow_banded + f_obj% subdiag
+   f_obj % nLeadDim2 = nBands  
+  else
+   f_obj % nLeadDim2 = f_obj % nSubset2 
+  end if
 
   !!!! SJT: start test block ---- take out ----
   print *, "mass_state_type =",mass_state_type
@@ -1135,7 +1158,7 @@ contains
 
  subroutine f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
                              &indx_data,diag_data,flux_data,deriv_data,&
-                             &stateMask,dMat_split,dBaseflow_dMatric,resVec_split)
+                             &nSubset,stateMask,dMat_split,dBaseflow_dMatric,resVec_split)
   ! *** Compute SUMMA's vector non-linear function for mass or energy state variables ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
   use stateFilter_module,only: fullyCoupled,stateTypeSplit
@@ -1157,9 +1180,10 @@ contains
   type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout) :: flux_data            ! flux data
   type(var_dlength),intent(inout) :: deriv_data           ! derivative data
+  integer(i4b)            ,intent(out) :: nSubset           ! # of state variables in split
   logical(lgt),allocatable,intent(out) :: stateMask(:)           ! logical mask array for split
   real(rkind),allocatable ,intent(out) :: dMat_split(:)          ! diagonal matrix (no flux derivatives) for split
-  real(rkind),allocatable ,intent(out) :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+  real(rkind)             ,intent(out) :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
   real(rkind),allocatable ,intent(out) :: resVec_split(:)        ! residual vector for split
 
   ! local variables
@@ -1216,6 +1240,7 @@ contains
   else
    stateMask = split_select % stateMask ! no transformation --- allocate on assignment
   end if
+  nSubset = split_select % nSubset ! for argument list
 
   ! * indexSplit *
   associate(&
@@ -1452,7 +1477,7 @@ contains
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
   ! local variables
   integer(i4b) :: nBands                                                      ! SUMMA's leading dimension for banded Jacobians
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  real(rkind)  :: aJac(f_obj % nLeadDim1,f_obj % nSubset1) ! SUMMA's unscaled Jacobian matrix
 
   ! compute derivatives based on current guess
   !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
@@ -1478,4 +1503,39 @@ contains
 !  end if
 
  end subroutine Jacobian_f_mass_SUMMA_vec
+
+ subroutine Jacobian_f_energy_SUMMA_vec(f_obj,xvec)
+  ! ** Compute SUMMA's Jacobian for mass **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  ! local variables
+  integer(i4b) :: nBands                                                      ! SUMMA's leading dimension for banded Jacobians
+  real(rkind)  :: aJac(f_obj % nLeadDim2,f_obj % nSubset2) ! SUMMA's unscaled Jacobian matrix
+
+  ! compute derivatives based on current guess
+  !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
+
+  ! assemble Jacobian using the computed derivatives
+  call f_obj % SUMMA_computJacob(f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
+                                &f_obj % dMat2,f_obj % dBaseflow_dMatric2,&
+                                &aJac)
+
+  !! SJT: testing --- take out ---
+  print *, "sum(aJac_energy)=",sum(aJac) 
+
+! SJT: update the following taking proper sizes into account
+! SJT: n probably refers to nSubset from the split (found from size(dMat) in computJacob)
+!  ! store Jacobian used in solver
+!  if (f_obj % banded) then ! banded storage
+!   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+!    nBands=nrow_banded+subdiag
+!    f_obj % J2(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+!   end associate
+!  else ! full matrix storage
+!   f_obj % J2(:,:) = aJac(:,:)
+!  end if
+
+ end subroutine Jacobian_f_energy_SUMMA_vec
+
 end module Newton_functions
