@@ -177,6 +177,9 @@ module Newton_functions
    procedure :: f_energy_SUMMA_vec ! SJT: testing ----- take out -----
    procedure :: Jacobian_f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
    procedure :: Jacobian_f_energy_SUMMA_vec ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f_mass_SUMMA_vec_numerical ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f_energy_SUMMA_vec_numerical ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f_SUMMA_vec_numerical ! SJT: testing ----- take out -----
 
    ! scalar routines
    procedure :: f     => f_diff 
@@ -1101,13 +1104,13 @@ contains
   end if
 
   !!!! SJT: start test block ---- take out ----
-  print *, "mass_state_type =",mass_state_type
+  !print *, "mass_state_type =",mass_state_type
   !print *, split_select % nState
-  print *, f_obj % nLeadDim1,f_obj % nSubset1,size(f_obj % dMat1)
-  print *, f_obj % stateMask1(:)
-  print *, resVec_split
-  print *, f_obj % f1_vec
-  print *, sum(resVec_split)
+  !print *, f_obj % nLeadDim1,f_obj % nSubset1,size(f_obj % dMat1)
+  !print *, f_obj % stateMask1(:)
+  !print *, resVec_split
+  !print *, f_obj % f1_vec
+  !print *, sum(resVec_split)
   !!!! SJT: end test block ---- take out ----
  end subroutine f_mass_SUMMA_vec
 
@@ -1146,13 +1149,13 @@ contains
   end if
 
   !!!! SJT: start test block ---- take out ----
-  print *, "mass_state_type =",mass_state_type
+  !print *, "mass_state_type =",mass_state_type
   !print *, split_select % nState
   !print *, split_select % nSubset
-  print *, f_obj % stateMask2(:)
-  print *, resVec_split
-  print *, f_obj % f2_vec
-  print *, sum(resVec_split)
+  !print *, f_obj % stateMask2(:)
+  !print *, resVec_split
+  !print *, f_obj % f2_vec
+  !print *, sum(resVec_split)
   !!!! SJT: end test block ---- take out ----
  end subroutine f_energy_SUMMA_vec
 
@@ -1281,21 +1284,25 @@ contains
    enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
 
    ! initialize state vectors
-   call popStateVec(&
-                   ! input
-                   nState,             & ! intent(in):  number of desired state variables
-                   enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
-                   f_obj % prog_data,  & ! intent(in):  model prognostic variables for a local HRU
-                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
-                   indx_data,          & ! intent(in):  indices defining model states and layers
-                   ! output
-                   stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
-                   err,cmessage)         ! intent(out): error control
-   if (err/=0_i4b) then
-     if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
-     end if
-   end if
+!   call popStateVec(&
+!                   ! input
+!                   nState,             & ! intent(in):  number of desired state variables
+!                   enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
+!                   f_obj % prog_data,  & ! intent(in):  model prognostic variables for a local HRU
+!                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
+!                   indx_data,          & ! intent(in):  indices defining model states and layers
+!                   ! output
+!                   stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
+!                   err,cmessage)         ! intent(out): error control
+!   if (err/=0_i4b) then
+!     if (f_obj % out_error) then
+!      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
+!     end if
+!   end if
+
+   !!!! SJT: testing -- take dependency on xvec input argument into account
+   stateVecTrial = pack(xvec,stateMask)
+   !!!! SJT: end testing
 
    ! compute scale factors
    call getScaling(diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
@@ -1537,5 +1544,118 @@ contains
 !  end if
 
  end subroutine Jacobian_f_energy_SUMMA_vec
+
+ subroutine Jacobian_f_mass_SUMMA_vec_numerical(f_obj,xvec)
+  ! ** Compute SUMMA's Jacobian for mass **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  ! local variables
+  integer(i4b) :: j ! loop index
+  real(r8b) :: f1_j(1:f_obj % n)
+  real(r8b) :: xvec_jp1(1:f_obj % n)
+  real(r8b) :: delta ! step size for FD approximations
+
+  ! store initial function vector (evaluated at xvec_j = xvec)
+  f1_j(:) = f_obj % f1_vec(:)
+
+  do j=1,f_obj % n
+
+   ! set test x vector (perturb jth entry)
+   xvec_jp1(:) = xvec(:)         ! note: xvec_j = xvec
+   xvec_jp1(j) = 1.000001_r8b*xvec(j)+0.000001_r8b ! note: xvec_j = xvec -- avoid division by zero
+   delta = xvec_jp1(j) - xvec(j)
+
+   call f_obj % f_mass_SUMMA_vec(xvec_jp1)
+
+   !print *, "A0",xvec_jp1
+   !print *, "B0",xvec
+   !print *, "A",f_obj % f1_vec
+   !print *, "B",f1_j
+   f_obj % J1(:,j) = (f_obj % f1_vec(:) - f1_j(:)) / delta ! note: f1_jp1 = f_obj % f1_vec
+
+  end do
+
+  ! restore initial function vector (evaluated at xvec_j = xvec)
+  f_obj % f1_vec(:) = f1_j(:)
+
+  print *, "sum(J1_num)",sum(f_obj % J1)
+ end subroutine Jacobian_f_mass_SUMMA_vec_numerical
+
+ subroutine Jacobian_f_energy_SUMMA_vec_numerical(f_obj,xvec)
+  ! ** Compute SUMMA's Jacobian for mass **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  ! local variables
+  integer(i4b) :: j ! loop index
+  real(r8b) :: f2_j(1:f_obj % n)
+  real(r8b) :: xvec_jp1(1:f_obj % n)
+  real(r8b) :: delta ! step size for FD approximations
+
+  ! store initial function vector (evaluated at xvec_j = xvec)
+  f2_j(:) = f_obj % f2_vec(:)
+
+  do j=1,f_obj % n
+
+   ! set test x vector (perturb jth entry)
+   xvec_jp1(:) = xvec(:)         ! note: xvec_j = xvec
+   xvec_jp1(j) = 1.000001_r8b*xvec(j)+0.000001_r8b ! note: xvec_j = xvec -- avoid division by zero
+   delta = xvec_jp1(j) - xvec(j)
+
+   call f_obj % f_energy_SUMMA_vec(xvec_jp1)
+
+   !print *, "A0",xvec_jp1
+   !print *, "B0",xvec
+   !print *, "A",f_obj % f2_vec
+   !print *, "B",f2_j
+   f_obj % J2(:,j) = (f_obj % f2_vec(:) - f2_j(:)) / delta ! note: f2_jp1 = f_obj % f2_vec
+
+  end do
+
+  ! restore initial function vector (evaluated at xvec_j = xvec)
+  f_obj % f2_vec(:) = f2_j(:)
+
+  print *, "sum(J2_num)",sum(f_obj % J2)
+ end subroutine Jacobian_f_energy_SUMMA_vec_numerical
+
+ subroutine Jacobian_f_SUMMA_vec_numerical(f_obj,xvec)
+  ! ** Compute SUMMA's Jacobian for mass **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+  ! local variables
+  integer(i4b) :: j ! loop index
+  real(r8b) :: f_j(1:f_obj % n)
+  real(r8b) :: xvec_jp1(1:f_obj % n)
+  real(r8b) :: delta ! step size for FD approximations
+
+  if (.not.allocated(f_obj % J)) allocate(f_obj % J(1:f_obj % n,1:f_obj % n))
+
+  ! store initial function vector (evaluated at xvec_j = xvec)
+  f_j(:) = f_obj % f_vec(:)
+
+  do j=1,f_obj % n
+
+   ! set test x vector (perturb jth entry)
+   xvec_jp1(:) = xvec(:)         ! note: xvec_j = xvec
+   xvec_jp1(j) = 1.000001_r8b*xvec(j)+0.000001_r8b ! note: xvec_j = xvec -- avoid division by zero
+   delta = xvec_jp1(j) - xvec(j)
+
+   call f_obj % f_vec_eval(xvec_jp1) ! call f_SUMMA_vec
+
+   !print *, "A0",xvec_jp1
+   !print *, "B0",xvec
+   !print *, "A",f_obj % f2_vec
+   !print *, "B",f2_j
+   f_obj % J(:,j) = (f_obj % f_vec(:) - f_j(:)) / delta ! note: f_jp1 = f_obj % f_vec
+
+  end do
+
+  ! restore initial function vector (evaluated at xvec_j = xvec)
+  f_obj % f_vec(:) = f_j(:)
+
+  print *, "sum(J_num)",sum(f_obj % J)
+ end subroutine Jacobian_f_SUMMA_vec_numerical
 
 end module Newton_functions

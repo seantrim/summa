@@ -1147,10 +1147,18 @@ contains
   nested_Newton % f1_vec(:) = 0._rkind ! reset f1 values for testing purposes
   call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
   call nested_Newton % Jacobian_f_mass_SUMMA_vec(stateVecTrial(:))
+  call nested_Newton % Jacobian_f_mass_SUMMA_vec_numerical(stateVecTrial(:))
   call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
   call nested_Newton % Jacobian_f_energy_SUMMA_vec(stateVecTrial(:))
+  call nested_Newton % Jacobian_f_energy_SUMMA_vec_numerical(stateVecTrial(:))
   print *, "f1-f2="
   print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
+  print *, "sum(f1-f2)="
+  print *, sum(nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:))
+  print *, "sum(J1_num-J2_num)",sum(nested_Newton % J1 - nested_Newton % J2)
+
+  nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
+  call nested_Newton % Jacobian_f_SUMMA_vec_numerical(stateVecTrial(:))
   stop
 !!!!!!!!!!!!!!!! SJT: End Test Block --- take out
 
