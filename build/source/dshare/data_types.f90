@@ -1911,11 +1911,11 @@ contains
   end associate
  end subroutine finalize_io_surfaceFlx
 
- subroutine finalize_out_surfaceFlx(out_surfaceFlx,io_soilLiqFlx,err,cmessage)
+ subroutine finalize_out_surfaceFlx(out_surfaceFlx,io_soilLiqFlx,err,message)
   class(out_type_surfaceFlx),intent(in)  :: out_surfaceFlx ! output object for surfaceFlx
   type(io_type_soilLiqFlx),intent(inout) :: io_soilLiqFlx  ! input-output class object for soilLiqFlx
   integer(i4b),intent(out)  :: err       ! error code
-  character(*),intent(out)  :: cmessage  ! error message
+  character(*),intent(out)  :: message   ! error message
 
   associate(&
    ! intent(out): surface runoff and infiltration
@@ -1938,7 +1938,7 @@ contains
   end associate
   ! intent(out): error control
   err      = out_surfaceFlx % err     ! error code
-  cmessage = out_surfaceFlx % message ! error message
+  message  = out_surfaceFlx % message ! error message
  end subroutine finalize_out_surfaceFlx
  ! **** end surfaceFlx ****
 

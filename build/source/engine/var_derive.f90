@@ -143,6 +143,7 @@ contains
  real(rkind)                     :: fracRootUpper   ! fraction of the rooting depth at the upper interface
  real(rkind), parameter          :: rootTolerance = 0.05_rkind ! tolerance for error in doubleExp rooting option
  real(rkind)                     :: error           ! machine precision error in rooting distribution
+ real(rkind)                     :: total_soil_depth ! total soil depth (m)
  ! initialize error control
  err=0; message='rootDensty/'
 
@@ -169,6 +170,7 @@ contains
  ! ----------------------------------------------------------------------------------
 
  ! compute the fraction of roots in each soil layer
+ total_soil_depth = iLayerHeight(nLayers) - iLayerHeight(nSnow)
  do iLayer=nSnow+1,nLayers
 
   ! different options for the rooting profile
@@ -181,9 +183,9 @@ contains
      if(iLayer==nSnow+1)then  ! height=0; avoid precision issues
       fracRootLower = 0._rkind
      else
-      fracRootLower = iLayerHeight(iLayer-1)/rootingDepth
+      fracRootLower = iLayerHeight(iLayer-1)/min(rootingDepth,total_soil_depth)
      end if
-     fracRootUpper = iLayerHeight(iLayer)/rootingDepth
+     fracRootUpper = iLayerHeight(iLayer)/min(rootingDepth,total_soil_depth)
      if(fracRootUpper>1._rkind) fracRootUpper=1._rkind
      ! compute the root density
      mLayerRootDensity(iLayer-nSnow) = fracRootUpper**rootDistExp - fracRootLower**rootDistExp
@@ -206,11 +208,11 @@ contains
 
  end do  ! (looping thru layers)
 
- ! check that root density is within some reaosnable version of machine tolerance
+ ! check that root density is within some reasonable version of machine tolerance
  ! This is the case when root density is greater than 1. Can only happen with powerLaw option.
  error = sum(mLayerRootDensity) - 1._rkind
  if (error > 2._rkind*epsilon(rootingDepth)) then
-  message=trim(message)//'problem with the root density calaculation'
+  message=trim(message)//'problem with the root density calculation'
   err=20; return
  else
   mLayerRootDensity = mLayerRootDensity - error/real(nSoil,kind(rkind))
