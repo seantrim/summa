@@ -97,7 +97,7 @@ module Newton_functions
 
 
    type(var_ilength) :: indx_data,indx_data1,indx_data2    ! indices defining model states and layers
-   type(var_dlength) :: prog_data                          ! prognostic variables for a local HRU
+   type(var_dlength) :: prog_data,prog_temp                ! prognostic variables for a local HRU
    type(var_dlength) :: diag_data,diag_data1,diag_data2    ! diagnostic variables for a local HRU
    type(var_dlength) :: flux_data,flux_data1,flux_data2    ! temporary flux variables for a local HRU
    type(var_dlength) :: deriv_data,deriv_data1,deriv_data2 ! derivatives in model fluxes w.r.t. relevant state variables
@@ -1172,7 +1172,9 @@ contains
   use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
   use getVectorz_module ,only: popStateVec                            ! populate the state vector
   use getVectorz_module ,only: getScaling                             ! scale factors for residual and solution vectors
+  use updateVars_module ,only: updateProg                             ! update prognostic (state) variable data structure
   use mDecisions_module ,only: closedForm                             ! use temperature with closed form heat capacity
+  use mDecisions_module ,only: enthalpyFormLU                         ! use look up tables for soil enthalpy
   use mDecisions_module ,only: ida                                    ! use IDA solver
 
   ! arguments
@@ -1193,6 +1195,8 @@ contains
   type(split_select_type)         :: split_select      ! split select object
   type(in_type_indexSplit)        :: in_indexSplit     ! indexSplit arguments
   type(out_type_indexSplit)       :: out_indexSplit
+  real(rkind)                     :: stateVecPrime(1:f_obj % n) ! trial state vector for full solution (prime variables -- not used here)
+  real(rkind)                     :: untappedMelt(1:f_obj % n)  ! untapped melt energy
   real(rkind),allocatable         :: stateVecTrial(:)  ! trial state vector for split
   real(rkind),allocatable         :: fScale_split(:)   ! residual vector scale factors for split
   real(rkind),allocatable         :: xScale_split(:)   ! solution vector scale factors for split
@@ -1201,11 +1205,46 @@ contains
   real(rkind),allocatable         :: fRHS_split(:)     ! RHS function for ARKODE for split
   real(rkind),allocatable         :: rAdd_split(:)     ! additional (sink) terms on the RHS of the state equation for split
   logical(lgt)                    :: enthalpyStateVec  ! flag to use enthalpy as a state variable (ida)
+  logical(lgt)                    :: computeEnthTemp   ! flag to use enthalpy temperature
+  logical(lgt)                    :: use_lookup        ! flag to use enthalpy lookup tables
+  logical(lgt)                    :: waterBalanceError,nrgFluxModified ! output flags for updateProg
+  real(rkind)                     :: balance(1:f_obj % n) ! balance error from updateProg
   character(LEN=256)              :: message           ! total error message
   character(LEN=256)              :: cmessage          ! error message of downwind routine
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
 
+  logical(lgt) :: firstFluxCall
+
+  ! * updateProg *
+  ! put xvec state variable values into prog_temp object
+ 
+  f_obj % prog_temp = f_obj % prog_data ! initialize
+  untappedMelt  = 0._rkind  ! set untapped melt energy to zero (matches systemSolv)
+  stateVecPrime = 0._rkind  ! state vector (primed variables -- not used)
+  associate(&
+   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+   nLayers        => f_obj % in_SS4HG % nLayers        ,& ! intent(in): total number of layers
+   ixNumericalMethod => f_obj % model_decisions(iLookDECISIONS%num_method)%iDecision,& ! intent(in): [i4b] choice of numerical solver
+   ixNrgConserv      => f_obj % model_decisions(iLookDECISIONS%nrgConserv)%iDecision,& ! intent(in): [i4b] choice of variable in either energy backward Euler residual or IDA state variable
+   doAdjustTemp      => mass_state_type, & ! flag to adjust temperature (same behaviour as homegrown mass split from opSplittin assumed) 
+   computeVegFlux    => f_obj % in_SS4HG % computeVegFlux,  & ! intent(in): flag to indicate if computing fluxes over vegetation
+   computMassBalance => .false., &
+   computNrgBalance  => .false.  &
+  &)
+
+   ! compute flags based on solver choices (following usage in varSubstep)
+   enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
+   computeEnthTemp = ((ixNrgConserv .ne. closedForm .or. computNrgBalance) .and. ixNumericalMethod .ne. ida) ! use enthTemp to conserve energy or compute energy balance
+   use_lookup = (ixNrgConserv==enthalpyFormLU) ! use lookup tables for soil enthalpy instead of analytical solution
+
+   call updateProg(f_obj % in_SS4HG % dt_cur,nSnow,nSoil,nLayers,untappedMelt,xVec,stateVecPrime,& ! input: states
+                  &doAdjustTemp,computeVegFlux,computMassBalance,computNrgBalance,computeEnthTemp,enthalpyStateVec,use_lookup,& ! input: model control
+                  &f_obj % model_decisions,f_obj % lookup_data,&
+                  &f_obj % mpar_data,indx_data,flux_data,f_obj % prog_temp,diag_data,deriv_data,    & ! input-output: data structures
+                  &f_obj % fluxVec0,f_obj % resVec,balance,waterBalanceError,nrgFluxModified,err,message) ! input-output: balances, flags, and error control
+  end associate
 
   ! * initialize operations for split_select object *
 
@@ -1228,7 +1267,9 @@ contains
   !split_select % iStateSplit =                 ! only used for scalar splits
 
   ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
-  ! from update_stateMask in opSplittin
+  ! note: from update_stateMask in opSplittin
+
+  ! compute stateMask and nSubset (in split_select object) for the selected split
   call split_select % get_stateMask(indx_data,err,cmessage,message,return_flag)
   if (return_flag) then
     if (f_obj % out_error) then
@@ -1239,6 +1280,7 @@ contains
   ! transform variables for energy split into mass split
   if (mass_state_type) then
    stateMask = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask --- allocate on assignment
+   split_select % stateMask(:) = stateMask(:)           ! update split_select object in case of future use
    split_select % nSubset = split_select % nState - split_select % nSubset ! count for new stateMask
   else
    stateMask = split_select % stateMask ! no transformation --- allocate on assignment
@@ -1260,6 +1302,7 @@ contains
      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: indexSplit message="//trim(cmessage); stop
     end if
   end if
+
 
   ! call eval8summa to get non-linear function values for mass state type
   ! update
@@ -1284,25 +1327,25 @@ contains
    enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
 
    ! initialize state vectors
-!   call popStateVec(&
-!                   ! input
-!                   nState,             & ! intent(in):  number of desired state variables
-!                   enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
-!                   f_obj % prog_data,  & ! intent(in):  model prognostic variables for a local HRU
-!                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
-!                   indx_data,          & ! intent(in):  indices defining model states and layers
-!                   ! output
-!                   stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
-!                   err,cmessage)         ! intent(out): error control
-!   if (err/=0_i4b) then
-!     if (f_obj % out_error) then
-!      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
-!     end if
-!   end if
+   call popStateVec(&
+                   ! input
+                   nState,             & ! intent(in):  number of desired state variables
+                   enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
+                   f_obj % prog_temp,  & ! intent(in):  model prognostic variables for a local HRU
+                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
+                   indx_data,          & ! intent(in):  indices defining model states and layers
+                   ! output
+                   stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
+                   err,cmessage)         ! intent(out): error control
+   if (err/=0_i4b) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
+     end if
+   end if
 
-   !!!! SJT: testing -- take dependency on xvec input argument into account
-   stateVecTrial = pack(xvec,stateMask)
-   !!!! SJT: end testing
+!   !!!! SJT: testing -- take dependency on xvec input argument into account
+!   stateVecTrial = pack(xvec,stateMask)
+!   !!!! SJT: end testing
 
    ! compute scale factors
    call getScaling(diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
@@ -1313,6 +1356,7 @@ contains
    end if
 
    ! evaluate residual vector for mass split
+   firstFluxCall = .true. ! may not be needed
    call eval8summa(&
                     ! input: model control
                     f_obj % in_SS4HG % dt_cur,         & ! intent(in):    current stepsize
@@ -1323,8 +1367,8 @@ contains
                     nState,                            & ! intent(in):    number of state variables in the current subset
                     .false.,                           & ! intent(in):    not inside Sundials solver
                     f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
-                    f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
-                    .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
+                    firstFluxCall,&!f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
+                    .true.,&!.false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
                     f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                     f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                     ! input: state vectors
@@ -1339,7 +1383,7 @@ contains
                     f_obj % mpar_data,               & ! intent(in):    model parameters
                     f_obj % forc_data,               & ! intent(in):    model forcing data
                     f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
-                    f_obj % prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                    f_obj % prog_temp,               & ! intent(in):    model prognostic variables for a local HRU
                     ! input-output: data structures
                     indx_data,                       & ! intent(inout): index data
                     diag_data,                       & ! intent(inout): model diagnostic variables for a local HRU
