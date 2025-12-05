@@ -969,7 +969,7 @@ contains
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
   use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
-  type(f_obj_type) :: nested_Newton ! nested Newton solver object
+  type(f_obj_type) :: nested_Newton,nested_Newton_ref ! nested Newton solver object
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
   ! initialize solver options
@@ -1049,7 +1049,7 @@ contains
 
   ! * Nested Newton solver options *
 
-  ! Newton iteration type
+  ! Newton iteration type ---------------------------- ADD SWITCH BASED ON HOMEGROWN SPLIT HERE ------------------------------
   nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
@@ -1118,6 +1118,23 @@ contains
   call nested_Newton % allocate_memory()
 
   if (nested_Newton % nested) then ! nested iterations
+   ! initialize data structures (ensure that fully-coupled structures are not overwritten) -- move to systemSolv?
+   nested_Newton % indx_data1         = nested_Newton % indx_data 
+   nested_Newton % diag_data1         = nested_Newton % diag_data    
+   nested_Newton % flux_data1         = nested_Newton % flux_data
+   nested_Newton % deriv_data1        = nested_Newton % deriv_data
+   nested_Newton % dBaseflow_dMatric1 = nested_Newton % dBaseflow_dMatric ! allocate
+   nested_Newton % sMul1              = nested_Newton % sMul              ! allocate
+   nested_Newton % dMat1              = nested_Newton % dMat              ! allocate
+
+   nested_Newton % indx_data2         = nested_Newton % indx_data 
+   nested_Newton % diag_data2         = nested_Newton % diag_data    
+   nested_Newton % flux_data2         = nested_Newton % flux_data
+   nested_Newton % deriv_data2        = nested_Newton % deriv_data
+   nested_Newton % dBaseflow_dMatric2 = nested_Newton % dBaseflow_dMatric ! allocate
+   nested_Newton % sMul2              = nested_Newton % sMul              ! allocate
+   nested_Newton % dMat2              = nested_Newton % dMat              ! allocate
+
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f1_vec(:)    = real(nested_Newton % resVec(:),r8b)
    nested_Newton % f1_eval_flag = .false. ! computed in Newton step refinement 
@@ -1126,7 +1143,13 @@ contains
    nested_Newton % f2_vec(:)    = 0._rkind
    nested_Newton % J2(:,:)      = 0._rkind
    nested_Newton % f2_eval_flag = .false. 
-   nested_Newton % J2_eval_flag = .false. 
+   nested_Newton % J2_eval_flag = .false.
+   
+   call nested_Newton % get_mass_energy_masks()
+   print *, "nSubset1=",nested_Newton % nSubset1 
+   print *, "stateMask1=",nested_Newton % stateMask1 
+   print *, "nSubset2=",nested_Newton % nSubset2 
+   print *, "stateMask2=",nested_Newton % stateMask2 
   else ! classical iterations
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
@@ -1140,32 +1163,41 @@ contains
 !!!!!!!!!!!!!!!! SJT: Start Test Block --- take out
   print *, "systemSolv A00:"
   stateVecTrial(18)=stateVecTrial(18)-100._rkind ! test perturbations of state vector entries
-  call nested_Newton % f1_vec_eval(stateVecTrial(:))
-  call nested_Newton % J1_eval(stateVecTrial(:))
-  nested_Newton % f_vec(:) = nested_Newton % f1_vec(:)
-  call nested_Newton % Jacobian_f_SUMMA_vec_numerical(stateVecTrial(:))
-  print *, "f=",nested_Newton % f1_vec
-  print *, "sum(f) =",sum(nested_Newton % f1_vec)
-  print *, "sum(J) =",sum(nested_Newton % J1)
+  nested_Newton_ref = nested_Newton ! for reference test values (preserve OG object)
+  call nested_Newton_ref % f1_vec_eval(stateVecTrial(:))
+  call nested_Newton_ref % J1_eval(stateVecTrial(:))
+  nested_Newton_ref % f_vec(:) = nested_Newton_ref % f1_vec(:)
+  call nested_Newton_ref % Jacobian_f_SUMMA_vec_numerical(stateVecTrial(:))
+  print *, "f=",nested_Newton_ref % f_vec
+  print *, "sum(f) =",sum(nested_Newton_ref % f_vec)
+  print *, "sum(J) =",sum(nested_Newton_ref % J1) ! J=J1 for trivial split
 
-  nested_Newton % f1_vec(:) = 0._rkind ! reset f1 values for testing purposes
-  nested_Newton % J1(:,:)   = 0._rkind ! reset J1 values for testing purposes
-  call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
-  print *, "stateMask1=",nested_Newton % stateMask1
-  print *, "nSubset1=",nested_Newton % nSubset1
-  call nested_Newton % Jacobian_f_mass_SUMMA_vec(stateVecTrial(:))
-  call nested_Newton % Jacobian_f_mass_SUMMA_vec_numerical(stateVecTrial(:))
+  call nested_Newton % f_mass_SUMMA_vec_full(stateVecTrial(:))
+  call nested_Newton % Jacobian_f_mass_SUMMA_vec_full(stateVecTrial(:))
 
-  call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
-  print *, "stateMask2=",nested_Newton % stateMask2
-  print *, "nSubset2=",nested_Newton % nSubset2
-  call nested_Newton % Jacobian_f_energy_SUMMA_vec(stateVecTrial(:))
-  call nested_Newton % Jacobian_f_energy_SUMMA_vec_numerical(stateVecTrial(:))
+  call nested_Newton % f_energy_SUMMA_vec_full(stateVecTrial(:))
+  call nested_Newton % Jacobian_f_energy_SUMMA_vec_full(stateVecTrial(:))
+
+
+ ! call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
+ ! print *, "stateMask1=",nested_Newton % stateMask1
+ ! print *, "nSubset1=",nested_Newton % nSubset1
+ ! call nested_Newton % Jacobian_f_mass_SUMMA_vec(stateVecTrial(:))
+ ! call nested_Newton % Jacobian_f_mass_SUMMA_vec_numerical(stateVecTrial(:))
+
+ ! call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
+ ! print *, "stateMask2=",nested_Newton % stateMask2
+ ! print *, "nSubset2=",nested_Newton % nSubset2
+ ! call nested_Newton % Jacobian_f_energy_SUMMA_vec(stateVecTrial(:))
+ ! call nested_Newton % Jacobian_f_energy_SUMMA_vec_numerical(stateVecTrial(:))
+
   print *, "f1-f2="
   print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
   print *, "sum(f1-f2)="
   print *, sum(nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:))
-  print *, "sum(J1_num-J2_num)",sum(nested_Newton % J1 - nested_Newton % J2)
+  print *, "sum(J1)=",sum(nested_Newton % J1)
+  print *, "sum(J2)=",sum(nested_Newton % J2)
+  print *, "sum(J1-J2)",sum(nested_Newton % J1 - nested_Newton % J2)
 
   stop
 !!!!!!!!!!!!!!!! SJT: End Test Block --- take out

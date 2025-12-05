@@ -112,7 +112,7 @@ module Newton_functions
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
    real(rkind),allocatable :: fScale(:)              ! characteristic scale of the function evaluations (mixed units)
    real(rkind),allocatable :: xScale(:)              ! characteristic scale of the state vector (mixed units)
-   real(qp),allocatable    :: sMul(:)    ! NOTE: qp  ! multiplier for state vector for the residual calculations
+   real(qp),allocatable    :: sMul(:),sMul1(:),sMul2(:) ! NOTE: qp  ! multiplier for state vector for the residual calculations
    logical(lgt) :: feasible                          ! feasibility flag
    real(rkind),allocatable :: fluxVec0(:)            ! flux vector (mixed units)
    real(rkind),allocatable :: fRHS(:)                ! RHS function for ARKODE
@@ -180,6 +180,12 @@ module Newton_functions
    procedure :: Jacobian_f_mass_SUMMA_vec_numerical ! SJT: testing ----- take out -----
    procedure :: Jacobian_f_energy_SUMMA_vec_numerical ! SJT: testing ----- take out -----
    procedure :: Jacobian_f_SUMMA_vec_numerical ! SJT: testing ----- take out -----
+   procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
+   procedure :: f_state_SUMMA_vec_full
+   procedure :: f_mass_SUMMA_vec_full
+   procedure :: f_energy_SUMMA_vec_full
+   procedure :: Jacobian_f_mass_SUMMA_vec_full
+   procedure :: Jacobian_f_energy_SUMMA_vec_full
 
    ! scalar routines
    procedure :: f     => f_diff 
@@ -1068,6 +1074,251 @@ contains
   end associate
 
  end subroutine SUMMA_computJacob
+
+ subroutine get_SUMMA_mass_energy_masks(f_obj)
+  ! *** Compute masks for mass and energy state variables for SUMMA ***
+  ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
+  use stateFilter_module,only: fullyCoupled,stateTypeSplit
+  use stateFilter_module,only: massSplit,nrgSplit
+  use stateFilter_module,only: fullDomain,subDomain
+  use stateFilter_module,only: vector,scalar
+
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+
+  ! local variables
+  type(split_select_type)         :: split_select      ! split select object
+  character(LEN=256)              :: message           ! total error message
+  character(LEN=256)              :: cmessage          ! error message of downwind routine
+  integer(i4b)                    :: err               ! error code of downwind routine
+  logical(lgt)                    :: return_flag
+
+  ! * initialize operations for split_select object *
+
+  associate(nstate => f_obj % in_SS4HG % nState)
+   ! initialize total # of state variables
+   split_select % nState = nState 
+
+   ! allocate data components
+   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
+  end associate
+
+  ! use split_select_type object to specify the desired split
+  ! NOTE: we are computing the energy state mask and negating to find the mass state mask (to include pressure head state variables)
+  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
+  split_select % ixCoupling = stateTypeSplit    ! splitting is used
+  split_select % iStateTypeSplit = nrgSplit     ! state variable type
+  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
+  !split_select % iDomainSplit =                ! only used for sub-domain splitting
+  split_select % ixSolution = vector            ! vector split (not scalar)
+  !split_select % iStateSplit =                 ! only used for scalar splits
+
+  ! apply steps similar to initialize_split from opSplitting to generate logical masks
+  ! note: from update_stateMask in opSplittin
+
+  ! compute stateMask and nSubset (in split_select object) for the selected split
+  call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
+  if (return_flag) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+    end if
+  end if
+
+  ! assign masks for f1 (mass) and f2 (energy)
+  f_obj % stateMask1 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
+  f_obj % stateMask2 = split_select % stateMask           ! no transformation --- allocate on assignment
+
+  ! get counts for mass and energy splits
+  f_obj % nSubset1 = split_select % nState - split_select % nSubset ! transform to get count for mass split
+  f_obj % nSubset2 = split_select % nSubset                         ! no transformation for energy split
+
+ end subroutine get_SUMMA_mass_energy_masks
+
+ subroutine f_mass_SUMMA_vec_full(f_obj,xvec)
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  ! local
+  real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
+
+  ! note: data structures and variables for f1 are initialized in systemSolv
+
+  call f_obj % f_state_SUMMA_vec_full(&
+               &xvec,&
+               &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,f_obj % sMul1,&
+               &f_obj % dBaseflow_dMatric1,resVec)
+
+  ! assign non-zero function values based on logical mask
+  f_obj % f1_vec(:)=0._r8b
+  f_obj % f1_vec(:)=merge(real(resVec,r8b),f_obj % f1_vec,f_obj % stateMask1)
+
+  print *, "f1=",f_obj % f1_vec(:)
+  print *, "sum(f1)",sum(f_obj % f1_vec(:))
+ end subroutine f_mass_SUMMA_vec_full
+
+ subroutine Jacobian_f_mass_SUMMA_vec_full(f_obj,xvec)
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
+
+  ! local
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  integer(i4b) :: i ! loop index
+
+  call f_obj % SUMMA_computJacob(&
+               &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
+               &f_obj % dMat1,f_obj % dBaseflow_dMatric1,&
+               &aJac)
+
+  ! store Jacobian used in solver
+  if (f_obj % banded) then ! banded storage
+   print *, "Error in Jacobian_f_mass_SUMMA_vec_full: banded Jacobian storage option not implemented"
+  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+  !  nBands=nrow_banded+subdiag
+  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+  ! end associate
+  else ! full matrix storage
+   f_obj % J1(:,:) = 0._r8b
+   do i=1,f_obj % n
+    f_obj % J1(:,i) = merge(aJac(:,i),f_obj % J1(:,i),f_obj % stateMask1(:))
+   end do
+  end if
+ end subroutine Jacobian_f_mass_SUMMA_vec_full
+
+ subroutine f_energy_SUMMA_vec_full(f_obj,xvec)
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  ! local
+  real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
+
+  ! note: data structures and variables for f1 are initialized in systemSolv
+
+  call f_obj % f_state_SUMMA_vec_full(&
+               &xvec,&
+               &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,f_obj % sMul2,&
+               &f_obj % dBaseflow_dMatric2,resVec)
+
+  ! assign non-zero function values based on logical mask
+  f_obj % f2_vec(:)=0._r8b
+  f_obj % f2_vec(:)=merge(-real(resVec,r8b),f_obj % f2_vec,f_obj % stateMask2) ! sign change so that f=f1-f2
+
+  print *, "f2=",f_obj % f2_vec(:)
+  print *, "sum(f2)",sum(f_obj % f2_vec(:))
+ end subroutine f_energy_SUMMA_vec_full
+
+ subroutine Jacobian_f_energy_SUMMA_vec_full(f_obj,xvec)
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
+
+  ! local
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  integer(i4b) :: i ! loop index
+
+  call f_obj % SUMMA_computJacob(&
+               &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
+               &f_obj % dMat2,f_obj % dBaseflow_dMatric2,&
+               &aJac)
+
+  ! store Jacobian used in solver
+  if (f_obj % banded) then ! banded storage
+   print *, "Error in Jacobian_f_energy_SUMMA_vec_full: banded Jacobian storage option not implemented"
+  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+  !  nBands=nrow_banded+subdiag
+  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+  ! end associate
+  else ! full matrix storage
+   f_obj % J2(:,:) = 0._r8b
+   do i=1,f_obj % n
+    f_obj % J2(:,i) = merge(-aJac(:,i),f_obj % J2(:,i),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
+   end do
+  end if
+
+ end subroutine Jacobian_f_energy_SUMMA_vec_full
+
+ subroutine f_state_SUMMA_vec_full(f_obj,xvec,&
+                                  &indx_data,diag_data,flux_data,deriv_data,sMul,&
+                                  &dBaseflow_dMatric,resVec)
+  ! *** Compute SUMMA's vector non-linear function for mass or energy state variables -- uses fully-coupled eval8summa call ***
+  ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
+
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
+  type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
+  type(var_dlength),intent(inout) :: flux_data            ! flux data
+  type(var_dlength),intent(inout) :: deriv_data           ! derivative data
+  real(qp)         ,intent(inout) :: sMul(:)              ! state vector multipliers
+  real(rkind)      ,intent(out)   :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
+  real(qp)         ,intent(out)   :: resVec(1:f_obj % n)    ! residual vector
+
+  ! local
+  real(rkind) :: fluxVec0(1:f_obj % n) ! flux vector
+  real(rkind) :: fRHS(1:f_obj % n)     ! RHS function for ARKODE
+  real(rkind) :: rAdd(1:f_obj % n)     ! additional (sink) terms on the RHS of the state equation
+
+  ! evaluate residual vector for mass split
+  call eval8summa(&
+                   ! input: model control
+                   f_obj % in_SS4HG % dt_cur,         & ! intent(in):    current stepsize
+                   f_obj % in_SS4HG % dt,             & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
+                   f_obj % in_SS4HG % nSnow,          & ! intent(in):    number of snow layers
+                   f_obj % in_SS4HG % nSoil,          & ! intent(in):    number of soil layers
+                   f_obj % in_SS4HG % nLayers,        & ! intent(in):    number of layers
+                   f_obj % n,                         & ! intent(in):    number of state variables in the current subset
+                   .false.,                           & ! intent(in):    not inside Sundials solver
+                   f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
+                   f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
+                   .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
+                   f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                   f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
+                   ! input: state vectors
+                   xvec,                            & ! intent(in):    model state vector
+                   f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
+                   sMul,                            & ! intent(inout): state vector multiplier (used in the residual calculations)
+                   ! input: data structures
+                   f_obj % model_decisions,         & ! intent(in):    model decisions
+                   f_obj % lookup_data,             & ! intent(in):    lookup tables
+                   f_obj % type_data,               & ! intent(in):    type of vegetation and soil
+                   f_obj % attr_data,               & ! intent(in):    spatial attributes
+                   f_obj % mpar_data,               & ! intent(in):    model parameters
+                   f_obj % forc_data,               & ! intent(in):    model forcing data
+                   f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
+                   f_obj % prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                   ! input-output: data structures
+                   indx_data,                       & ! intent(inout): index data
+                   diag_data,                       & ! intent(inout): model diagnostic variables for a local HRU
+                   flux_data,                       & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                   deriv_data,                      & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                   ! input-output: baseflow
+                   f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                   dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                   ! output
+                   f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                   fluxVec0,                        & ! intent(out):   flux vector
+                   fRHS,                            & ! intent(out):   RHS function for ARKODE
+                   rAdd,                            & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                   resVec,                          & ! intent(out):   residual vector
+                   f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
+                   f_obj % out_SS4HG % err,         & ! intent(out): error code
+                   f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
+
+  ! finalize
+  associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
+   if (err /= 0) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error f_state_SUMMA_vec: eval8summa message="//trim(message); stop
+    end if
+   end if
+  end associate
+
+ end subroutine f_state_SUMMA_vec_full
+
 
  subroutine f_mass_SUMMA_vec(f_obj,xvec)
   ! arguments
