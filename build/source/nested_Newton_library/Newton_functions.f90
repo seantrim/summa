@@ -158,14 +158,18 @@ module Newton_functions
    ! vector routines
    procedure :: f_vec_eval  => f_SUMMA_vec  ! solver
    !procedure :: f_vec_eval => f_diff_vec   ! solver (note: f_diff_vec requires nested iterations to be activated)
-   procedure :: f1_vec_eval => f1_SUMMA_vec ! solver
-   procedure :: f2_vec_eval => f2_zero_vec  ! solver
+   !procedure :: f1_vec_eval => f1_SUMMA_vec ! solver -- trivial split
+   !procedure :: f2_vec_eval => f2_zero_vec  ! solver -- trivial split
+   procedure :: f1_vec_eval => f_mass_SUMMA_vec_full   ! solver
+   procedure :: f2_vec_eval => f_energy_SUMMA_vec_full ! solver
    procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
    procedure :: J_eval  => Jacobian_f_SUMMA_vec  ! solver
-   procedure :: J1_eval => Jacobian_f1_SUMMA_vec ! solver
-   procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver
+   !procedure :: J1_eval => Jacobian_f1_SUMMA_vec ! solver -- trivial split
+   !procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver -- trivial split
+   procedure :: J1_eval => Jacobian_f_mass_SUMMA_vec_full   ! solver -- trivial split
+   procedure :: J2_eval => Jacobian_f_energy_SUMMA_vec_full ! solver -- trivial split
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_refinement_classical   => SUMMA_refine_Newton_step_classical
    procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
@@ -173,13 +177,9 @@ module Newton_functions
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
    procedure :: custom_descaling   => SUMMA_descaling  
-   procedure :: f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
-   procedure :: f_energy_SUMMA_vec ! SJT: testing ----- take out -----
-   procedure :: Jacobian_f_mass_SUMMA_vec   ! SJT: testing ----- take out -----
-   procedure :: Jacobian_f_energy_SUMMA_vec ! SJT: testing ----- take out -----
-   procedure :: Jacobian_f_mass_SUMMA_vec_numerical ! SJT: testing ----- take out -----
-   procedure :: Jacobian_f_energy_SUMMA_vec_numerical ! SJT: testing ----- take out -----
-   procedure :: Jacobian_f_SUMMA_vec_numerical ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f1_SUMMA_vec_numerical ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f2_SUMMA_vec_numerical ! SJT: testing ----- take out -----
+   procedure :: Jacobian_f_SUMMA_vec_numerical  ! SJT: testing ----- take out -----
    procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
    procedure :: f_state_SUMMA_vec_full
    procedure :: f_mass_SUMMA_vec_full
@@ -275,11 +275,11 @@ contains
   else
     f_obj % nrow = f_obj % n
   end if
+  
+  allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n)) ! SJT: available for classical and nested iterations (for testing -- not needed for nested)
   if (f_obj % nested) then
    allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
            &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n))
-  else
-   allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n))
   end if
 
  end subroutine f_allocate_memory
@@ -1135,6 +1135,7 @@ contains
  end subroutine get_SUMMA_mass_energy_masks
 
  subroutine f_mass_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute mass non-linear function --- use fully-coupled eval8summa call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1153,11 +1154,10 @@ contains
   f_obj % f1_vec(:)=0._r8b
   f_obj % f1_vec(:)=merge(real(resVec,r8b),f_obj % f1_vec,f_obj % stateMask1)
 
-  print *, "f1=",f_obj % f1_vec(:)
-  print *, "sum(f1)",sum(f_obj % f1_vec(:))
  end subroutine f_mass_SUMMA_vec_full
 
  subroutine Jacobian_f_mass_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute Jacobian for mass non-linear function --- use fully-coupled computJacob call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
@@ -1173,7 +1173,9 @@ contains
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
-   print *, "Error in Jacobian_f_mass_SUMMA_vec_full: banded Jacobian storage option not implemented"
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in Jacobian_f_mass_SUMMA_vec_full: banded Jacobian storage option not implemented"; stop
+   end if
   ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
   !  nBands=nrow_banded+subdiag
   !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
@@ -1187,6 +1189,7 @@ contains
  end subroutine Jacobian_f_mass_SUMMA_vec_full
 
  subroutine f_energy_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute energy non-linear function --- use fully-coupled eval8summa call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1205,11 +1208,11 @@ contains
   f_obj % f2_vec(:)=0._r8b
   f_obj % f2_vec(:)=merge(-real(resVec,r8b),f_obj % f2_vec,f_obj % stateMask2) ! sign change so that f=f1-f2
 
-  print *, "f2=",f_obj % f2_vec(:)
-  print *, "sum(f2)",sum(f_obj % f2_vec(:))
  end subroutine f_energy_SUMMA_vec_full
 
  subroutine Jacobian_f_energy_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute Jacobian for energy non-linear function --- use fully-coupled computJacob call and filter results ***
+  ! Note: assumes corresponding eval8summa call has already occurred
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
@@ -1225,7 +1228,9 @@ contains
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
-   print *, "Error in Jacobian_f_energy_SUMMA_vec_full: banded Jacobian storage option not implemented"
+   if (f_obj % out_error) then
+    write(f_obj % unit,*) "Error in Jacobian_f_energy_SUMMA_vec_full: banded Jacobian storage option not implemented"; stop
+   end if
   ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
   !  nBands=nrow_banded+subdiag
   !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
@@ -1321,6 +1326,7 @@ contains
 
 
  subroutine f_mass_SUMMA_vec(f_obj,xvec)
+  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1366,6 +1372,7 @@ contains
  end subroutine f_mass_SUMMA_vec
 
  subroutine f_energy_SUMMA_vec(f_obj,xvec)
+  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1415,6 +1422,7 @@ contains
                              &nSubset,stateMask,dMat_split,dBaseflow_dMatric,resVec_split)
   ! *** Compute SUMMA's vector non-linear function for mass or energy state variables ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
+  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
   use stateFilter_module,only: fullyCoupled,stateTypeSplit
   use stateFilter_module,only: massSplit,nrgSplit
   use stateFilter_module,only: fullDomain,subDomain
@@ -1774,6 +1782,7 @@ contains
 
  subroutine Jacobian_f_mass_SUMMA_vec(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian for mass **
+  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1808,6 +1817,7 @@ contains
 
  subroutine Jacobian_f_energy_SUMMA_vec(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian for mass **
+  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
@@ -1840,7 +1850,7 @@ contains
 
  end subroutine Jacobian_f_energy_SUMMA_vec
 
- subroutine Jacobian_f_mass_SUMMA_vec_numerical(f_obj,xvec)
+ subroutine Jacobian_f1_SUMMA_vec_numerical(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian for mass **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
@@ -1861,7 +1871,7 @@ contains
    xvec_jp1(j) = 1.000001_r8b*xvec(j)+0.000001_r8b ! note: xvec_j = xvec -- avoid division by zero
    delta = xvec_jp1(j) - xvec(j)
 
-   call f_obj % f_mass_SUMMA_vec(xvec_jp1)
+   call f_obj % f1_vec_eval(xvec_jp1)
 
    !print *, "A0",xvec_jp1
    !print *, "B0",xvec
@@ -1875,9 +1885,9 @@ contains
   f_obj % f1_vec(:) = f1_j(:)
 
   print *, "sum(J1_num)",sum(f_obj % J1)
- end subroutine Jacobian_f_mass_SUMMA_vec_numerical
+ end subroutine Jacobian_f1_SUMMA_vec_numerical
 
- subroutine Jacobian_f_energy_SUMMA_vec_numerical(f_obj,xvec)
+ subroutine Jacobian_f2_SUMMA_vec_numerical(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian for mass **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
@@ -1898,7 +1908,7 @@ contains
    xvec_jp1(j) = 1.000001_r8b*xvec(j)+0.000001_r8b ! note: xvec_j = xvec -- avoid division by zero
    delta = xvec_jp1(j) - xvec(j)
 
-   call f_obj % f_energy_SUMMA_vec(xvec_jp1)
+   call f_obj % f2_vec_eval(xvec_jp1)
 
    !print *, "A0",xvec_jp1
    !print *, "B0",xvec
@@ -1912,7 +1922,7 @@ contains
   f_obj % f2_vec(:) = f2_j(:)
 
   print *, "sum(J2_num)",sum(f_obj % J2)
- end subroutine Jacobian_f_energy_SUMMA_vec_numerical
+ end subroutine Jacobian_f2_SUMMA_vec_numerical
 
  subroutine Jacobian_f_SUMMA_vec_numerical(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian for mass **

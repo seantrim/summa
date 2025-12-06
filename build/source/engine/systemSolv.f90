@@ -969,7 +969,9 @@ contains
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
   use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
-  type(f_obj_type) :: nested_Newton,nested_Newton_ref ! nested Newton solver object
+  type(f_obj_type) :: nested_Newton,nested_Newton_ref          ! nested Newton solver object
+  logical(lgt),parameter :: debug_output=.false. ! flag controlling debug output
+
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
   ! initialize solver options
@@ -1058,7 +1060,7 @@ contains
     !     |--> (actually computes the convergence error of the previous iteration)
     ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
    nested_Newton % convergence       = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
-   nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+   nested_Newton % convergence_inner = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
    ! solver output
    call nested_Newton % solver_output('silent') ! standard output used by default 
@@ -1066,7 +1068,8 @@ contains
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
-   nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
+   !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
+   nested_Newton % kmax = 30_i4b; nested_Newton % lmax = 10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1075,8 +1078,8 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
-   nested_Newton % refinement        = .false. ! apply refine_Newton_step following outer/classical iterations
-   nested_Newton % refinement_inner  = .true.  ! apply refine_Newton_step following inner iterations
+   nested_Newton % refinement        = .true.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement_inner  = .false. ! apply refine_Newton_step following inner iterations
 
    ! constraints 
    nested_Newton % constraints       = .false. ! apply imposeConstraints between outer/classical iterations
@@ -1135,21 +1138,26 @@ contains
    nested_Newton % sMul2              = nested_Newton % sMul              ! allocate
    nested_Newton % dMat2              = nested_Newton % dMat              ! allocate
 
-   ! store initial non-linear function values based on the initial call to eval8summa
-   nested_Newton % f1_vec(:)    = real(nested_Newton % resVec(:),r8b)
-   nested_Newton % f1_eval_flag = .false. ! computed in Newton step refinement 
-   nested_Newton % J1_eval_flag = .true. 
-
-   nested_Newton % f2_vec(:)    = 0._rkind
-   nested_Newton % J2(:,:)      = 0._rkind
-   nested_Newton % f2_eval_flag = .false. 
-   nested_Newton % J2_eval_flag = .false.
    
    call nested_Newton % get_mass_energy_masks()
-   print *, "nSubset1=",nested_Newton % nSubset1 
-   print *, "stateMask1=",nested_Newton % stateMask1 
-   print *, "nSubset2=",nested_Newton % nSubset2 
-   print *, "stateMask2=",nested_Newton % stateMask2 
+   if (debug_output) then
+    print *, "nSubset1=",nested_Newton % nSubset1 
+    print *, "stateMask1=",nested_Newton % stateMask1 
+    print *, "nSubset2=",nested_Newton % nSubset2 
+    print *, "stateMask2=",nested_Newton % stateMask2
+   end if 
+
+   ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
+   nested_Newton % f1_vec(:)=0._r8b
+   nested_Newton % f1_vec(:)=merge(real(resVec,r8b),nested_Newton % f1_vec,nested_Newton % stateMask1)
+   nested_Newton % f1_eval_flag = .true. 
+   nested_Newton % J1_eval_flag = .true. 
+
+   nested_Newton % f2_vec(:)=0._r8b
+   nested_Newton % f2_vec(:)=merge(-real(resVec,r8b),nested_Newton % f2_vec,nested_Newton % stateMask2) ! sign change so that f=f1-f2
+   nested_Newton % f2_eval_flag = .true. 
+   nested_Newton % J2_eval_flag = .true.
+
   else ! classical iterations
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
@@ -1161,45 +1169,34 @@ contains
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
 !!!!!!!!!!!!!!!! SJT: Start Test Block --- take out
-  print *, "systemSolv A00:"
-  stateVecTrial(18)=stateVecTrial(18)-100._rkind ! test perturbations of state vector entries
-  nested_Newton_ref = nested_Newton ! for reference test values (preserve OG object)
-  call nested_Newton_ref % f1_vec_eval(stateVecTrial(:))
-  call nested_Newton_ref % J1_eval(stateVecTrial(:))
-  nested_Newton_ref % f_vec(:) = nested_Newton_ref % f1_vec(:)
-  call nested_Newton_ref % Jacobian_f_SUMMA_vec_numerical(stateVecTrial(:))
-  print *, "f=",nested_Newton_ref % f_vec
-  print *, "sum(f) =",sum(nested_Newton_ref % f_vec)
-  print *, "sum(J) =",sum(nested_Newton_ref % J1) ! J=J1 for trivial split
+  if (debug_output) then
+   print *, "systemSolv A00:"
+   stateVecTrial(1)=stateVecTrial(1)-100._rkind ! perturbation for testing
+   nested_Newton_ref = nested_Newton ! object to compute reference values (to avoid unintended side effects)
+   call nested_Newton_ref % f_vec_eval(stateVecTrial)
+   call nested_Newton_ref % J_eval(stateVecTrial)
+   print *, "f=",nested_Newton_ref % f_vec
+   print *, "sum(f) =",sum(nested_Newton_ref % f_vec)
+   print *, "sum(J) =",sum(nested_Newton_ref % J)
 
-  call nested_Newton % f_mass_SUMMA_vec_full(stateVecTrial(:))
-  call nested_Newton % Jacobian_f_mass_SUMMA_vec_full(stateVecTrial(:))
-
-  call nested_Newton % f_energy_SUMMA_vec_full(stateVecTrial(:))
-  call nested_Newton % Jacobian_f_energy_SUMMA_vec_full(stateVecTrial(:))
-
-
- ! call nested_Newton % f_mass_SUMMA_vec(stateVecTrial(:))
- ! print *, "stateMask1=",nested_Newton % stateMask1
- ! print *, "nSubset1=",nested_Newton % nSubset1
- ! call nested_Newton % Jacobian_f_mass_SUMMA_vec(stateVecTrial(:))
- ! call nested_Newton % Jacobian_f_mass_SUMMA_vec_numerical(stateVecTrial(:))
-
- ! call nested_Newton % f_energy_SUMMA_vec(stateVecTrial(:))
- ! print *, "stateMask2=",nested_Newton % stateMask2
- ! print *, "nSubset2=",nested_Newton % nSubset2
- ! call nested_Newton % Jacobian_f_energy_SUMMA_vec(stateVecTrial(:))
- ! call nested_Newton % Jacobian_f_energy_SUMMA_vec_numerical(stateVecTrial(:))
-
-  print *, "f1-f2="
-  print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
-  print *, "sum(f1-f2)="
-  print *, sum(nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:))
-  print *, "sum(J1)=",sum(nested_Newton % J1)
-  print *, "sum(J2)=",sum(nested_Newton % J2)
-  print *, "sum(J1-J2)",sum(nested_Newton % J1 - nested_Newton % J2)
-
-  stop
+   if (nested_Newton % nested) then 
+    call nested_Newton % f1_vec_eval(stateVecTrial(:))
+    call nested_Newton % J1_eval(stateVecTrial(:))
+ 
+    call nested_Newton % f2_vec_eval(stateVecTrial(:))
+    call nested_Newton % J2_eval(stateVecTrial(:))
+ 
+    print *, "f1-f2="
+    print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
+    print *, "sum(f1-f2)="
+    print *, sum(nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:))
+    print *, "sum(J1)=",sum(nested_Newton % J1)
+    print *, "sum(J2)=",sum(nested_Newton % J2)
+    print *, "sum(J1-J2)",sum(nested_Newton % J1 - nested_Newton % J2)
+   end if
+ 
+   !stop
+  end if
 !!!!!!!!!!!!!!!! SJT: End Test Block --- take out
 
   ! call solver
@@ -1234,7 +1231,8 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
-  !print *, "niter=",niter ! SJT: --- take out ---
+  print *, "niter=",niter ! SJT: --- take out ---
+  !stop
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
