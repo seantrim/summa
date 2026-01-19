@@ -907,8 +907,7 @@ subroutine coupled_em(&
           ! compute the total water content in the vegetation canopy
           scalarCanopyWat = scalarCanopyLiq + scalarCanopyIce  ! kg m-2
 
-          ! compute the total water content in snow and soil
-          ! NOTE: no ice expansion allowed for soil
+          ! compute the total water content in snow and soil, no ice expansion allowed for soil
           if(nSnow>0)&
             mLayerVolFracWat(      1:nSnow  ) = mLayerVolFracLiq(      1:nSnow  ) + mLayerVolFracIce(      1:nSnow  )*(iden_ice/iden_water)
           mLayerVolFracWat(nSnow+1:nLayers)   = mLayerVolFracLiq(nSnow+1:nLayers) + mLayerVolFracIce(nSnow+1:nLayers)

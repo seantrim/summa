@@ -98,8 +98,8 @@ subroutine computResid(&
                       mLayerVolFracWatTrial,     & ! intent(in):  trial value for the volumetric water in each snow and soil layer (-)
                       mLayerVolFracLiqTrial,     & ! intent(in):  trial value for the volumetric liq in each snow and soil layer (-)
                       ! input: enthalpy terms
-                      scalarCanopyCmTrial,       & ! intent(in):  Cm for vegetation canopy (J kg K-1)
-                      mLayerCmTrial,             & ! intent(in):  Cm for each snow and soil layer (J kg K-1)
+                      scalarCanopyCmTrial,       & ! intent(in):  Cm for vegetation canopy (J kg-1)
+                      mLayerCmTrial,             & ! intent(in):  Cm for each snow+soil layer (J m-3)
                       scalarCanairEnthalpyTrial, & ! intent(in):  trial value for  enthalpy of the canopy air space (J m-3)
                       scalarCanopyEnthTempTrial, & ! intent(in):  trial value for temperature component of enthalpy of the vegetation canopy (J m-3)
                       mLayerEnthTempTrial,       & ! intent(in):  trial vector of temperature component of enthalpy of each snow+soil layer (J m-3)  
@@ -138,8 +138,8 @@ subroutine computResid(&
   real(rkind),intent(in)             :: mLayerVolFracWatTrial(:)  ! trial value for the volumetric water in each snow and soil layer (-)
   real(rkind),intent(in)             :: mLayerVolFracLiqTrial(:)  ! trial value for the volumetric water in each snow and soil layer (-)
   ! input: enthalpy terms
-  real(rkind),intent(in)             :: scalarCanopyCmTrial       ! Cm for vegetation canopy (-)
-  real(rkind),intent(in)             :: mLayerCmTrial(:)          ! Cm for each snow and soil layer (-)
+  real(rkind),intent(in)             :: scalarCanopyCmTrial       ! Cm for vegetation canopy (J kg-1)
+  real(rkind),intent(in)             :: mLayerCmTrial(:)          ! Cm for each snow+soil layer (J m-3)
   real(rkind),intent(in)             :: scalarCanairEnthalpyTrial ! trial value for enthalpy of the canopy air space (J m-3)
   real(rkind),intent(in)             :: scalarCanopyEnthTempTrial ! trial value for temperature component of enthalpy of the vegetation canopy (J m-3)
   real(rkind),intent(in)             :: mLayerEnthTempTrial(:)    ! trial vector of temperature component of enthalpy of each snow+soil layer (J m-3)

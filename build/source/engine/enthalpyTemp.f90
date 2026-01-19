@@ -520,10 +520,10 @@ subroutine T2enthTemp_snow(&
   ! --------------------------------------------------------------------------------------------------------------------------------
   diffT    = mLayerTemp - Tfreeze  ! diffT<0._rkind because snow is frozen
 
-  if(diffT==0._rkind)then ! only need for upper bound
-    enthLiq = 0._rkind
+  if(diffT>=0._rkind)then ! diffT<0._rkind if in snow, but keep for generality and temporary upper bound violations
+    enthLiq = iden_water * Cp_water * mLayerVolFracWat * diffT
     enthIce = 0._rkind
-    enthAir = 0._rkind
+    enthAir = iden_air * Cp_air * ( 1._rkind - mLayerVolFracWat ) * diffT
   else
     integral = (1._rkind/snowfrz_scale) * atan(snowfrz_scale * diffT)
     enthLiq  = iden_water * Cp_water * mLayerVolFracWat * integral
@@ -999,45 +999,56 @@ subroutine enthalpy2T_snow(&
   ! initialize error control
   err=0; message="enthalpy2T_snow/"
 
-  ! ***** iterate to find temperature, ice always exists
-  T = min(mLayerTemp, Tfreeze)  ! initial guess
+  ! ***** get temperature if unfrozen snow (only happens in temporary upper bound violations)
+  if (mLayerEnthalpy>=0)then
+    T = mLayerEnthalpy / ( iden_water * Cp_water * mLayerVolFracWat + iden_air * Cp_air * (1._rkind - mLayerVolFracWat) ) + Tfreeze
+    if(computeJac)then  
+      dT_dEnthalpy = 1._rkind / ( iden_water * Cp_water * mLayerVolFracWat + iden_air * Cp_air * (1._rkind - mLayerVolFracWat) )
+      dT_dWat      = -( iden_water * Cp_water - iden_air * Cp_air ) &
+                      * mLayerEnthalpy / ( iden_water * Cp_water * mLayerVolFracWat + iden_air * Cp_air * (1._rkind - mLayerVolFracWat) )**2_i4b
+    endif
 
-  ! find the root of the function
-  ! inputs = function, lower bound, upper bound, initial point, tolerance, integer flag if want detail
-  ! and the vector of parameters, snow_layer
-  vec = 0._rkind
-  vec(1:3) = (/mLayerEnthalpy, snowfrz_scale, mLayerVolFracWat/)
-  if(mLayerEnthalpy>0._rkind)then
-    T = Tfreeze - 1.e-6_rkind ! need to merge layers, don't iterate to find the temperature
+  ! ***** iterate to find temperature if ice exists
   else
-    call brent(diff_H_snow, T, T_out, 0._rkind, Tfreeze, vec, err, cmessage)
-    if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
-    T = T_out
-  endif
-  
-  ! compute Jacobian terms
-  if(computJac)then
-    ! NOTE: dintegral_dT = fLiq
-    diffT    = T - Tfreeze
-    integral = (1._rkind/snowfrz_scale) * atan(snowfrz_scale * diffT)
-    fLiq     = fracLiquid(T, snowfrz_scale)
- 
-    ! w.r.t. temperature, NOTE: dintegral_dT = fLiq
-    dfLiq_dT    = dFracLiq_dTk(T,snowfrz_scale)
-    denthLiq_dT = iden_water * Cp_water * mLayerVolFracWat * fLiq
-    denthIce_dT = iden_water * Cp_ice * mLayerVolFracWat * (1._rkind - fLiq)
-    denthAir_dT = iden_air * Cp_air * (1._rkind - mLayerVolFracWat * ( (iden_water/iden_ice)*(1._rkind-fLiq) + fLiq ) )
-    dH_dT       = denthLiq_dT + denthIce_dT + denthAir_dT + iden_water * LH_fus * dfLiq_dT * mLayerVolFracWat
+    T = min(mLayerTemp, Tfreeze)  ! initial guess
 
-    ! w.r.t. layer water content
-    denthLiq_dWat = iden_water * Cp_water * integral
-    denthIce_dWat = iden_water * Cp_ice * ( diffT - integral )
-    denthAir_dWat = -iden_air * Cp_air * ( (iden_water/iden_ice)*(diffT-integral) + integral )
-    dH_dWat       = denthLiq_dWat + denthIce_dWat + denthAir_dWat - iden_water * LH_fus * (1._rkind - fLiq)
+    ! find the root of the function
+    ! inputs = function, lower bound, upper bound, initial point, tolerance, integer flag if want detail
+    ! and the vector of parameters, snow_layer
+    vec = 0._rkind
+    vec(1:3) = (/mLayerEnthalpy, snowfrz_scale, mLayerVolFracWat/)
+    if(mLayerEnthalpy>0._rkind)then
+      T = Tfreeze - 1.e-6_rkind ! need to merge layers, don't iterate to find the temperature
+    else
+      call brent(diff_H_snow, T, T_out, 0._rkind, Tfreeze, vec, err, cmessage)
+      if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
+      T = T_out
+    endif
+    
+    ! compute Jacobian terms
+    if(computJac)then
+      ! NOTE: dintegral_dT = fLiq
+      diffT    = T - Tfreeze
+      integral = (1._rkind/snowfrz_scale) * atan(snowfrz_scale * diffT)
+      fLiq     = fracLiquid(T, snowfrz_scale)
+    
+      ! w.r.t. temperature, NOTE: dintegral_dT = fLiq
+      dfLiq_dT    = dFracLiq_dTk(T,snowfrz_scale)
+      denthLiq_dT = iden_water * Cp_water * mLayerVolFracWat * fLiq
+      denthIce_dT = iden_water * Cp_ice * mLayerVolFracWat * (1._rkind - fLiq)
+      denthAir_dT = iden_air * Cp_air * (1._rkind - mLayerVolFracWat * ( (iden_water/iden_ice)*(1._rkind-fLiq) + fLiq ) )
+      dH_dT       = denthLiq_dT + denthIce_dT + denthAir_dT + iden_water * LH_fus * dfLiq_dT * mLayerVolFracWat
 
-    dT_dEnthalpy = 1._rkind / dH_dT
-    dT_dWat      = -dH_dWat / dH_dT  ! NOTE, while it is not generally appropriate to cancel partial derivatives, here this is true if it is multiplied by -1
-  endif
+      ! w.r.t. layer water content
+      denthLiq_dWat = iden_water * Cp_water * integral
+      denthIce_dWat = iden_water * Cp_ice * ( diffT - integral )
+      denthAir_dWat = -iden_air * Cp_air * ( (iden_water/iden_ice)*(diffT-integral) + integral )
+      dH_dWat       = denthLiq_dWat + denthIce_dWat + denthAir_dWat - iden_water * LH_fus * (1._rkind - fLiq)
+
+      dT_dEnthalpy = 1._rkind / dH_dT
+      dT_dWat      = -dH_dWat / dH_dT  ! NOTE, while it is not generally appropriate to cancel partial derivatives, here this is true if it is multiplied by -1
+    endif
+  endif ! (if ice exists)
 
   ! update temperature and derivatives
   mLayerTemp = T

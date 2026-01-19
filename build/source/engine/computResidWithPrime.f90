@@ -78,8 +78,8 @@ subroutine computResidWithPrime(&
                       mLayerVolFracWatPrime,     & ! intent(in):  prime vector of the volumetric water in each snow and soil layer (s-1)
                       mLayerVolFracLiqPrime,     & ! intent(in):  prime vector of the volumetric liq in each snow and soil layer (s-1)
                       ! input: enthalpy terms
-                      scalarCanopyCmTrial,       & ! intent(in):  Cm for vegetation canopy (J kg K-1)
-                      mLayerCmTrial,             & ! intent(in):  Cm for each snow and soil layer (J kg K-1)
+                      scalarCanopyCmTrial,       & ! intent(in):  Cm for vegetation canopy (J kg-1)
+                      mLayerCmTrial,             & ! intent(in):  Cm for each snow+soil layer (J m-3)
                       scalarCanairEnthalpyPrime, & ! intent(in):  prime value for the enthalpy of the canopy air space (W m-3)
                       scalarCanopyEnthalpyPrime, & ! intent(in):  prime value for the of enthalpy of the vegetation canopy (W m-3)
                       mLayerEnthalpyPrime,       & ! intent(in):  prime vector of the of enthalpy of each snow and soil layer (W m-3)
@@ -116,8 +116,8 @@ subroutine computResidWithPrime(&
   real(rkind),intent(in)          :: mLayerVolFracWatPrime(:)  ! prime vector of the volumetric water in each snow and soil layer (s-1)
   real(rkind),intent(in)          :: mLayerVolFracLiqPrime(:)  ! prime vector of the volumetric water in each snow and soil layer (s-1)
   ! input: enthalpy terms
-  real(rkind),intent(in)          :: scalarCanopyCmTrial       ! Cm for vegetation canopy (-)
-  real(rkind),intent(in)          :: mLayerCmTrial(:)          ! Cm for each snow and soil layer (-)
+  real(rkind),intent(in)          :: scalarCanopyCmTrial       ! Cm for vegetation canopy (J kg-1)
+  real(rkind),intent(in)          :: mLayerCmTrial(:)          ! Cm for each snow+soil layer (J m-3)
   real(rkind),intent(in)          :: scalarCanairEnthalpyPrime ! prime value for enthalpy of the canopy air space (W m-3)
   real(rkind),intent(in)          :: scalarCanopyEnthalpyPrime ! prime value for enthalpy of the vegetation canopy (W m-3)
   real(rkind),intent(in)          :: mLayerEnthalpyPrime(:)    ! prime vector of enthalpy of each snow and soil layer (W m-3)
