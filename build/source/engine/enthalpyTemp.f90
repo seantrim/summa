@@ -1002,7 +1002,7 @@ subroutine enthalpy2T_snow(&
   ! ***** get temperature if unfrozen snow (only happens in temporary upper bound violations)
   if (mLayerEnthalpy>=0)then
     T = mLayerEnthalpy / ( iden_water * Cp_water * mLayerVolFracWat + iden_air * Cp_air * (1._rkind - mLayerVolFracWat) ) + Tfreeze
-    if(computeJac)then  
+    if(computJac)then  
       dT_dEnthalpy = 1._rkind / ( iden_water * Cp_water * mLayerVolFracWat + iden_air * Cp_air * (1._rkind - mLayerVolFracWat) )
       dT_dWat      = -( iden_water * Cp_water - iden_air * Cp_air ) &
                       * mLayerEnthalpy / ( iden_water * Cp_water * mLayerVolFracWat + iden_air * Cp_air * (1._rkind - mLayerVolFracWat) )**2_i4b
