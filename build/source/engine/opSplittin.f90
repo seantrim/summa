@@ -849,7 +849,8 @@ subroutine opSplittin(&
 
   ! **** varSubstep ****
   subroutine initialize_varSubstep
-   call in_varSubstep % initialize(dt,dtInit,dt_min,whole_step,nSubset,doAdjustTemp,firstSubStep,computeVegFlux,ixSolution,scalar,iStateSplit,fluxMask)
+   call in_varSubstep % initialize(dt,dtInit,dt_min,whole_step,nSubset,doAdjustTemp,firstSubStep,computeVegFlux,ixSolution,&
+                                  &scalar,iStateSplit,fluxMask)
    call io_varSubstep % initialize(firstFluxCall,fluxCount,ixSaturation)
   end subroutine initialize_varSubstep
 
@@ -868,10 +869,10 @@ subroutine opSplittin(&
 
    ! solve variable subset for one full time step
    call initialize_varSubstep
-   call varSubstep(in_varSubstep,io_varSubstep,&                                            ! intent(inout): class objects for model control
-                   model_decisions,lookup_data,type_data,attr_data,forc_data,mpar_data,&    ! intent(inout): data structures for model properties
+   call varSubstep(in_varSubstep,io_varSubstep,&                                                      ! intent(inout): class objects for model control
+                   split_select,model_decisions,lookup_data,type_data,attr_data,forc_data,mpar_data,& ! intent(inout): data structures
                    indx_data,prog_data,diag_data,flux_data,flux_mean,deriv_data,bvar_data,&
-                   out_varSubstep)                                                          ! intent(out): class object for model control
+                   out_varSubstep)                                                                    ! intent(out): class object for model control
    call finalize_varSubstep
   
    if (nested_Newton_test) then

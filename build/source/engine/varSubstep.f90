@@ -89,6 +89,9 @@ USE mDecisions_module,only:         &
 ! note: updateProg was relocated to updateVars_module for interoperability with the nested Newton solver
 USE updateVars_module,only: updateProg ! update prognostic variables
 
+! split_select_type (includes access to stateFilter procedure)
+USE stateFilter_module,only: split_select_type
+
 ! safety: set private unless specified otherwise
 implicit none
 private
@@ -104,6 +107,7 @@ subroutine varSubstep(&
                       in_varSubstep,     & ! intent(in)    : model control
                       io_varSubstep,     & ! intent(inout) : model control
                       ! input/output: data structures
+                      split_select,      & ! intent(in)    : operator splitting object
                       model_decisions,   & ! intent(in)    : model decisions
                       lookup_data,       & ! intent(in)    : lookup tables
                       type_data,         & ! intent(in)    : type of vegetation and soil
@@ -136,6 +140,7 @@ subroutine varSubstep(&
   type(in_type_varSubstep),intent(in)    :: in_varSubstep             ! model control
   type(io_type_varSubstep),intent(inout) :: io_varSubstep             ! model control
   ! input/output: data structures
+  type(split_select_type),intent(in)     :: split_select              ! class object for selecting operator splitting methods
   type(model_options),intent(in)         :: model_decisions(:)        ! model decisions
   type(zLookup),intent(in)               :: lookup_data               ! lookup tables
   type(var_i),intent(in)                 :: type_data                 ! type of vegetation and soil
@@ -351,6 +356,7 @@ subroutine varSubstep(&
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
                       ! input/output: data structures
+                      split_select,      & ! intent(in):    operator splitting object
                       lookup_data,       & ! intent(in):    lookup tables
                       type_data,         & ! intent(in):    type of vegetation and soil
                       attr_data,         & ! intent(in):    spatial attributes

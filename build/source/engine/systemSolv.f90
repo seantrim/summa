@@ -95,6 +95,9 @@ USE mDecisions_module,only:&
                     kinsol       ,& ! SUNDIALS backward Euler solution using Kinsol
                     ida             ! SUNDIALS solution using IDA
 
+! split_select_type (includes access to stateFilter procedure)
+USE stateFilter_module,only: split_select_type
+
 ! safety: set private unless specified otherwise
 implicit none
 private
@@ -120,6 +123,7 @@ subroutine systemSolv(&
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
                       ! input/output: data structures
+                      split_select,      & ! intent(in):    operator splitting object
                       lookup_data,       & ! intent(in):    lookup tables
                       type_data,         & ! intent(in):    type of vegetation and soil
                       attr_data,         & ! intent(in):    spatial attributes
@@ -182,6 +186,7 @@ subroutine systemSolv(&
   logical(lgt),intent(in)         :: computMassBalance             ! flag to compute mass balance
   logical(lgt),intent(in)         :: computNrgBalance              ! flag to compute energy balance
   ! input/output: data structures
+  type(split_select_type),intent(in) :: split_select               ! class object for selecting operator splitting methods
   type(zLookup),intent(in)        :: lookup_data                   ! lookup tables
   type(var_i),intent(in)          :: type_data                     ! type of vegetation and soil
   type(var_d),intent(in)          :: attr_data                     ! spatial attributes
@@ -272,7 +277,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -294,7 +299,7 @@ subroutine systemSolv(&
       case(kinsol) ! solve for BE time step using KINSOL
         call solve_with_KINSOL; if (return_flag) return           ! solve using KINSOL -- return if error
       case(homegrown) ! solve for BE time step using Newton iterations
-        if (nested_Newton_flag) then ! replace with model decision in future update -- test flag for now
+        if ((nested_Newton_flag).and.(split_select % iSplit == 1)) then ! replace with model decision in future update -- fully-coupled split only
          call nested_Newton_iterations; if (return_flag) return ! nested Newton library
         else
          call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
