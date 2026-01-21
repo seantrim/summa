@@ -1132,6 +1132,11 @@ contains
   f_obj % nSubset1 = split_select % nState - split_select % nSubset ! transform to get count for mass split
   f_obj % nSubset2 = split_select % nSubset                         ! no transformation for energy split
 
+  if ((f_obj % nSubset1 == 0_i4b).or.(f_obj % nSubset2 == 0_i4b)) then
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in get_SUMMA_mass_energy_masks: empty stateMask detected"; stop
+    end if
+  end if
  end subroutine get_SUMMA_mass_energy_masks
 
  subroutine f_mass_SUMMA_vec_full(f_obj,xvec)
