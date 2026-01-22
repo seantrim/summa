@@ -268,7 +268,7 @@ contains
    if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(f_obj % WORK(1:4_i4b*f_obj % n))
   end if
 
-  ! allocate Jacobian arrays
+  ! allocate Jacobian arrays (and initialize to zero)
   if (f_obj % banded) then ! banded storage
     f_obj % nrow_banded = f_obj % subdiag + f_obj % superdiag + 1_i4b
     f_obj % nrow = f_obj % nrow_banded
@@ -276,10 +276,10 @@ contains
     f_obj % nrow = f_obj % n
   end if
   
-  allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n)) ! SJT: available for classical and nested iterations (for testing -- not needed for nested)
+  allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n),source=0._r8b) ! SJT: available for classical and nested iterations (for testing -- not needed for nested)
   if (f_obj % nested) then
    allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
-           &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n))
+           &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
   end if
 
  end subroutine f_allocate_memory
@@ -1170,7 +1170,7 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i,j ! loop indices
+  integer(i4b) :: i,j,k  ! loop indices
   integer(i4b) :: nBands ! # of bands for banded storage
 
   call f_obj % SUMMA_computJacob(&
@@ -1181,12 +1181,14 @@ contains
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nBands=nrow_banded+subdiag
-    do j=1,f_obj % n
-     do i=1,nrow_banded !note: aJac has extra storage rows
-      f_obj % J1(i,j)= merge(-aJac(i+subdiag,j),0._rkind,f_obj % stateMask1(i+j-superdiag-1)) ! sign change so that J=J1-J2
+    do j=1,n ! column index for dense and banded storage
+     do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+      k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+      aJac(k,j) = merge(aJac(k,j),0._rkind,f_obj % stateMask1(i)) ! zero the elements that are not included in J1
      end do
     end do
+    nBands=nrow_banded+subdiag ! number of non-zero bands
+    f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
    f_obj % J1(:,:) = 0._r8b
@@ -1227,7 +1229,7 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i,j ! loop indices
+  integer(i4b) :: i,j,k ! loop indices
   integer(i4b) :: nBands ! # of bands for banded storage
 
   call f_obj % SUMMA_computJacob(&
@@ -1238,12 +1240,14 @@ contains
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nBands=nrow_banded+subdiag
-    do j=1,f_obj % n
-     do i=1,nrow_banded !note: aJac has extra storage rows
-      f_obj % J2(i,j)= merge(-aJac(i+subdiag,j),0._rkind,f_obj % stateMask2(i+j-superdiag-1)) ! sign change so that J=J1-J2
+    do j=1,n ! column index for dense and banded storage
+     do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+      k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+      aJac(k,j) = merge(-aJac(k,j),0._rkind,f_obj % stateMask2(i)) ! zero the elements that are not included in J2 (sign change so that J=J1-J2)
      end do
     end do
+    nBands=nrow_banded+subdiag ! number of non-zero bands
+    f_obj % J2(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
    f_obj % J2(:,:) = 0._r8b
