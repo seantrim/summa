@@ -440,14 +440,14 @@ contains
  subroutine stateTypeSplit_fullDomain_nrgSplit_stateMask
   ! *** Get state type full domain energy split stateMask ***
   associate(ixStateType     => indx_data%var(iLookINDEX%ixStateType)%dat) ! intent(in): [i4b(:)] indices defining the type of the state (ixNrgState...)
-   split_select % stateMask = (ixStateType==iname_nrgCanair .or. ixStateType==iname_nrgCanopy .or. ixStateType==iname_nrgLayer)
+   split_select % stateMask(:) = (ixStateType==iname_nrgCanair .or. ixStateType==iname_nrgCanopy .or. ixStateType==iname_nrgLayer)
   end associate
  end subroutine stateTypeSplit_fullDomain_nrgSplit_stateMask
 
  subroutine stateTypeSplit_fullDomain_massSplit_stateMask
   ! *** Get state type full domain mass split stateMask ***
   associate(ixStateType     => indx_data%var(iLookINDEX%ixStateType)%dat) ! intent(in): [i4b(:)] indices defining the type of the state (ixNrgState...)
-   split_select % stateMask = (ixStateType==iname_liqCanopy .or. ixStateType==iname_liqLayer  .or. &
+   split_select % stateMask(:) = (ixStateType==iname_liqCanopy .or. ixStateType==iname_liqLayer  .or. &
                             &  ixStateType==iname_lmpLayer  .or. ixStateType==iname_watAquifer)
   end associate
  end subroutine stateTypeSplit_fullDomain_massSplit_stateMask
