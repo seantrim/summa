@@ -1134,7 +1134,8 @@ contains
 
   if ((f_obj % nSubset1 == 0_i4b).or.(f_obj % nSubset2 == 0_i4b)) then
     if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in get_SUMMA_mass_energy_masks: empty stateMask detected"; stop
+     write(f_obj % unit,*) "Error in get_SUMMA_mass_energy_masks: empty stateMask detected"
+     stop
     end if
   end if
  end subroutine get_SUMMA_mass_energy_masks
@@ -1169,7 +1170,8 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i ! loop index
+  integer(i4b) :: i,j ! loop indices
+  integer(i4b) :: nBands ! # of bands for banded storage
 
   call f_obj % SUMMA_computJacob(&
                &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
@@ -1178,13 +1180,14 @@ contains
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
-   if (f_obj % out_error) then
-    write(f_obj % unit,*) "Error in Jacobian_f_mass_SUMMA_vec_full: banded Jacobian storage option not implemented"; stop
-   end if
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-  !  nBands=nrow_banded+subdiag
-  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-  ! end associate
+   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    nBands=nrow_banded+subdiag
+    do j=1,f_obj % n
+     do i=1,nrow_banded !note: aJac has extra storage rows
+      f_obj % J1(i,j)= merge(-aJac(i+subdiag,j),0._rkind,f_obj % stateMask1(i+j-superdiag-1)) ! sign change so that J=J1-J2
+     end do
+    end do
+   end associate
   else ! full matrix storage
    f_obj % J1(:,:) = 0._r8b
    do i=1,f_obj % n
@@ -1224,7 +1227,8 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i ! loop index
+  integer(i4b) :: i,j ! loop indices
+  integer(i4b) :: nBands ! # of bands for banded storage
 
   call f_obj % SUMMA_computJacob(&
                &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
@@ -1233,17 +1237,18 @@ contains
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
-   if (f_obj % out_error) then
-    write(f_obj % unit,*) "Error in Jacobian_f_energy_SUMMA_vec_full: banded Jacobian storage option not implemented"; stop
-   end if
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-  !  nBands=nrow_banded+subdiag
-  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-  ! end associate
+   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    nBands=nrow_banded+subdiag
+    do j=1,f_obj % n
+     do i=1,nrow_banded !note: aJac has extra storage rows
+      f_obj % J2(i,j)= merge(-aJac(i+subdiag,j),0._rkind,f_obj % stateMask2(i+j-superdiag-1)) ! sign change so that J=J1-J2
+     end do
+    end do
+   end associate
   else ! full matrix storage
    f_obj % J2(:,:) = 0._r8b
-   do i=1,f_obj % n
-    f_obj % J2(:,i) = merge(-aJac(:,i),f_obj % J2(:,i),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
+   do j=1,f_obj % n
+    f_obj % J2(:,j) = merge(-aJac(:,j),f_obj % J2(:,j),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
    end do
   end if
 
