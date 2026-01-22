@@ -95,8 +95,9 @@ USE mDecisions_module,only:&
                     kinsol       ,& ! SUNDIALS backward Euler solution using Kinsol
                     ida             ! SUNDIALS solution using IDA
 
-! split_select_type (includes access to stateFilter procedure)
-USE stateFilter_module,only: split_select_type
+! stateFilter module access for information on splitting method
+USE stateFilter_module,only: split_select_type           ! operator splitting object
+use stateFilter_module,only: fullyCoupled,stateTypeSplit ! options for ixCoupling
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -299,7 +300,7 @@ subroutine systemSolv(&
       case(kinsol) ! solve for BE time step using KINSOL
         call solve_with_KINSOL; if (return_flag) return           ! solve using KINSOL -- return if error
       case(homegrown) ! solve for BE time step using Newton iterations
-        if ((nested_Newton_flag).and.(split_select % iSplit == 1)) then ! replace with model decision in future update -- fully-coupled split only
+        if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
          call nested_Newton_iterations; if (return_flag) return ! nested Newton library
         else
          call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
