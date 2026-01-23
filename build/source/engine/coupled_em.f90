@@ -298,7 +298,6 @@ subroutine coupled_em(&
   ! This is the start of a data step for a local HRU
 
   ! get the start time
- ! get the start time
   CALL system_clock(count_rate=count_rate)
   CALL system_clock(i_start)
 
