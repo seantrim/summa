@@ -289,7 +289,7 @@ subroutine coupled_em(&
   logical(lgt)                         :: enthalpyStateVec       ! flag if enthalpy is a state variable (IDA)
   logical(lgt)                         :: use_lookup             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
+  logical(lgt),parameter :: nested_Newton_test=.true. ! test output
 
   ! ----------------------------------------------------------------------------------------------------------------------------------------------
   ! initialize error control
@@ -1005,14 +1005,6 @@ subroutine coupled_em(&
       ! check for all errors (error recovery within opSplittin)
       if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; end if
 
-      if (nested_Newton_test) then
-       print *, "coupled_em Test A: after opSplittin call"
-       print *, "err=",err
-       print *, "tooMuchMelt=",tooMuchMelt
-       print *, "stepFailure=",stepFailure
-       print *, ""
-      end if
-
       ! process the flag for too much melt
       if(tooMuchMelt)then
         stepFailure  = .true.
@@ -1020,6 +1012,11 @@ subroutine coupled_em(&
       else
         doLayerMerge = .false.
       endif
+
+      if ((nested_Newton_test).and.(stepFailure)) then
+       print *, "coupled_em: substep failure after opSplittin call"
+       print *, "tooMuchMelt=",tooMuchMelt
+      end if
 
       ! handle special case of the step failure
       ! NOTE: need to revert back to the previous state vector that we were happy with and reduce the time step
