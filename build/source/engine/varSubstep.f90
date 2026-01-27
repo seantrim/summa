@@ -208,7 +208,7 @@ subroutine varSubstep(&
   logical(lgt)                       :: enthalpyStateVec                       ! flag if enthalpy is a state variable (ida)
   logical(lgt)                       :: use_lookup                             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
+  logical(lgt),parameter :: nested_Newton_test=.true. ! test output
 
   ! ---------------------------------------------------------------------------------------
   ! initialize error control
@@ -386,13 +386,11 @@ subroutine varSubstep(&
                       reduceCoupledStep, & ! intent(out):   flag to reduce the length of the coupled step
                       tooMuchMelt,       & ! intent(out):   flag to denote that ice is insufficient to support melt
                       err,cmessage)        ! intent(out):   error code and error message
-      if (nested_Newton_test) then
-       print *, "varSubstep Test A: after systemSolv call"
+      if ((nested_Newton_test).and.(err/=0)) then
+       print *, "varSubstep: failed substep"
        print *, "err=",err
        print *, "reduceCoupledStep=",reduceCoupledStep
        print *, "tooMuchMelt=",tooMuchMelt
-       print *, "indx_data nSoil=",indx_data%var(iLookINDEX%nSoil)%dat(1)
-       print *, "indx_data nLayers=",indx_data%var(iLookINDEX%nLayers)%dat(1)
        print *, ""
       end if
 
@@ -464,25 +462,11 @@ subroutine varSubstep(&
        nSoil                   => indx_data%var(iLookINDEX%nSoil)%dat(1)                 ,& ! intent(in):    [i4b]    number of soil layers
        nLayers                 => indx_data%var(iLookINDEX%nLayers)%dat(1)                & ! intent(in):    [i4b]    total number of layers
       &)
-        if (nested_Newton_test) then
-         print *, "varSubstep Test B: before updateProg call"
-         print *, "nSnow=",nSnow
-         print *, "nSoil=",nSoil
-         print *, "indx_data nSoil=",indx_data%var(iLookINDEX%nSoil)%dat(1)
-         print *, "nLayers=",nLayers
-         print *, ""
-        end if
         ! update prognostic variables, update balances, and check them for possible step reduction if homegrown or kinsol solver
         call updateProg(dtSubstep,nSnow,nSoil,nLayers,untappedMelt,stateVecTrial,stateVecPrime,                                    & ! input: states
                         doAdjustTemp,computeVegFlux,computMassBalance,computNrgBalance,computeEnthTemp,enthalpyStateVec,use_lookup,& ! input: model control
                         model_decisions,lookup_data,mpar_data,indx_data,flux_temp,prog_data,diag_data,deriv_data,                  & ! input-output: data structures
                         fluxVec,resVec,balance,waterBalanceError,nrgFluxModified,err,message)                                        ! input-output: balances, flags, and error control
-        if (nested_Newton_test) then
-         print *, "varSubstep Test C: after updateProg call"
-         print *, "err=",err
-         print *, "waterBalanceError=",waterBalanceError
-         print *, ""
-        end if
       end associate
 
       ! check for errors -- return if non-recoverable

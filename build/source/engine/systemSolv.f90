@@ -1056,7 +1056,7 @@ contains
   ! * Nested Newton solver options *
 
   ! Newton iteration type ---------------------------- ADD SWITCH BASED ON HOMEGROWN SPLIT HERE ------------------------------
-  nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
+  nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
    ! set method for computing relative convergence error
@@ -1073,7 +1073,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 70_i4b; nested_Newton % lmax = 3_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 80_i4b; nested_Newton % lmax = 6_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1235,7 +1235,7 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
-  print *, "niter=",niter ! SJT: --- take out ---
+  !print *, "niter=",niter ! SJT: --- take out ---
   !stop
  end subroutine nested_Newton_iterations
 

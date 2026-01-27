@@ -309,6 +309,12 @@ MODULE data_types
 
  integer(i4b),parameter :: len_msg=256 ! length of character string used in class definitions
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! SJT: start
+ type, public :: convergence_stats_type
+ 
+ end type convergence_stats_type
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! SJT: end
+
  ! ***********************************************************************************************************
  ! Define classes used to simplify calls to the subroutines in computFlux
  ! ***********************************************************************************************************
