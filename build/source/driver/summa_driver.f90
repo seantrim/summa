@@ -25,6 +25,7 @@ program summa_driver
   ! data types
   USE nrtype                                                  ! variable types, etc.
   USE summa_type, only: summa1_type_dec                       ! master summa data type
+  USE data_types, only: convergence_stats_type                ! convergence stats object for Newton iterations
   ! subroutines and functions: model setup
   USE summa_init, only: summa_initialize                      ! used to allocate/initialize summa data structures
   USE summa_setup, only: summa_paramSetup                     ! used to initialize parameter data structures (e.g. vegetation and soil parameters)
@@ -57,6 +58,8 @@ program summa_driver
   integer(i4b), parameter            :: n=1                        ! number of instantiations
   ! define timing information
   integer(i4b)                       :: modelTimeStep              ! index of model time step
+  ! Newton iteration stats
+  type(convergence_stats_type)       :: convergence_stats          ! object for convergence stats for Newton iterations
   ! error control
   integer(i4b)                       :: err=0                      ! error code
   character(len=1024)                :: message=''                 ! error message
@@ -100,6 +103,9 @@ contains
   subroutine update_summa_driver
    ! *** Update operations for SUMMA driver program ***
 
+   ! initialize convergence_stats object
+   call initialize_convergence_stats
+
    ! loop through time
    do modelTimeStep=1,numtim
  
@@ -116,7 +122,7 @@ contains
      end if
  
      ! run the summa physics for one time step
-     call summa_runPhysics(modelTimeStep, summa1_struc(n), err, message)
+     call summa_runPhysics(modelTimeStep, summa1_struc(n), convergence_stats, err, message)
      call handle_err(err, message)
  
 #ifdef OPENWQ_ACTIVE
@@ -132,6 +138,10 @@ contains
 #endif
  
    end do  ! end looping through time
+
+   ! finalize convergence_stats object
+   call finalize_convergence_stats
+
   end subroutine update_summa_driver
 
   subroutine finalize_summa_driver
@@ -142,5 +152,48 @@ contains
    ! to prevent exiting before HDF5 has closed
    call sleep(2)
   end subroutine finalize_summa_driver
+
+  subroutine initialize_convergence_stats
+   ! *** Initialize convergence stats object ***
+   USE globalData,only:gru_struc ! gru-hru mapping structures
+   integer(i4b) :: iGRU,iHRU     ! indices for GRUs and HRUs
+
+   ! allocate memory and initialize
+   associate(nGRU => summa1_struc(n)%nGRU)
+    allocate(convergence_stats%gru(1:nGRU))
+    do iGRU = 1,nGRU
+     allocate(convergence_stats%gru(iGRU)%hru(1:gru_struc(iGRU)%hruCount))
+     do iHRU = 1,gru_struc(iGRU)%hruCount
+      convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions  = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures         = 0_i4b
+     end do
+    end do
+   end associate
+
+  end subroutine initialize_convergence_stats
+
+  subroutine finalize_convergence_stats
+   ! *** Finalize convergence stats object ***
+   USE globalData,only:gru_struc ! gru-hru mapping structures
+   integer(i4b) :: iGRU,iHRU     ! indices for GRUs and HRUs
+
+   ! print convergence information
+   print *, ""
+   print *, "Convergence Statistics:"
+   associate(nGRU => summa1_struc(n)%nGRU)
+    do iGRU = 1,nGRU
+     print *, "GRU=",iGRU
+     do iHRU = 1,gru_struc(iGRU)%hruCount
+      print *, "HRU=",iHRU
+      print *, "high_level_step_reductions=", convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions
+      print *, "low_level_step_reductions =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions
+      print *, "splitting_failures        =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures
+     end do
+    end do
+   end associate
+   print *, ""
+
+  end subroutine finalize_convergence_stats
 
 end program summa_driver

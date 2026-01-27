@@ -309,11 +309,24 @@ MODULE data_types
 
  integer(i4b),parameter :: len_msg=256 ! length of character string used in class definitions
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! SJT: start
+
+ ! ***********************************************************************************************************
+ ! Define classes used to gather convergence statistics for Newton iterations
+ ! ***********************************************************************************************************
+ type, public :: convergence_stats_data
+  integer(i4b) ::  high_level_step_reductions 
+  integer(i4b) ::  low_level_step_reductions 
+  integer(i4b) ::  splitting_failures 
+ end type convergence_stats_data
+
+ type, public :: convergence_stats_hru
+  type(convergence_stats_data),allocatable :: hru(:)  
+ end type convergence_stats_hru
+
  type, public :: convergence_stats_type
- 
+  type(convergence_stats_hru),allocatable :: gru(:)  
  end type convergence_stats_type
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! SJT: end
+
 
  ! ***********************************************************************************************************
  ! Define classes used to simplify calls to the subroutines in computFlux

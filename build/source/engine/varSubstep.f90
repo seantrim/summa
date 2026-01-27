@@ -43,16 +43,17 @@ USE globalData,only:flux_meta       ! metadata on the model fluxes
 
 ! derived types to define the data structures
 USE data_types,only:&
-                    var_i,              & ! data vector (i4b)
-                    var_d,              & ! data vector (rkind)
-                    var_flagVec,        & ! data vector with variable length dimension (i4b)
-                    var_ilength,        & ! data vector with variable length dimension (i4b)
-                    var_dlength,        & ! data vector with variable length dimension (rkind)
-                    zLookup,            & ! lookup tables
-                    model_options,      & ! defines the model decisions
-                    in_type_varSubstep, & ! class for intent(in) arguments
-                    io_type_varSubstep, & ! class for intent(inout) arguments
-                    out_type_varSubstep   ! class for intent(out) arguments
+                    var_i,               & ! data vector (i4b)
+                    var_d,               & ! data vector (rkind)
+                    var_flagVec,         & ! data vector with variable length dimension (i4b)
+                    var_ilength,         & ! data vector with variable length dimension (i4b)
+                    var_dlength,         & ! data vector with variable length dimension (rkind)
+                    zLookup,             & ! lookup tables
+                    model_options,       & ! defines the model decisions
+                    in_type_varSubstep,  & ! class for intent(in) arguments
+                    io_type_varSubstep,  & ! class for intent(inout) arguments
+                    out_type_varSubstep, & ! class for intent(out) arguments
+                    convergence_stats_data ! convergence stats
 
 ! provide access to indices that define elements of the data structures
 USE var_lookup,only:iLookFLUX       ! named variables for structure elements
@@ -121,6 +122,7 @@ subroutine varSubstep(&
                       flux_mean,         & ! intent(inout) : mean model fluxes for a local HRU
                       deriv_data,        & ! intent(inout) : derivatives in model fluxes w.r.t. relevant state variables
                       bvar_data,         & ! intent(in)    : model variables for the local basin
+                      conv_data,         & ! intent(inout) : convergence data for a local HRU
                       ! output: model control
                       out_varSubstep)      ! intent(out)   : model control
   ! ---------------------------------------------------------------------------------------
@@ -154,6 +156,7 @@ subroutine varSubstep(&
   type(var_dlength),intent(inout)        :: flux_mean                 ! mean model fluxes for a local HRU
   type(var_dlength),intent(inout)        :: deriv_data                ! derivatives in model fluxes w.r.t. relevant state variables
   type(var_dlength),intent(in)           :: bvar_data                 ! model variables for the local basin
+  type(convergence_stats_data),intent(inout) :: conv_data             ! convergence stats for a local HRU
   ! output: model control
   type(out_type_varSubstep),intent(out)  :: out_varSubstep            ! model control
   ! ---------------------------------------------------------------------------------------
@@ -393,6 +396,13 @@ subroutine varSubstep(&
        print *, "tooMuchMelt=",tooMuchMelt
        print *, ""
       end if
+
+      ! gather failure stats
+      if (err/=0) then
+       if (.not.tooMuchMelt) then
+        conv_data % low_level_step_reductions = conv_data % low_level_step_reductions + 1_i4b
+       end if
+      end if 
 
       if(err/=0)then ! (check for errors, but do not fail yet)
         message=trim(message)//trim(cmessage)

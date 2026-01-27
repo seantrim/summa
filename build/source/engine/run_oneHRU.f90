@@ -29,7 +29,8 @@ USE data_types,only:&
                var_d,                    & ! x%var(:)                (rkind)
                var_ilength,              & ! x%var(:)%dat            (i4b)
                var_dlength,              & ! x%var(:)%dat            (rkind)
-               zLookup                     ! x%z(:)%var(:)%lookup(:) (rkind)
+               zLookup,                  & ! x%z(:)%var(:)%lookup(:) (rkind)
+               convergence_stats_data      ! convergence stats
 
 ! access vegetation data
 USE globalData,only:greenVegFrac_monthly   ! fraction of green vegetation in each month (0-1)
@@ -104,6 +105,7 @@ contains
                        progData,            & ! intent(inout): prognostic variables for a local HRU
                        diagData,            & ! intent(inout): diagnostic variables for a local HRU
                        fluxData,            & ! intent(inout): model fluxes for a local HRU
+                       convData,            & ! intent(inout): convergence stats for a local HRU
                        ! error control
                        err,message)           ! intent(out):   error control
 
@@ -135,6 +137,7 @@ contains
  type(var_dlength) , intent(inout) :: progData            ! x%var(:)%dat -- model prognostic (state) variables
  type(var_dlength) , intent(inout) :: diagData            ! x%var(:)%dat -- model diagnostic variables
  type(var_dlength) , intent(inout) :: fluxData            ! x%var(:)%dat -- model fluxes
+ type(convergence_stats_data) , intent(inout) :: convData ! convergence stats data entries
  ! error control
  integer(i4b)      , intent(out)   :: err                 ! error code
  character(*)      , intent(out)   :: message             ! error message
@@ -234,6 +237,7 @@ contains
                  progData,         & ! intent(inout): model prognostic variables for a local HRU
                  diagData,         & ! intent(inout): model diagnostic variables for a local HRU
                  fluxData,         & ! intent(inout): model fluxes for a local HRU
+                 convData,         & ! intent(inout): convergence data for a local HRU
                  ! error control
                  err,cmessage)       ! intent(out):   error control
  if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif

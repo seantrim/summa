@@ -40,7 +40,9 @@ USE data_types,only:&
                     hru_intVec,      & ! x%hru(:)%var(:)%dat (i4b)
                     hru_doubleVec,   & ! x%hru(:)%var(:)%dat (rkind)
                     ! hru+z dimension
-                    hru_z_vLookup      ! x%hru(:)%z(:)%var(:)%lookup(:)
+                    hru_z_vLookup,   & ! x%hru(:)%z(:)%var(:)%lookup(:)
+                    ! convergence stats per hru
+                    convergence_stats_hru
 
 ! provide access to the named variables that describe elements of parameter structures
 USE var_lookup,only:iLookTYPE          ! look-up values for classification of veg, soils etc.
@@ -83,13 +85,14 @@ contains
                        attrHRU,            & ! intent(in):    local attributes for each HRU
                        lookupHRU,          & ! intent(in):    local lookup tables for each HRU
                        ! data structures (input-output)
-                       mparHRU,            & ! intent(inout):    local model parameters
-                       indxHRU,            & ! intent(inout): model indices
-                       forcHRU,            & ! intent(inout): model forcing data
-                       progHRU,            & ! intent(inout): prognostic variables for a local HRU
-                       diagHRU,            & ! intent(inout): diagnostic variables for a local HRU
-                       fluxHRU,            & ! intent(inout): model fluxes for a local HRU
-                       bvarData,           & ! intent(inout): basin-average variables
+                       mparHRU,             & ! intent(inout):    local model parameters
+                       indxHRU,             & ! intent(inout): model indices
+                       forcHRU,             & ! intent(inout): model forcing data
+                       progHRU,             & ! intent(inout): prognostic variables for a local HRU
+                       diagHRU,             & ! intent(inout): diagnostic variables for a local HRU
+                       fluxHRU,             & ! intent(inout): model fluxes for a local HRU
+                       bvarData,            & ! intent(inout): basin-average variables
+                       convergence_statsHRU,& ! intent(inout): convergence stats for a local HRU
                        ! error control
                        err,message)          ! intent(out):   error control
 
@@ -116,6 +119,7 @@ contains
  type(hru_doubleVec) , intent(inout) :: diagHRU              ! x%hru(:)%var(:)%dat -- model diagnostic variables
  type(hru_doubleVec) , intent(inout) :: fluxHRU              ! x%hru(:)%var(:)%dat -- model fluxes
  type(var_dlength)   , intent(inout) :: bvarData             ! x%var(:)%dat        -- basin-average variables
+ type(convergence_stats_hru),intent(inout) :: convergence_statsHRU ! convergence stats for a local HRU
  ! error control
  integer(i4b)        , intent(out)   :: err                  ! error code
  character(*)        , intent(out)   :: message              ! error message
@@ -188,6 +192,7 @@ contains
                   progHRU%hru(iHRU),               & ! intent(inout): model prognostic variables for a local HRU
                   diagHRU%hru(iHRU),               & ! intent(inout): model diagnostic variables for a local HRU
                   fluxHRU%hru(iHRU),               & ! intent(inout): model fluxes for a local HRU
+                  convergence_statsHRU%hru(iHRU),  & ! intent(inout): convergence stats for a local HRU
                   ! error control
                   err,cmessage)                      ! intent(out):   error control
   if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif

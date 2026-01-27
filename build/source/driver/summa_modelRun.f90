@@ -43,13 +43,14 @@ public::summa_runPhysics
 contains
 
  ! calls the model physics
- subroutine summa_runPhysics(modelTimeStep, summa1_struc, err, message)
+ subroutine summa_runPhysics(modelTimeStep, summa1_struc, convergence_stats, err, message)
  ! ---------------------------------------------------------------------------------------
  ! * desired modules
  ! ---------------------------------------------------------------------------------------
  ! data types
  USE nrtype                                                     ! variable types, etc.
  USE summa_type, only:summa1_type_dec                           ! master summa data type
+ USE data_types, only:convergence_stats_type                    ! convergence stats object for Newton iterations
  ! subroutines and functions
  USE nr_utility_module,only:indexx                              ! sort vectors in ascending order
  USE vegPhenlgy_module,only:vegPhenlgy                          ! module to compute vegetation phenology
@@ -65,10 +66,11 @@ contains
  ! ---------------------------------------------------------------------------------------
  implicit none
  ! dummy variables
- integer(i4b),intent(in)               :: modelTimeStep         ! time step index
- type(summa1_type_dec),intent(inout)   :: summa1_struc          ! master summa data structure
- integer(i4b),intent(out)              :: err                   ! error code
- character(*),intent(out)              :: message               ! error message
+ integer(i4b),intent(in)                    :: modelTimeStep     ! time step index
+ type(summa1_type_dec),intent(inout)        :: summa1_struc      ! master summa data structure
+ type(convergence_stats_type),intent(inout) :: convergence_stats ! object for convergence statistics
+ integer(i4b),intent(out)                   :: err               ! error code
+ character(*),intent(out)                   :: message           ! error message
  ! ---------------------------------------------------------------------------------------
  ! local variables: general
  character(LEN=512)                    :: cmessage              ! error message of downwind routine
@@ -264,6 +266,7 @@ contains
                   diagStruct%gru(iGRU),         & ! intent(inout): diagnostic variables for a local HRU
                   fluxStruct%gru(iGRU),         & ! intent(inout): model fluxes for a local HRU
                   bvarStruct%gru(iGRU),         & ! intent(inout): basin-average variables
+                  convergence_stats%gru(iGRU),  & ! intent(inout): convergence statistics 
                   ! error control
                   err,cmessage)                   ! intent(out):   error control
 
@@ -292,8 +295,6 @@ contains
  ! deallocate space used to determine the GRU computational expense
  deallocate(totalFluxCalls, ixExpense, timeGRU, stat=err)
  if(err/=0)then; message=trim(message)//'unable to deallocate space for GRU timing'; return; endif
-
- ! end associate statements
 
  end subroutine summa_runPhysics
 

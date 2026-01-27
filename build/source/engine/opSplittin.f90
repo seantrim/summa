@@ -71,7 +71,8 @@ USE data_types,only:&
                     zLookup,                                                   & ! lookup tables
                     model_options,                                             & ! defines the model decisions
                     in_type_indexSplit,out_type_indexSplit,                    & ! classes for indexSplit objects
-                    in_type_varSubstep,io_type_varSubstep,out_type_varSubstep    ! classes for varSubstep objects
+                    in_type_varSubstep,io_type_varSubstep,out_type_varSubstep, & ! classes for varSubstep objects
+                    convergence_stats_data                                       ! convergence stats
 
 ! look-up values for the numerical method
 USE mDecisions_module,only:       &
@@ -148,6 +149,7 @@ subroutine opSplittin(&
                       bvar_data,            & ! intent(in):    model variables for the local basin
                       lookup_data,          & ! intent(in):    lookup tables
                       model_decisions,      & ! intent(in):    model decisions
+                      conv_data,            & ! intent(inout): convergence stats for a local HRU
                       ! output: model control
                       dtMultiplier,         & ! intent(out):   substep multiplier (-)
                       tooMuchMelt,          & ! intent(out):   flag to denote that ice is insufficient to support melt
@@ -187,6 +189,7 @@ subroutine opSplittin(&
   type(var_dlength),intent(in)    :: bvar_data                      ! model variables for the local basin
   type(zLookup),    intent(in)    :: lookup_data                    ! lookup tables
   type(model_options),intent(in)  :: model_decisions(:)             ! model decisions
+  type(convergence_stats_data),intent(inout) :: conv_data           ! convergence stats for a local HRU
   ! output: model control
   real(rkind),intent(out)         :: dtMultiplier                   ! substep multiplier (-)
   logical(lgt),intent(out)        :: tooMuchMelt                    ! flag to denote that ice is insufficient to support melt
@@ -870,7 +873,7 @@ subroutine opSplittin(&
    call initialize_varSubstep
    call varSubstep(in_varSubstep,io_varSubstep,&                                                      ! intent(inout): class objects for model control
                    split_select,model_decisions,lookup_data,type_data,attr_data,forc_data,mpar_data,& ! intent(inout): data structures
-                   indx_data,prog_data,diag_data,flux_data,flux_mean,deriv_data,bvar_data,&
+                   indx_data,prog_data,diag_data,flux_data,flux_mean,deriv_data,bvar_data,conv_data,&
                    out_varSubstep)                                                                    ! intent(out): class object for model control
    call finalize_varSubstep
   
@@ -884,6 +887,11 @@ subroutine opSplittin(&
      print *, "tooMuchMelt=",tooMuchMelt
      print *, ""
     end if
+   end if
+
+   ! gather failure stats
+   if (failedMinimumStep) then
+    conv_data % splitting_failures = conv_data % splitting_failures + 1_i4b
    end if 
 
    if (err/=0) then 

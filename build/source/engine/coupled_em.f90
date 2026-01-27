@@ -38,7 +38,8 @@ USE data_types,only:&
                     var_d,               & ! x%var(:)                (rkind)
                     var_ilength,         & ! x%var(:)%dat            (i4b)
                     var_dlength,         & ! x%var(:)%dat            (rkind)
-                    zLookup                ! x%z(:)%var(:)%lookup(:) (rkind)
+                    zLookup,             & ! x%z(:)%var(:)%lookup(:) (rkind)
+                    convergence_stats_data ! convergence stats
 
 ! named variables for parent structures
 USE var_lookup,only:iLookDECISIONS         ! named variables for elements of the decision structure
@@ -126,6 +127,7 @@ subroutine coupled_em(&
                       prog_data,         & ! intent(inout): prognostic variables for a local HRU
                       diag_data,         & ! intent(inout): diagnostic variables for a local HRU
                       flux_data,         & ! intent(inout): model fluxes for a local HRU
+                      conv_data,         & ! intent(inout): convergence stats for a local HRU
                       ! error control
                       err,message)         ! intent(out):   error control
   ! structure allocations
@@ -173,6 +175,7 @@ subroutine coupled_em(&
   type(var_dlength),intent(inout)      :: prog_data              ! prognostic variables for a local HRU
   type(var_dlength),intent(inout)      :: diag_data              ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout)      :: flux_data              ! model fluxes for a local HRU
+  type(convergence_stats_data),intent(inout):: conv_data         ! model fluxes for a local HRU
   real(rkind),intent(in)               :: fracJulDay             ! fractional julian days since the start of year
   integer(i4b),intent(in)              :: yearLength             ! number of days in the current year
   ! error control
@@ -995,6 +998,7 @@ subroutine coupled_em(&
                       bvar_data,                              & ! intent(in):    model variables for the local basin
                       lookup_data,                            & ! intent(in):    lookup tables
                       model_decisions,                        & ! intent(in):    model decisions
+                      conv_data,                              & ! intent(inout): convergence stats for a local HRU
                       ! output: model control
                       dtMultiplier,                           & ! intent(out):   substep multiplier (-)
                       tooMuchMelt,                            & ! intent(out):   flag to denote that ice is insufficient to support melt
@@ -1016,6 +1020,13 @@ subroutine coupled_em(&
       if ((nested_Newton_test).and.(stepFailure)) then
        print *, "coupled_em: substep failure after opSplittin call"
        print *, "tooMuchMelt=",tooMuchMelt
+      end if
+
+      ! gather failure stats
+      if (stepFailure) then
+       if (.not.tooMuchMelt) then
+        conv_data % high_level_step_reductions = conv_data % high_level_step_reductions + 1_i4b
+       end if
       end if
 
       ! handle special case of the step failure
