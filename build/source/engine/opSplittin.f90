@@ -892,6 +892,9 @@ subroutine opSplittin(&
    ! gather failure stats
    if (failedMinimumStep) then
     conv_data % splitting_failures = conv_data % splitting_failures + 1_i4b
+    if (split_select % ixCoupling == fullyCoupled) then
+     conv_data % splitting_failures_coupled = conv_data % splitting_failures_coupled + 1_i4b
+    end if
    end if 
 
    if (err/=0) then 

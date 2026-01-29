@@ -164,9 +164,11 @@ contains
     do iGRU = 1,nGRU
      allocate(convergence_stats%gru(iGRU)%hru(1:gru_struc(iGRU)%hruCount))
      do iHRU = 1,gru_struc(iGRU)%hruCount
-      convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions = 0_i4b
-      convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions  = 0_i4b
-      convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures         = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions        = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions         = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures                = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled        = 0_i4b
      end do
     end do
    end associate
@@ -186,9 +188,11 @@ contains
      print *, "GRU=",iGRU
      do iHRU = 1,gru_struc(iGRU)%hruCount
       print *, "HRU=",iHRU
-      print *, "high_level_step_reductions=", convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions
-      print *, "low_level_step_reductions =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions
-      print *, "splitting_failures        =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures
+      print *, "high_level_step_reductions        =", convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions
+      print *, "low_level_step_reductions         =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions
+      print *, "low_level_step_reductions_coupled =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled
+      print *, "splitting_failures                =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures
+      print *, "splitting_failures_coupled        =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled
      end do
     end do
    end associate

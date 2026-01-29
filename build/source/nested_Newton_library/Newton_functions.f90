@@ -677,7 +677,7 @@ contains
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
-  logical,parameter :: trivial_decomposition = .true.
+  logical,parameter :: trivial_decomposition = .false.
 
   call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
 
@@ -705,7 +705,7 @@ contains
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
-  logical,parameter :: trivial_decomposition = .true.
+  logical,parameter :: trivial_decomposition = .false.
 
   call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
 

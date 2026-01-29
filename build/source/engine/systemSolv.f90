@@ -97,7 +97,7 @@ USE mDecisions_module,only:&
 
 ! stateFilter module access for information on splitting method
 USE stateFilter_module,only: split_select_type           ! operator splitting object
-use stateFilter_module,only: fullyCoupled,stateTypeSplit ! options for ixCoupling
+USE stateFilter_module,only: fullyCoupled,stateTypeSplit ! options for ixCoupling
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -278,7 +278,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1073,7 +1073,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 80_i4b; nested_Newton % lmax = 6_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 100_i4b; nested_Newton % lmax = 2_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1083,11 +1083,11 @@ contains
 
    ! Newton step refinement
    nested_Newton % refinement        = .true.  ! apply refine_Newton_step following outer/classical iterations
-   nested_Newton % refinement_inner  = .false. ! apply refine_Newton_step following inner iterations
+   nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
 
    ! constraints 
    nested_Newton % constraints       = .false. ! apply imposeConstraints between outer/classical iterations
-   nested_Newton % constraints_inner = .true. ! apply imposeConstraints between outer/classical iterations
+   nested_Newton % constraints_inner = .false. ! apply imposeConstraints between outer/classical iterations
 
    ! scaling
    nested_Newton % scaling           = .true.  ! apply xScale and fScale scaling factors for LAPACK   

@@ -92,6 +92,7 @@ USE updateVars_module,only: updateProg ! update prognostic variables
 
 ! split_select_type (includes access to stateFilter procedure)
 USE stateFilter_module,only: split_select_type
+USE stateFilter_module,only: fullyCoupled,stateTypeSplit ! options for ixCoupling
 
 ! safety: set private unless specified otherwise
 implicit none
@@ -211,7 +212,7 @@ subroutine varSubstep(&
   logical(lgt)                       :: enthalpyStateVec                       ! flag if enthalpy is a state variable (ida)
   logical(lgt)                       :: use_lookup                             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_test=.true. ! test output
+  logical(lgt),parameter :: nested_Newton_test=.false. ! test output
 
   ! ---------------------------------------------------------------------------------------
   ! initialize error control
@@ -397,10 +398,13 @@ subroutine varSubstep(&
        print *, ""
       end if
 
-      ! gather failure stats
-      if (err/=0) then
-       if (.not.tooMuchMelt) then
+      ! gather failure stats (for recoverable errors)
+      if (err<0_i4b) then
+       if ((.not.tooMuchMelt).and.(.not.reduceCoupledStep)) then
         conv_data % low_level_step_reductions = conv_data % low_level_step_reductions + 1_i4b
+        if (split_select % ixCoupling == fullyCoupled) then
+         conv_data % low_level_step_reductions_coupled = conv_data % low_level_step_reductions_coupled + 1_i4b
+        end if
        end if
       end if 
 
