@@ -651,7 +651,7 @@ contains
   ! input
   real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
 
@@ -673,7 +673,7 @@ contains
   ! input
   real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
@@ -701,7 +701,7 @@ contains
   ! input
   real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
@@ -730,7 +730,7 @@ contains
   ! input
   real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
   real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xstep(1:f_obj % n) ! unrefined Newton step
+  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
   ! input-output
   real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
   ! local
@@ -751,8 +751,8 @@ contains
     ! assume xvec1 is already scaled on input (e.g., from LAPACK solution for nested iterations)
     newtStepScaled = xvec1(:) - xvec0(:)/f_obj % xScale(:) 
    else
-    ! assume xstep is already scaled on input
-    newtStepScaled = xstep(:) 
+    ! assume xStep is already scaled on input
+    newtStepScaled = xStep(:) 
    end if
 
   else ! scale arrays
@@ -774,7 +774,7 @@ contains
     newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
     f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:) - f_obj % f2_vec(:)) ! matches solve_linear_system
    else ! if Newton step is provided on input
-    newtStepScaled(:) = xstep(:) / f_obj % xScale(:)             ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+    newtStepScaled(:) = xStep(:) / f_obj % xScale(:)             ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
     f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
    end if
 
@@ -1092,6 +1092,7 @@ contains
   character(LEN=256)              :: cmessage          ! error message of downwind routine
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
+  logical(lgt),parameter          :: dual = .true.
 
   ! * initialize operations for split_select object *
 
@@ -1124,13 +1125,23 @@ contains
     end if
   end if
 
-  ! assign masks for f1 (mass) and f2 (energy)
-  f_obj % stateMask1 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
-  f_obj % stateMask2 = split_select % stateMask           ! no transformation --- allocate on assignment
+  ! assign masks
+  if (dual) then ! assign masks for f1 (energy) and f2 (mass)
+   f_obj % stateMask2 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
+   f_obj % stateMask1 = split_select % stateMask           ! no transformation --- allocate on assignment
+  else ! assign masks for f1 (mass) and f2 (energy)
+   f_obj % stateMask1 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
+   f_obj % stateMask2 = split_select % stateMask           ! no transformation --- allocate on assignment
+  end if
 
   ! get counts for mass and energy splits
-  f_obj % nSubset1 = split_select % nState - split_select % nSubset ! transform to get count for mass split
-  f_obj % nSubset2 = split_select % nSubset                         ! no transformation for energy split
+  if (dual) then
+   f_obj % nSubset2 = split_select % nState - split_select % nSubset ! transform to get count for mass split
+   f_obj % nSubset1 = split_select % nSubset                         ! no transformation for energy split
+  else
+   f_obj % nSubset1 = split_select % nState - split_select % nSubset ! transform to get count for mass split
+   f_obj % nSubset2 = split_select % nSubset                         ! no transformation for energy split
+  end if
 
   if ((f_obj % nSubset1 == 0_i4b).or.(f_obj % nSubset2 == 0_i4b)) then
     if (f_obj % out_error) then
