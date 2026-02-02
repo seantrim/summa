@@ -80,7 +80,7 @@ module Newton_functions
    procedure :: allocate_memory => f_allocate_memory ! allocate array data components 
    procedure :: initial_guess   => f_initial_guess   ! apply initial guess strategy
    procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
-   procedure :: solver_output   => f_solver_output   ! set tolerances and iteration count maximums
+   procedure :: solver_output   => f_solver_output   ! set solver output options
  end type f_obj_base
 
  type,extends(f_obj_base),public :: f_obj_inputs
@@ -1092,7 +1092,7 @@ contains
   character(LEN=256)              :: cmessage          ! error message of downwind routine
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
-  logical(lgt),parameter          :: dual = .true.
+  logical(lgt),parameter          :: dual = .false.
 
   ! * initialize operations for split_select object *
 

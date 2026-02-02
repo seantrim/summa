@@ -182,7 +182,11 @@ contains
    ! final convergence error for outer iterations (if early loop exit occurred)
    if (f_obj % out_detail) then
     final_mean=sum(f_obj % xkp1lp1)/f_obj % n
-    write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean,f_obj % R(1) ! mean of final solution 
+    if (f_obj % convergence .ne. 'custom') then
+     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean,f_obj % R(1) ! mean of final solution 
+    else ! custom methods don't have f_obj % R computed
+     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean ! mean of final solution 
+    end if
    end if
    f_obj % kcount = k+1
   else
@@ -197,7 +201,7 @@ contains
   end if
 
   f_obj % x1(:) = f_obj % xkp1lp1(:)
-  if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
+  if ((f_obj % out_basic).and.(f_obj % convergence .ne. 'custom')) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then
    write(f_obj % unit,*) "# of outer iterations=",f_obj % kcount
