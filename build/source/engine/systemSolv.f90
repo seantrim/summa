@@ -278,7 +278,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1055,7 +1055,7 @@ contains
 
   ! * Nested Newton solver options *
 
-  ! Newton iteration type ---------------------------- ADD SWITCH BASED ON HOMEGROWN SPLIT HERE ------------------------------
+  ! Newton iteration type
   nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
@@ -1071,9 +1071,9 @@ contains
 
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-   call nested_Newton % set_tolerance('strict',1.0e-3_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+   call nested_Newton % set_tolerance('strict',1.0e-10_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 300_i4b; nested_Newton % lmax = 50_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 2_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1125,7 +1125,8 @@ contains
   call nested_Newton % allocate_memory()
 
   if (nested_Newton % nested) then ! nested iterations
-   ! initialize data structures (ensure that fully-coupled structures are not overwritten) -- move to systemSolv?
+   ! initialize data structures (ensure that fully-coupled structures are not overwritten)
+   ! SJT: ----------------- add inSS4HG_inner, ioSS4HG_inner, etc for Newton step refinement? --------------
    nested_Newton % indx_data1         = nested_Newton % indx_data 
    nested_Newton % diag_data1         = nested_Newton % diag_data    
    nested_Newton % flux_data1         = nested_Newton % flux_data
@@ -1142,6 +1143,10 @@ contains
    nested_Newton % sMul2              = nested_Newton % sMul              ! allocate
    nested_Newton % dMat2              = nested_Newton % dMat              ! allocate
 
+   nested_Newton % in_SS4HG_inner     = nested_Newton % in_SS4HG  ! allocate
+   nested_Newton % io_SS4HG_inner     = nested_Newton % io_SS4HG  ! allocate
+   nested_Newton % out_SS4HG_inner    = nested_Newton % out_SS4HG ! allocate
+   
    
    call nested_Newton % get_mass_energy_masks()
    if (debug_output) then
@@ -1222,7 +1227,7 @@ contains
   resSink = nested_Newton % rAdd
 
   ! save the computed functions, residuals, and solution
-  fOld          = fNew   ! may be from previous Newton iteration
+  fOld          = fNew   ! may be from previous Newton iteration ------ may not be necessary (recalculated at start of next systemSolv call)
   resVec        = nested_Newton % resVec ! may be from previous Newton iteration
   stateVecTrial = nested_Newton % x1
   !stateVecPrime = stateVecTrial  !prime values not used here, dummy
@@ -1236,6 +1241,7 @@ contains
   end if
 
   !print *, "niter=",niter ! SJT: --- take out ---
+  !print *, "fOld=",fOld ! SJT: --- take out ---
   !stop
  end subroutine nested_Newton_iterations
 
@@ -1247,6 +1253,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
+  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 
@@ -1256,6 +1263,7 @@ contains
   do iter=1,localMaxIter ! begin Newton iterations
     niter = iter+1                ! # of iterations -- +1 because xFluxResid was moved outside the iteration loop (for backwards compatibility)
     call Newton_step; if (return_flag) return ! compute Newton step -- return if error                
+    !print *, "iter,fNew=",fNew ! SJT: --- take out ----------------------------------------------------------------
     call check_Newton_convergence ! check current Newton step for convergence
     if (exit_flag) exit           ! exit loop if convereged
     if (return_flag) return       ! return if error
@@ -1263,6 +1271,8 @@ contains
 
   if (post_massCons) call enforce_mass_conservation ! enforce mass conservation if desired
   !print *, "niter=",niter ! SJT: --- take out ---
+  !print *, "fOld=",fOld ! SJT: --- take out ---
+  !stop
  end subroutine Newton_iterations_homegrown
 
  subroutine finalize_systemSolv

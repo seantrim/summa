@@ -104,9 +104,16 @@ module Newton_functions
    real(rkind),allocatable :: dBaseflow_dMatric(:,:),dBaseflow_dMatric1(:,:),dBaseflow_dMatric2(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
    real(rkind),allocatable :: dMat(:),dMat1(:),dMat2(:)    ! diagonal matrix (excludes flux derivatives) 
 
-   type(in_type_summaSolve4homegrown)  :: in_SS4HG   ! summaSolve4homegrown input object: model control variables and previous function evaluation
-   type(io_type_summaSolve4homegrown)  :: io_SS4HG   ! summaSolve4homegrown io object: model control variables and previous function evaluation
-   type(out_type_summaSolve4homegrown) :: out_SS4HG  ! summaSolve4homegrown output object: model control variables and previous function evaluation
+   ! * summaSolve4homegrown (SS4HG) objects *
+   ! classical and outer iterations
+   type(in_type_summaSolve4homegrown)  :: in_SS4HG   ! SS4HG input object: model control variables and previous function evaluation
+   type(io_type_summaSolve4homegrown)  :: io_SS4HG   ! SS4HG io object: model control variables and previous function evaluation
+   type(out_type_summaSolve4homegrown) :: out_SS4HG  ! SS4HG output object: model control variables and previous function evaluation
+
+   ! inner iterations
+   type(in_type_summaSolve4homegrown)  :: in_SS4HG_inner  ! SS4HG input object: model control variables and previous function evaluation
+   type(io_type_summaSolve4homegrown)  :: io_SS4HG_inner  ! SS4HG io object: model control variables and previous function evaluation
+   type(out_type_summaSolve4homegrown) :: out_SS4HG_inner ! SS4HG output object: model control variables and previous function evaluation
 
    ! additional variables for eval8summa call
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
@@ -689,7 +696,7 @@ contains
   end if
 
   ! update function value for line search
-  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
+  f_obj % in_SS4HG_inner % fOld = f_obj % out_SS4HG_inner % fNew
 
  end subroutine SUMMA_refine_Newton_step_inner
 
@@ -802,9 +809,10 @@ contains
 
   associate(&
    ! input
-   in_SS4HG => f_obj % in_SS4HG , & 
-   fScale   => f_obj % fScale   , & 
-   xScale   => f_obj % xScale   , & 
+   in_SS4HG       => f_obj % in_SS4HG , & 
+   in_SS4HG_inner => f_obj % in_SS4HG , & 
+   fScale         => f_obj % fScale   , & 
+   xScale         => f_obj % xScale   , & 
    ! input: SUMMA data structures
    model_decisions => f_obj % model_decisions , &
    lookup_data     => f_obj % lookup_data     , &
@@ -817,21 +825,30 @@ contains
    ! input-output
    sMul              => f_obj % sMul              , &
    io_SS4HG          => f_obj % io_SS4HG          , &
+   io_SS4HG_inner    => f_obj % io_SS4HG_inner    , &
    indx_data         => f_obj % indx_data         , & 
    diag_data         => f_obj % diag_data         , &
    flux_data         => f_obj % flux_data         , & 
    deriv_data        => f_obj % deriv_data        , &
    dBaseflow_dMatric => f_obj % dBaseflow_dMatric , &
    ! output
-   fluxVecNew  => f_obj % fluxVec0  , &
-   resSinkNew  => f_obj % rAdd      , &
-   resVecNew   => f_obj % resVec    , &
-   out_SS4HG   => f_obj % out_SS4HG   &  
+   fluxVecNew      => f_obj % fluxVec0      , &
+   resSinkNew      => f_obj % rAdd          , &
+   resVecNew       => f_obj % resVec        , &
+   out_SS4HG       => f_obj % out_SS4HG     , &  
+   out_SS4HG_inner => f_obj % out_SS4HG_inner &  
   &)
-   call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,f_obj % aJacScaled,f_obj % rVecScaled,fScale,xScale,& ! input
-                          &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
-                          &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
-                          &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                ! output
+   if ((f_obj % nested).and.(f_obj % inner)) then ! use SS4HG objects for inner iterations
+    call refine_Newton_step(in_SS4HG_inner,mSoil,stateVecTrial,newtStepScaled,f_obj%aJacScaled,f_obj%rVecScaled,fScale,xScale,& ! input
+                           &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
+                           &sMul,f_obj%io_SS4HG_inner,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
+                           &stateVecNew,fluxVecNew,resSinkNew,resVecNew,f_obj%out_SS4HG_inner,return_flag)                                ! output
+   else                                           ! use SS4HG objects for classical/outer iterations
+    call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,f_obj%aJacScaled,f_obj%rVecScaled,fScale,xScale,& ! input
+                           &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
+                           &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
+                           &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                ! output
+   end if
   end associate
 
   ! check for errors in refine_Newton_step call

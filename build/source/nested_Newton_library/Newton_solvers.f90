@@ -92,6 +92,7 @@ contains
  subroutine nested_Newton_vector(f_obj)
   ! Newton solver
   type(f_obj_type),intent(inout) :: f_obj 
+  real(r8b),allocatable          :: Jsave(:,:)   ! Jacobian for outer Newton step refinement
   real(r8b)    :: final_mean                     ! mean value of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
@@ -99,7 +100,12 @@ contains
   logical      :: exit_outer,exit_inner 
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
-  real(r8b)    :: f2mJ2xk0(1:f_obj % n)             ! right-hand side / solution vector
+  real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
+
+  ! initialize arrays
+  if (f_obj % refinement) then
+   allocate(Jsave,mold = f_obj % Jdiff) 
+  end if
 
   ! initialize convergence flag
   f_obj % converged = .false.
@@ -122,6 +128,14 @@ contains
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
+    ! prep for Newton step refinement of outer iterations
+    if (f_obj % refinement) then
+     if (l == 0_i4b) then
+      Jsave(:,:) = f_obj % Jdiff(:,:)
+      !f_obj % in_SS4HG_inner % fOld = f_obj % in_SS4HG % fOld ! SJT: verify and build into Newton_functions procedure ------------- 
+     end if
+    end if
+
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
     B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
@@ -133,7 +147,7 @@ contains
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
-    ! print exact convergence error
+    ! print exact convergence error for iteration l
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
     if (f_obj % constraints_inner) then
@@ -143,6 +157,7 @@ contains
    end do inner
 
    if (l.gt.f_obj % lmax) then
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l,sum(f_obj % xkp1lp1)/f_obj % n,f_obj % R_inner(1)
     if (f_obj % out_warning) then
      write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of inner iterations&
                            & - accuracy may not be sufficient."
@@ -161,7 +176,9 @@ contains
 
    ! apply Newton step refinement
    if (f_obj % refinement) then
-    call f_obj % apply_refinement_outer(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1) 
+    call f_obj % apply_refinement_outer(Jsave,f_obj % xk0,B(:,1),f_obj % xkp1lp1) 
+    !call f_obj % apply_refinement_outer(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1) !OG 
+    !print *, "k,f_obj % out_SS4HG % fNew=",k,f_obj % out_SS4HG % fNew ! SJT: testing -------------- take out ------------------------
    end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
