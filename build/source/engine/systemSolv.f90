@@ -1071,9 +1071,9 @@ contains
 
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-   call nested_Newton % set_tolerance('strict',1.0e-10_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+   call nested_Newton % set_tolerance('strict',1.0e-4_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 2_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 10_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1082,7 +1082,7 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
-   nested_Newton % refinement        = .true.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement        = .false.  ! apply refine_Newton_step following outer/classical iterations
    nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
 
    ! constraints 
@@ -1125,27 +1125,27 @@ contains
   call nested_Newton % allocate_memory()
 
   if (nested_Newton % nested) then ! nested iterations
-   ! initialize data structures (ensure that fully-coupled structures are not overwritten)
-   ! SJT: ----------------- add inSS4HG_inner, ioSS4HG_inner, etc for Newton step refinement? --------------
-   nested_Newton % indx_data1         = nested_Newton % indx_data 
-   nested_Newton % diag_data1         = nested_Newton % diag_data    
-   nested_Newton % flux_data1         = nested_Newton % flux_data
-   nested_Newton % deriv_data1        = nested_Newton % deriv_data
-   nested_Newton % dBaseflow_dMatric1 = nested_Newton % dBaseflow_dMatric ! allocate
-   nested_Newton % sMul1              = nested_Newton % sMul              ! allocate
-   nested_Newton % dMat1              = nested_Newton % dMat              ! allocate
-
-   nested_Newton % indx_data2         = nested_Newton % indx_data 
-   nested_Newton % diag_data2         = nested_Newton % diag_data    
-   nested_Newton % flux_data2         = nested_Newton % flux_data
-   nested_Newton % deriv_data2        = nested_Newton % deriv_data
-   nested_Newton % dBaseflow_dMatric2 = nested_Newton % dBaseflow_dMatric ! allocate
-   nested_Newton % sMul2              = nested_Newton % sMul              ! allocate
-   nested_Newton % dMat2              = nested_Newton % dMat              ! allocate
-
-   nested_Newton % in_SS4HG_inner     = nested_Newton % in_SS4HG  ! allocate
-   nested_Newton % io_SS4HG_inner     = nested_Newton % io_SS4HG  ! allocate
-   nested_Newton % out_SS4HG_inner    = nested_Newton % out_SS4HG ! allocate
+!   ! initialize data structures (ensure that fully-coupled structures are not overwritten)
+!   ! SJT: ----------------- add inSS4HG_inner, ioSS4HG_inner, etc for Newton step refinement? --------------
+!   nested_Newton % indx_data1         = nested_Newton % indx_data 
+!   nested_Newton % diag_data1         = nested_Newton % diag_data    
+!   nested_Newton % flux_data1         = nested_Newton % flux_data
+!   nested_Newton % deriv_data1        = nested_Newton % deriv_data
+!   nested_Newton % dBaseflow_dMatric1 = nested_Newton % dBaseflow_dMatric ! allocate
+!   nested_Newton % sMul1              = nested_Newton % sMul              ! allocate
+!   nested_Newton % dMat1              = nested_Newton % dMat              ! allocate
+!
+!   nested_Newton % indx_data2         = nested_Newton % indx_data 
+!   nested_Newton % diag_data2         = nested_Newton % diag_data    
+!   nested_Newton % flux_data2         = nested_Newton % flux_data
+!   nested_Newton % deriv_data2        = nested_Newton % deriv_data
+!   nested_Newton % dBaseflow_dMatric2 = nested_Newton % dBaseflow_dMatric ! allocate
+!   nested_Newton % sMul2              = nested_Newton % sMul              ! allocate
+!   nested_Newton % dMat2              = nested_Newton % dMat              ! allocate
+!
+!   nested_Newton % in_SS4HG_inner     = nested_Newton % in_SS4HG  ! allocate
+!   nested_Newton % io_SS4HG_inner     = nested_Newton % io_SS4HG  ! allocate
+!   nested_Newton % out_SS4HG_inner    = nested_Newton % out_SS4HG ! allocate
    
    
    call nested_Newton % get_mass_energy_masks()

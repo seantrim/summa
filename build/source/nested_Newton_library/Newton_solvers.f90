@@ -92,7 +92,7 @@ contains
  subroutine nested_Newton_vector(f_obj)
   ! Newton solver
   type(f_obj_type),intent(inout) :: f_obj 
-  real(r8b),allocatable          :: Jsave(:,:)   ! Jacobian for outer Newton step refinement
+!  real(r8b),allocatable          :: Jsave(:,:)   ! Jacobian for outer Newton step refinement
   real(r8b)    :: final_mean                     ! mean value of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
@@ -102,10 +102,10 @@ contains
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
   real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
 
-  ! initialize arrays
-  if (f_obj % refinement) then
-   allocate(Jsave,mold = f_obj % Jdiff) 
-  end if
+!  ! initialize arrays
+!  if (f_obj % refinement) then
+!   allocate(Jsave,mold = f_obj % Jdiff) 
+!  end if
 
   ! initialize convergence flag
   f_obj % converged = .false.
@@ -128,13 +128,12 @@ contains
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
-    ! prep for Newton step refinement of outer iterations
-    if (f_obj % refinement) then
-     if (l == 0_i4b) then
-      Jsave(:,:) = f_obj % Jdiff(:,:)
-      !f_obj % in_SS4HG_inner % fOld = f_obj % in_SS4HG % fOld ! SJT: verify and build into Newton_functions procedure ------------- 
-     end if
-    end if
+    !! prep for Newton step refinement of outer iterations
+    !if (f_obj % refinement) then
+    ! if (l == 0_i4b) then
+    !  Jsave(:,:) = f_obj % Jdiff(:,:)
+    ! end if
+    !end if
 
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
@@ -143,7 +142,9 @@ contains
     f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     if (f_obj % refinement_inner) then
-     call f_obj % apply_refinement_inner(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
+     ! f_obj % J updated on last J1 evaluation
+     ! fOld taken from last f1 evaluatopn
+     call f_obj % apply_refinement_inner(f_obj % J,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
@@ -175,11 +176,11 @@ contains
    f_obj % inner=.false.
 
    ! apply Newton step refinement
-   if (f_obj % refinement) then
-    call f_obj % apply_refinement_outer(Jsave,f_obj % xk0,B(:,1),f_obj % xkp1lp1) 
-    !call f_obj % apply_refinement_outer(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1) !OG 
-    !print *, "k,f_obj % out_SS4HG % fNew=",k,f_obj % out_SS4HG % fNew ! SJT: testing -------------- take out ------------------------
-   end if
+   !if (f_obj % refinement) then
+   ! call f_obj % apply_refinement_outer(Jsave,f_obj % xk0,B(:,1),f_obj % xkp1lp1) 
+   ! !call f_obj % apply_refinement_outer(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1) !OG 
+   ! !print *, "k,f_obj % out_SS4HG % fNew=",k,f_obj % out_SS4HG % fNew ! SJT: testing -------------- take out ------------------------
+   !end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k

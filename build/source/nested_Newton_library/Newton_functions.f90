@@ -686,6 +686,9 @@ contains
   ! local
   logical,parameter :: trivial_decomposition = .false.
 
+  ! update function value for line search (based on previous evaluation of f1, f2, or f)
+  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
+
   call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
 
   ! store non-linear function vector for next Newton iteration
@@ -694,9 +697,6 @@ contains
   else
    if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec1) ! non-trivial decomposition (assume f2_vec does not change during inner iterations)
   end if
-
-  ! update function value for line search
-  f_obj % in_SS4HG_inner % fOld = f_obj % out_SS4HG_inner % fNew
 
  end subroutine SUMMA_refine_Newton_step_inner
 
@@ -714,6 +714,9 @@ contains
   ! local
   logical,parameter :: trivial_decomposition = .false.
 
+  ! update function value for line search (based on previous evaluation of f1, f2, or f)
+  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
+
   call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
 
   ! store non-linear function vector for next Newton iteration
@@ -723,9 +726,6 @@ contains
    if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec1) ! non-trivial decomposition
    if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xvec1) ! non-trivial decomposition
   end if
-
-  ! update function value for line search
-  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
 
  end subroutine SUMMA_refine_Newton_step_outer
 
@@ -810,7 +810,6 @@ contains
   associate(&
    ! input
    in_SS4HG       => f_obj % in_SS4HG , & 
-   in_SS4HG_inner => f_obj % in_SS4HG , & 
    fScale         => f_obj % fScale   , & 
    xScale         => f_obj % xScale   , & 
    ! input: SUMMA data structures
@@ -825,7 +824,6 @@ contains
    ! input-output
    sMul              => f_obj % sMul              , &
    io_SS4HG          => f_obj % io_SS4HG          , &
-   io_SS4HG_inner    => f_obj % io_SS4HG_inner    , &
    indx_data         => f_obj % indx_data         , & 
    diag_data         => f_obj % diag_data         , &
    flux_data         => f_obj % flux_data         , & 
@@ -835,20 +833,12 @@ contains
    fluxVecNew      => f_obj % fluxVec0      , &
    resSinkNew      => f_obj % rAdd          , &
    resVecNew       => f_obj % resVec        , &
-   out_SS4HG       => f_obj % out_SS4HG     , &  
-   out_SS4HG_inner => f_obj % out_SS4HG_inner &  
+   out_SS4HG       => f_obj % out_SS4HG       &  
   &)
-   if ((f_obj % nested).and.(f_obj % inner)) then ! use SS4HG objects for inner iterations
-    call refine_Newton_step(in_SS4HG_inner,mSoil,stateVecTrial,newtStepScaled,f_obj%aJacScaled,f_obj%rVecScaled,fScale,xScale,& ! input
-                           &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
-                           &sMul,f_obj%io_SS4HG_inner,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
-                           &stateVecNew,fluxVecNew,resSinkNew,resVecNew,f_obj%out_SS4HG_inner,return_flag)                                ! output
-   else                                           ! use SS4HG objects for classical/outer iterations
     call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,f_obj%aJacScaled,f_obj%rVecScaled,fScale,xScale,& ! input
                            &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
                            &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
                            &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                ! output
-   end if
   end associate
 
   ! check for errors in refine_Newton_step call
@@ -1181,8 +1171,11 @@ contains
 
   call f_obj % f_state_SUMMA_vec_full(&
                &xvec,&
-               &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,f_obj % sMul1,&
-               &f_obj % dBaseflow_dMatric1,resVec)
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+               &f_obj % dBaseflow_dMatric,resVec)
+
+  ! store total non-linear function
+  f_obj % f_vec(:) = resVec(:)
 
   ! assign non-zero function values based on logical mask
   f_obj % f1_vec(:)=0._r8b
@@ -1202,23 +1195,25 @@ contains
   integer(i4b) :: nBands ! # of bands for banded storage
 
   call f_obj % SUMMA_computJacob(&
-               &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
-               &f_obj % dMat1,f_obj % dBaseflow_dMatric1,&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    nBands=nrow_banded+subdiag ! number of non-zero bands
+    f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
     do j=1,n ! column index for dense and banded storage
      do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
       k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
       aJac(k,j) = merge(aJac(k,j),0._rkind,f_obj % stateMask1(i)) ! zero the elements that are not included in J1
      end do
     end do
-    nBands=nrow_banded+subdiag ! number of non-zero bands
     f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
+   f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
    f_obj % J1(:,:) = 0._r8b
    do i=1,f_obj % n
     f_obj % J1(:,i) = merge(aJac(:,i),f_obj % J1(:,i),f_obj % stateMask1(:))
@@ -1239,8 +1234,11 @@ contains
 
   call f_obj % f_state_SUMMA_vec_full(&
                &xvec,&
-               &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,f_obj % sMul2,&
-               &f_obj % dBaseflow_dMatric2,resVec)
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+               &f_obj % dBaseflow_dMatric,resVec)
+
+  ! store total non-linear function
+  f_obj % f_vec(:) = resVec(:)
 
   ! assign non-zero function values based on logical mask
   f_obj % f2_vec(:)=0._r8b
@@ -1261,23 +1259,25 @@ contains
   integer(i4b) :: nBands ! # of bands for banded storage
 
   call f_obj % SUMMA_computJacob(&
-               &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
-               &f_obj % dMat2,f_obj % dBaseflow_dMatric2,&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+    nBands=nrow_banded+subdiag ! number of non-zero bands
+    f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
     do j=1,n ! column index for dense and banded storage
      do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
       k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
       aJac(k,j) = merge(-aJac(k,j),0._rkind,f_obj % stateMask2(i)) ! zero the elements that are not included in J2 (sign change so that J=J1-J2)
      end do
     end do
-    nBands=nrow_banded+subdiag ! number of non-zero bands
     f_obj % J2(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
+   f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
    f_obj % J2(:,:) = 0._r8b
    do j=1,f_obj % n
     f_obj % J2(:,j) = merge(-aJac(:,j),f_obj % J2(:,j),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
