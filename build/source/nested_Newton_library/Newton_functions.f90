@@ -750,21 +750,14 @@ contains
   logical(lgt)   :: return_flag
   integer(i4b)   :: err
   character(256) :: cmessage
+  
+  if ((f_obj % scaling).and.(.not.f_obj % nested)) then ! reuse scaled arrays already computed
 
-  if (f_obj % scaling) then ! reuse scaled arrays already computed
-
-   ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-   if (f_obj % nested) then
-    ! assume xvec1 is already scaled on input (e.g., from LAPACK solution for nested iterations)
-    newtStepScaled = xvec1(:) - xvec0(:)/f_obj % xScale(:) 
-   else
-    ! assume xStep is already scaled on input
-    newtStepScaled = xStep(:) 
-   end if
+   newtStepScaled = xStep(:) ! assume xStep is already scaled on input
 
   else ! scale arrays
 
-   ! get SUMMA Jacobian from solver Jacobian
+   ! get SUMMA Jacobian from solver Jacobian for total non-linear function f
    if (f_obj % banded) then ! banded storage
     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
      nBands=nrow_banded+subdiag
@@ -778,8 +771,15 @@ contains
    ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
    ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
    if (f_obj % nested) then ! if computing the Newton step
-    newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:) - f_obj % f2_vec(:)) ! matches solve_linear_system
+    if (f_obj % scaling) then
+     ! assume xvec1 is already scaled on input (e.g., from LAPACK solution for nested iterations)
+     newtStepScaled = xvec1(:) - xvec0(:)/f_obj % xScale(:) 
+    else 
+     newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
+    end if
+    !f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system (step refinement needs updated total f)
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! matches solve_linear_system
+    f_obj % in_SS4HG % fOld = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
    else ! if Newton step is provided on input
     newtStepScaled(:) = xStep(:) / f_obj % xScale(:)             ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
     f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
@@ -836,9 +836,9 @@ contains
    out_SS4HG       => f_obj % out_SS4HG       &  
   &)
     call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,f_obj%aJacScaled,f_obj%rVecScaled,fScale,xScale,& ! input
-                           &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&         ! input
-                           &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                        ! input-output
-                           &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                                ! output
+                           &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&     ! input
+                           &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                    ! input-output
+                           &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                            ! output
   end associate
 
   ! check for errors in refine_Newton_step call

@@ -1064,16 +1064,16 @@ contains
     !     |--> (actually computes the convergence error of the previous iteration)
     ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
    nested_Newton % convergence       = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
-   nested_Newton % convergence_inner = 'strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+   nested_Newton % convergence_inner = 'custom-strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
    ! solver output
    call nested_Newton % solver_output('silent') ! standard output used by default 
 
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-   call nested_Newton % set_tolerance('strict',1.0e-4_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+   call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 10_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 2_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1082,12 +1082,12 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
-   nested_Newton % refinement        = .false.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement        = .false.  ! apply refine_Newton_step following outer/classical iterations --- TAKEN OUT OF SOLVER ---
    nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
 
    ! constraints 
    nested_Newton % constraints       = .false. ! apply imposeConstraints between outer/classical iterations
-   nested_Newton % constraints_inner = .false. ! apply imposeConstraints between outer/classical iterations
+   nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
 
    ! scaling
    nested_Newton % scaling           = .true.  ! apply xScale and fScale scaling factors for LAPACK   

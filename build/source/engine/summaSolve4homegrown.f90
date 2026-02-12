@@ -1031,6 +1031,9 @@ contains
   ! local
   real(rkind)                     :: fRHS(1:in_SS4HG % nState) ! RHS function for ARKODE (not used here)
   character(len=256)              :: cmessage                  ! error message of downwind routine
+  !!!! SJT: nested Newton variables
+  logical(lgt),parameter :: nested_Newton_flag=.true.          ! for branching into the nested Newton solver -- to be replaced by a model decision
+  real(rkind)            :: resVecScaled(1:in_SS4HG % nState)  ! scaled residual vector
   ! ----------------------------------------------------------------------------------------------------------
   ! initialize error control
   err=0; message='eval8summa_wrapper/'
@@ -1095,7 +1098,24 @@ contains
   end associate
 
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
- 
+!!!!!!!!!!!!!!!!!! SJT start -- case for inner iterations
+!  if (nested_Newton_flag) then
+!   if ((nested_Newton % nested).and.(nested_Newton % inner)) then
+!    ! store total non-linear function
+!    nested_Newton % f_vec(:) = resVecNew(:)
+!
+!    ! update f1: assign non-zero function values based on logical mask
+!    nested_Newton % f1_vec(:)=0._r8b
+!    nested_Newton % f1_vec(:)=merge(real(resVecNew,r8b),nested_Newton % f1_vec,nested_Newton % stateMask1)
+!
+!    ! update residual for line search
+!    resVecNew(:) = nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:) ! f2 contributions are constant during inner iterations
+!
+!    resVecScaled(:) = fScale(:) * resVecNew(:)
+!    fNew = 0.5_rkind*dot_product(resVecScaled,resVecScaled)
+!   end if
+!  end if 
+!!!!!!!!!!!!!!!!!! SJT end
  end subroutine eval8summa_wrapper
 
  ! *********************************************************************************************************

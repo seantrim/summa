@@ -92,7 +92,6 @@ contains
  subroutine nested_Newton_vector(f_obj)
   ! Newton solver
   type(f_obj_type),intent(inout) :: f_obj 
-!  real(r8b),allocatable          :: Jsave(:,:)   ! Jacobian for outer Newton step refinement
   real(r8b)    :: final_mean                     ! mean value of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
@@ -101,11 +100,6 @@ contains
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
   real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
-
-!  ! initialize arrays
-!  if (f_obj % refinement) then
-!   allocate(Jsave,mold = f_obj % Jdiff) 
-!  end if
 
   ! initialize convergence flag
   f_obj % converged = .false.
@@ -128,13 +122,6 @@ contains
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
-    !! prep for Newton step refinement of outer iterations
-    !if (f_obj % refinement) then
-    ! if (l == 0_i4b) then
-    !  Jsave(:,:) = f_obj % Jdiff(:,:)
-    ! end if
-    !end if
-
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK
     B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
@@ -143,8 +130,9 @@ contains
 
     if (f_obj % refinement_inner) then
      ! f_obj % J updated on last J1 evaluation
-     ! fOld taken from last f1 evaluatopn
-     call f_obj % apply_refinement_inner(f_obj % J,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
+     ! fOld (L2 norm for scaled f) taken from last f1 evaluatopn
+     !call f_obj % apply_refinement_inner(f_obj % J,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
+     call f_obj % apply_refinement_inner(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
@@ -174,13 +162,6 @@ contains
    end if
 
    f_obj % inner=.false.
-
-   ! apply Newton step refinement
-   !if (f_obj % refinement) then
-   ! call f_obj % apply_refinement_outer(Jsave,f_obj % xk0,B(:,1),f_obj % xkp1lp1) 
-   ! !call f_obj % apply_refinement_outer(f_obj % Jdiff,f_obj % xk0,B(:,1),f_obj % xkp1lp1) !OG 
-   ! !print *, "k,f_obj % out_SS4HG % fNew=",k,f_obj % out_SS4HG % fNew ! SJT: testing -------------- take out ------------------------
-   !end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
@@ -254,6 +235,12 @@ contains
    if (exit_flag)  return  ! set exit flag if criterion is satisfied
   else
 
+   ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
+   if ((convergence.eq.'custom-strict').or.(convergence.eq.'custom-predictive')) then
+    exit_flag = f_obj % custom_convergence()
+    if (exit_flag)  return  ! set exit flag if criterion is satisfied
+   end if
+
    do i=1,f_obj % n
     if (xk(i).ne.0._r8b) then
      R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
@@ -278,9 +265,9 @@ contains
    end if
 
    R(0)=maxval(R_vec) ! actual worst case residual for input iteration
-   if (convergence.eq.'strict') then ! strict estimate
+   if ((convergence.eq.'strict').or.(convergence.eq.'custom-strict')) then ! strict estimate
     R(1)=R(0) ! estimated residual for iteration+1
-   else if (convergence.eq.'predictive') then
+   else if ((convergence.eq.'predictive').or.(convergence.eq.'custom-predictive')) then
     if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
      R(1)=R(0) ! estimated residual for iteration+1   
     else ! compute prediction based on power function
