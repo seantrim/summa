@@ -957,6 +957,7 @@ MODULE data_types
  ! ***********************************************************************************************************
 
  type, public :: in_type_summaSolve4homegrown  ! class for intent(in) arguments in summaSolve4homegrown call
+   ! core variables
    real(rkind)              :: dt_cur                   ! intent(in): current stepsize
    real(rkind)              :: dt                       ! intent(in): entire time step for drainage pond rate
    integer(i4b)             :: iter                     ! intent(in): iteration index
@@ -970,14 +971,25 @@ MODULE data_types
    logical(lgt)             :: computeVegFlux           ! intent(in): flag to indicate if computing fluxes over vegetation
    logical(lgt)             :: scalarSolution           ! intent(in): flag to denote if implementing the scalar solution
    real(rkind)              :: fOld                     ! intent(in): old function evaluation
+   ! variables used in step refinement for nested Newton iterations
+   logical                  :: nested_Newton_flag ! intent(in): flag indicating nested Newton library use ---- to be replaced with model decision ----
+   logical                  :: nested             ! intent(in): nested iteration = .true., classical iterations = .false.
+   logical                  :: inner              ! intent(in): flag indicating if nested algorithm is in inner iteration phase 
+   logical(lgt),allocatable :: stateMask1(:)      ! intent(in): state mask for non-linear function f1
+   logical(lgt),allocatable :: stateMask2(:)      ! intent(in): state mask for non-linear function f2
   contains
    procedure :: initialize => initialize_in_summaSolve4homegrown
  end type in_type_summaSolve4homegrown
 
  type, public :: io_type_summaSolve4homegrown  ! class for intent(inout) arguments in summaSolve4homegrown call
+   ! core variables
    logical(lgt)             :: firstFluxCall            ! intent(inout): flag to indicate if we are processing the first flux call
    real(rkind)              :: xMin,xMax                ! intent(inout): brackets of the root
    integer(i4b)             :: ixSaturation             ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+   ! variables used in step refinement for nested Newton iterations
+   real(rkind) ,allocatable :: f_vec(:)      ! intent(inout): total non-linear function f (f = f1-f2)
+   real(rkind) ,allocatable :: f1_vec(:)     ! intent(inout): component non-linear function f1 (constant in outer iterations)
+   real(rkind) ,allocatable :: f2_vec(:)     ! intent(inout): component non-linear function f2 (constant in inner iterations)
   contains
    procedure :: initialize => initialize_io_summaSolve4homegrown
    procedure :: finalize   => finalize_io_summaSolve4homegrown
@@ -2339,6 +2351,7 @@ contains
   logical(lgt),intent(in) :: scalarSolution           ! intent(in): flag to denote if implementing the scalar solution
   real(rkind) ,intent(in) :: fOld                     ! intent(in): old function evaluation
 
+  ! core variables
   in_SS4NR % dt_cur         = dt_cur        
   in_SS4NR % dt             = dt            
   in_SS4NR % iter           = iter          
@@ -2351,7 +2364,12 @@ contains
   in_SS4NR % firstSubStep   = firstSubStep  
   in_SS4NR % computeVegFlux = computeVegFlux 
   in_SS4NR % scalarSolution = scalarSolution
-  in_SS4NR % fOld           = fOld            
+  in_SS4NR % fOld           = fOld
+  ! Newton step refinement variables for nested iterations
+  ! note: initialize with default values           
+  in_SS4NR % nested_Newton_flag = .false. ! --- to be replaced by model decision --- 
+  in_SS4NR % nested             = .false.
+  in_SS4NR % inner              = .false. 
  end subroutine initialize_in_summaSolve4homegrown
 
  subroutine initialize_io_summaSolve4homegrown(io_SS4NR,firstFluxCall,xMin,xMax,ixSaturation)

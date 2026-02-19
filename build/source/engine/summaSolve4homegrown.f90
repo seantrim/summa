@@ -495,14 +495,14 @@ contains
   ! --------------------------------------------------------------------------------------------------------
   ! local
   character(len=256)             :: cmessage                      ! error message of downwind routine
-  real(rkind)                    :: gradScaled(in_SS4HG % nState) ! scaled gradient
+  real(rkind)                    :: gradScaled(in_SS4HG % nState) ! scaled gradient (of line search scalar function)
   real(rkind)                    :: xInc(in_SS4HG % nState)       ! iteration increment (re-scaled to original units of the state vector)
   logical(lgt)                   :: feasible                      ! flag to denote the feasibility of the solution
   integer(i4b)                   :: iLine                         ! line search index
   integer(i4b),parameter         :: maxLineSearch=5               ! maximum number of backtracks
-  real(rkind),parameter          :: alpha=1.e-4_rkind             ! check on gradient
-  real(rkind)                    :: xLambda                       ! backtrack magnitude
-  real(rkind)                    :: xLambdaTemp                   ! temporary backtrack magnitude
+  real(rkind),parameter          :: alpha=1.e-4_rkind             ! check on gradient (line search control parameter)
+  real(rkind)                    :: xLambda                       ! backtrack magnitude (line search step size)
+  real(rkind)                    :: xLambdaTemp                   ! temporary backtrack magnitude (temporary line search step size)
   real(rkind)                    :: slopeInit                     ! initial slope
   real(rkind)                    :: rhs1,rhs2                     ! rhs used to compute the cubic
   real(rkind)                    :: aCoef,bCoef                   ! coefficients in the cubic
@@ -532,7 +532,8 @@ contains
    ! check the need to compute the line search
    if (doLineSearch) then
 
-    ! compute the gradient of the function vector
+    ! compute the gradient (gradScaled) of the line search scalar function
+    ! NOTE: function = 0.5 * dot_product(rVecScaled,rVecScaled)
     call computeGradient(ixMatrix,nState,aJacScaled,rVecScaled,gradScaled,err,cmessage)
     if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
@@ -541,7 +542,7 @@ contains
 
    end if  ! if computing the line search
 
-   ! initialize lambda
+   ! initialize lambda (line search step size)
    xLambda=1._rkind
 
    ! ***** LINE SEARCH LOOP...
@@ -551,7 +552,7 @@ contains
     ! NOTE: start with back-tracking the scaled step
     xInc(:) = xLambda*newtStepScaled(:)
 
-    ! re-scale the iteration increment
+    ! re-scale the iteration increment (descale)
     xInc(:) = xInc(:)*xScale(:)
    
     ! state vector with proposed iteration increment
@@ -581,7 +582,7 @@ contains
     end if
 
     ! check feasibility
-    if (.not.feasible) cycle ! go back and impose constraints again
+    if (.not.feasible) cycle ! go back and impose constraints again (does this do anything?)
 
     ! check convergence
     ! NOTE: some efficiency gains possible by scaling the full newton step outside the line search loop
@@ -1032,7 +1033,6 @@ contains
   real(rkind)                     :: fRHS(1:in_SS4HG % nState) ! RHS function for ARKODE (not used here)
   character(len=256)              :: cmessage                  ! error message of downwind routine
   !!!! SJT: nested Newton variables
-  logical(lgt),parameter :: nested_Newton_flag=.true.          ! for branching into the nested Newton solver -- to be replaced by a model decision
   real(rkind)            :: resVecScaled(1:in_SS4HG % nState)  ! scaled residual vector
   ! ----------------------------------------------------------------------------------------------------------
   ! initialize error control
@@ -1099,22 +1099,22 @@ contains
 
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 !!!!!!!!!!!!!!!!!! SJT start -- case for inner iterations
-!  if (nested_Newton_flag) then
-!   if ((nested_Newton % nested).and.(nested_Newton % inner)) then
-!    ! store total non-linear function
-!    nested_Newton % f_vec(:) = resVecNew(:)
-!
-!    ! update f1: assign non-zero function values based on logical mask
-!    nested_Newton % f1_vec(:)=0._r8b
-!    nested_Newton % f1_vec(:)=merge(real(resVecNew,r8b),nested_Newton % f1_vec,nested_Newton % stateMask1)
-!
-!    ! update residual for line search
-!    resVecNew(:) = nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:) ! f2 contributions are constant during inner iterations
-!
-!    resVecScaled(:) = fScale(:) * resVecNew(:)
-!    fNew = 0.5_rkind*dot_product(resVecScaled,resVecScaled)
-!   end if
-!  end if 
+  if (in_SS4HG % nested_Newton_flag) then
+   if ((in_SS4HG % nested).and.(in_SS4HG % inner)) then
+    ! store total non-linear function
+    io_SS4HG % f_vec(:) = resVecNew(:)
+
+    ! update f1: assign non-zero function values based on logical mask
+    io_SS4HG % f1_vec(:)=0._rkind
+    io_SS4HG % f1_vec(:)=merge(real(resVecNew,rkind),io_SS4HG % f1_vec,in_SS4HG % stateMask1)
+
+    ! update residual for line search
+    resVecNew(:) = io_SS4HG % f1_vec(:) - io_SS4HG % f2_vec(:) ! f2 contributions are constant during inner iterations
+
+    resVecScaled(:) = fScale(:) * resVecNew(:)
+    fNew = 0.5_rkind*dot_product(resVecScaled,resVecScaled)
+   end if
+  end if 
 !!!!!!!!!!!!!!!!!! SJT end
  end subroutine eval8summa_wrapper
 

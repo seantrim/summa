@@ -1073,7 +1073,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 2_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 1_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1155,6 +1155,15 @@ contains
     print *, "nSubset2=",nested_Newton % nSubset2 
     print *, "stateMask2=",nested_Newton % stateMask2
    end if 
+
+   ! initilize input variables for Newton step refinement
+   nested_Newton % in_SS4HG % nested_Newton_flag = nested_Newton_flag
+   nested_Newton % in_SS4HG % nested = nested_Newton % nested
+   nested_Newton % in_SS4HG % stateMask1 = nested_Newton % stateMask1 ! allocate on assignment
+   nested_Newton % in_SS4HG % stateMask2 = nested_Newton % stateMask2 ! allocate on assignment
+   allocate(nested_Newton % io_SS4HG % f_vec , mold = nested_Newton % f_vec ) ! allocate on assignment
+   allocate(nested_Newton % io_SS4HG % f1_vec, mold = nested_Newton % f1_vec) ! allocate on assignment
+   allocate(nested_Newton % io_SS4HG % f2_vec, mold = nested_Newton % f2_vec) ! allocate on assignment
 
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
    nested_Newton % f1_vec(:)=0._r8b
