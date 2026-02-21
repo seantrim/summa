@@ -780,8 +780,8 @@ contains
     f_obj % io_SS4HG % f_vec(:)  = f_obj % f_vec(:)  ! initialize function values for line search
     f_obj % io_SS4HG % f1_vec(:) = f_obj % f1_vec(:)
     f_obj % io_SS4HG % f2_vec(:) = f_obj % f2_vec(:)
-    !f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system (step refinement needs updated total f)
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! matches solve_linear_system
+    !f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! step refinement uses updated total f
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
     f_obj % in_SS4HG % fOld = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
     f_obj % in_SS4HG % inner = f_obj % inner ! which nested iteration loop?
    else ! if Newton step is provided on input
