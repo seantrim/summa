@@ -956,50 +956,54 @@ MODULE data_types
  ! Define classes used to simplify calls to the subroutines in systemSolv
  ! ***********************************************************************************************************
 
- type, public :: in_type_summaSolve4homegrown  ! class for intent(in) arguments in summaSolve4homegrown call
+ type, public :: in_type_summaSolve4homegrown     ! class for intent(in) arguments in summaSolve4homegrown call
    ! core variables
-   real(rkind)              :: dt_cur                   ! intent(in): current stepsize
-   real(rkind)              :: dt                       ! intent(in): entire time step for drainage pond rate
-   integer(i4b)             :: iter                     ! intent(in): iteration index
-   integer(i4b)             :: nSnow                    ! intent(in): number of snow layers
-   integer(i4b)             :: nSoil                    ! intent(in): number of soil layers
-   integer(i4b)             :: nLayers                  ! intent(in): total number of layers
-   integer(i4b)             :: nLeadDim                 ! intent(in): length of the leading dimension of the Jacobian matrix (nBands or nState)
-   integer(i4b)             :: nState                   ! intent(in): total number of state variables
-   integer(i4b)             :: ixMatrix                 ! intent(in): type of matrix (full or band diagonal)
-   logical(lgt)             :: firstSubStep             ! intent(in): flag to indicate if we are processing the first sub-step
-   logical(lgt)             :: computeVegFlux           ! intent(in): flag to indicate if computing fluxes over vegetation
-   logical(lgt)             :: scalarSolution           ! intent(in): flag to denote if implementing the scalar solution
-   real(rkind)              :: fOld                     ! intent(in): old function evaluation
+   real(rkind)              :: dt_cur             ! intent(in): current stepsize
+   real(rkind)              :: dt                 ! intent(in): entire time step for drainage pond rate
+   integer(i4b)             :: iter               ! intent(in): iteration index
+   integer(i4b)             :: nSnow              ! intent(in): number of snow layers
+   integer(i4b)             :: nSoil              ! intent(in): number of soil layers
+   integer(i4b)             :: nLayers            ! intent(in): total number of layers
+   integer(i4b)             :: nLeadDim           ! intent(in): length of the leading dimension of the Jacobian matrix (nBands or nState)
+   integer(i4b)             :: nState             ! intent(in): total number of state variables
+   integer(i4b)             :: ixMatrix           ! intent(in): type of matrix (full or band diagonal)
+   logical(lgt)             :: firstSubStep       ! intent(in): flag to indicate if we are processing the first sub-step
+   logical(lgt)             :: computeVegFlux     ! intent(in): flag to indicate if computing fluxes over vegetation
+   logical(lgt)             :: scalarSolution     ! intent(in): flag to denote if implementing the scalar solution
+   real(rkind)              :: fOld               ! intent(in): old function evaluation
    ! variables used in step refinement for nested Newton iterations
    logical                  :: nested_Newton_flag ! intent(in): flag indicating nested Newton library use ---- to be replaced with model decision ----
    logical                  :: nested             ! intent(in): nested iteration = .true., classical iterations = .false.
    logical                  :: inner              ! intent(in): flag indicating if nested algorithm is in inner iteration phase 
    logical(lgt),allocatable :: stateMask1(:)      ! intent(in): state mask for non-linear function f1
    logical(lgt),allocatable :: stateMask2(:)      ! intent(in): state mask for non-linear function f2
+   real(rkind) ,allocatable :: aJac1Scaled(:,:)   ! intent(in): scaled Jacobian for f1 (SUMMA storage scheme) 
+   real(rkind) ,allocatable :: aJac2Scaled(:,:)   ! intent(in): scaled Jacobian for f2 (SUMMA storage scheme)
+   real(rkind) ,allocatable :: xk0(:)             ! intent(in): guess for previous outer iteration
+   real(rkind) ,allocatable :: xkp1l(:)           ! intent(in): guess for previous inner iteration
   contains
    procedure :: initialize => initialize_in_summaSolve4homegrown
  end type in_type_summaSolve4homegrown
 
  type, public :: io_type_summaSolve4homegrown  ! class for intent(inout) arguments in summaSolve4homegrown call
    ! core variables
-   logical(lgt)             :: firstFluxCall            ! intent(inout): flag to indicate if we are processing the first flux call
-   real(rkind)              :: xMin,xMax                ! intent(inout): brackets of the root
-   integer(i4b)             :: ixSaturation             ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+   logical(lgt)             :: firstFluxCall   ! intent(inout): flag to indicate if we are processing the first flux call
+   real(rkind)              :: xMin,xMax       ! intent(inout): brackets of the root
+   integer(i4b)             :: ixSaturation    ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
    ! variables used in step refinement for nested Newton iterations
-   real(rkind) ,allocatable :: f_vec(:)      ! intent(inout): total non-linear function f (f = f1-f2)
-   real(rkind) ,allocatable :: f1_vec(:)     ! intent(inout): component non-linear function f1 (constant in outer iterations)
-   real(rkind) ,allocatable :: f2_vec(:)     ! intent(inout): component non-linear function f2 (constant in inner iterations)
+   real(rkind) ,allocatable :: f_vec(:)        ! intent(inout): total non-linear function f (f = f1-f2)
+   real(rkind) ,allocatable :: f1_vec(:)       ! intent(inout): component non-linear function f1 (constant in outer iterations)
+   real(rkind) ,allocatable :: f2_vec(:)       ! intent(inout): component non-linear function f2 (constant in inner iterations)
   contains
    procedure :: initialize => initialize_io_summaSolve4homegrown
    procedure :: finalize   => finalize_io_summaSolve4homegrown
  end type io_type_summaSolve4homegrown
 
  type, public :: out_type_summaSolve4homegrown  ! class for intent(out) arguments in summaSolve4homegrown call
-   real(rkind)              :: fNew                     ! intent(out): new function evaluation
-   logical(lgt)             :: converged                ! intent(out): convergence flag
-   integer(i4b)             :: err                      ! intent(out): error code
-   character(len=len_msg)   :: message                  ! intent(out): error message
+   real(rkind)              :: fNew             ! intent(out): new function evaluation
+   logical(lgt)             :: converged        ! intent(out): convergence flag
+   integer(i4b)             :: err              ! intent(out): error code
+   character(len=len_msg)   :: message          ! intent(out): error message
   contains
    procedure :: finalize => finalize_out_summaSolve4homegrown
  end type out_type_summaSolve4homegrown

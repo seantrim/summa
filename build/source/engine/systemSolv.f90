@@ -1156,14 +1156,18 @@ contains
     print *, "stateMask2=",nested_Newton % stateMask2
    end if 
 
-   ! initilize input variables for Newton step refinement
+   ! initialize input variables for Newton step refinement
    nested_Newton % in_SS4HG % nested_Newton_flag = nested_Newton_flag
    nested_Newton % in_SS4HG % nested = nested_Newton % nested
    nested_Newton % in_SS4HG % stateMask1 = nested_Newton % stateMask1 ! allocate on assignment
    nested_Newton % in_SS4HG % stateMask2 = nested_Newton % stateMask2 ! allocate on assignment
-   allocate(nested_Newton % io_SS4HG % f_vec , mold = nested_Newton % f_vec ) ! allocate on assignment
-   allocate(nested_Newton % io_SS4HG % f1_vec, mold = nested_Newton % f1_vec) ! allocate on assignment
-   allocate(nested_Newton % io_SS4HG % f2_vec, mold = nested_Newton % f2_vec) ! allocate on assignment
+   allocate(nested_Newton % in_SS4HG % aJac1Scaled, mold = nested_Newton % aJacScaled)
+   allocate(nested_Newton % in_SS4HG % aJac2Scaled, mold = nested_Newton % aJacScaled)
+   allocate(nested_Newton % in_SS4HG % xk0, mold = nested_Newton % xk0)
+   allocate(nested_Newton % in_SS4HG % xkp1l, mold = nested_Newton % xkp1l)
+   allocate(nested_Newton % io_SS4HG % f_vec , mold = nested_Newton % f_vec )
+   allocate(nested_Newton % io_SS4HG % f1_vec, mold = nested_Newton % f1_vec)
+   allocate(nested_Newton % io_SS4HG % f2_vec, mold = nested_Newton % f2_vec)
 
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
    nested_Newton % f1_vec(:)=0._r8b

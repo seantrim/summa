@@ -757,18 +757,77 @@ contains
 
   else ! scale arrays
 
-   ! get SUMMA Jacobian from solver Jacobian for total non-linear function f
-   if (f_obj % banded) then ! banded storage
-    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-     nBands=nrow_banded+subdiag
-     aJac(1:subdiag,1:n) = 0._rkind
-     aJac(subdiag+1:nBands,1:n) = J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+   ! * Get Scaled Jacobians *
+   if (f_obj % nested) then ! nested iterations
+
+    ! get SUMMA Jacobian from solver Jacobian for total non-linear function f1
+    if (f_obj % banded) then ! banded storage
+     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+      nBands=nrow_banded+subdiag
+      aJac(1:subdiag,1:n) = 0._rkind
+      aJac(subdiag+1:nBands,1:n) = f_obj % J1(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+     end associate
+    else ! full matrix storage
+     aJac(:,:) = f_obj % J1(:,:)
+    end if
+
+    ! Scale Jacobian for f1
+    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
+     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,f_obj % in_SS4HG % aJac1Scaled,err,cmessage) ! matches solve_linear_system
     end associate
-   else ! full matrix storage
-    aJac(:,:) = J(:,:)
+    if (err/=0) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
+     end if
+    end if
+
+    ! get SUMMA Jacobian from solver Jacobian for total non-linear function f2
+    if (f_obj % banded) then ! banded storage
+     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+      nBands=nrow_banded+subdiag
+      aJac(1:subdiag,1:n) = 0._rkind
+      aJac(subdiag+1:nBands,1:n) = f_obj % J2(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+     end associate
+    else ! full matrix storage
+     aJac(:,:) = f_obj % J2(:,:)
+    end if
+
+    ! Scale Jacobian for f2
+    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
+     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,f_obj % in_SS4HG % aJac2Scaled,err,cmessage) ! matches solve_linear_system
+    end associate
+    if (err/=0) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
+     end if
+    end if
+
+   else ! classical iterations
+
+    ! get SUMMA Jacobian from solver Jacobian for total non-linear function f
+    if (f_obj % banded) then ! banded storage
+     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+      nBands=nrow_banded+subdiag
+      aJac(1:subdiag,1:n) = 0._rkind
+      aJac(subdiag+1:nBands,1:n) = J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+     end associate
+    else ! full matrix storage
+     aJac(:,:) = J(:,:)
+    end if
+
+    ! scale Jacobian for f 
+    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
+     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,f_obj % aJacScaled,err,cmessage) ! matches solve_linear_system
+    end associate
+    if (err/=0) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
+     end if
+    end if
+
    end if
- 
-   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
+
+   ! * Get Other Scaled Variables *
    ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
    if (f_obj % nested) then ! if computing the Newton step
     if (f_obj % scaling) then
@@ -789,19 +848,6 @@ contains
     f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
    end if
 
-   associate(&
-    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)
-    nState   => f_obj % in_SS4HG % nState   , & ! number of state variables in the current subset
-    fScale   => f_obj % fScale              , & 
-    xScale   => f_obj % xScale                & 
-   &)
-    call scaleMatrices(ixMatrix,nState,aJac,fScale,xScale,f_obj % aJacScaled,err,cmessage) ! matches solve_linear_system
-   end associate
-   if (err/=0) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
-    end if
-   end if
 
   end if
 
