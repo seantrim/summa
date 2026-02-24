@@ -836,6 +836,9 @@ contains
     else 
      newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
     end if
+    f_obj % in_SS4HG % xk0 = f_obj % xk0
+    f_obj % in_SS4HG % xkp1l = f_obj % xkp1l
+    f_obj % in_SS4HG % xkp1lp1 = f_obj % xkp1lp1
     f_obj % io_SS4HG % f_vec(:)  = f_obj % f_vec(:)  ! initialize function values for line search
     f_obj % io_SS4HG % f1_vec(:) = f_obj % f1_vec(:)
     f_obj % io_SS4HG % f2_vec(:) = f_obj % f2_vec(:)

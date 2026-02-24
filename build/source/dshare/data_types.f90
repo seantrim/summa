@@ -981,6 +981,7 @@ MODULE data_types
    real(rkind) ,allocatable :: aJac2Scaled(:,:)   ! intent(in): scaled Jacobian for f2 (SUMMA storage scheme)
    real(rkind) ,allocatable :: xk0(:)             ! intent(in): guess for previous outer iteration
    real(rkind) ,allocatable :: xkp1l(:)           ! intent(in): guess for previous inner iteration
+   real(rkind) ,allocatable :: xkp1lp1(:)         ! intent(in): guess for current inner iteration
   contains
    procedure :: initialize => initialize_in_summaSolve4homegrown
  end type in_type_summaSolve4homegrown
@@ -994,6 +995,8 @@ MODULE data_types
    real(rkind) ,allocatable :: f_vec(:)        ! intent(inout): total non-linear function f (f = f1-f2)
    real(rkind) ,allocatable :: f1_vec(:)       ! intent(inout): component non-linear function f1 (constant in outer iterations)
    real(rkind) ,allocatable :: f2_vec(:)       ! intent(inout): component non-linear function f2 (constant in inner iterations)
+   real(rkind) ,allocatable :: stateVecTrialNested(:) ! intent(inout): trial total state vector containing elements for inner and outer iterations 
+   real(rkind) ,allocatable :: stateVecNewNested(:)   ! intent(inout): new total state vector containing elements for inner and outer iterations 
   contains
    procedure :: initialize => initialize_io_summaSolve4homegrown
    procedure :: finalize   => finalize_io_summaSolve4homegrown
