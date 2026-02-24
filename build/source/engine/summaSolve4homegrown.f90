@@ -1093,7 +1093,7 @@ contains
   ! initialize error control
   err=0; message='eval8summa_wrapper/'
 
-  if (.not.(in_SS4HG % nested_Newton_flag)) then ! classical Newton iterations
+  if (.not.(in_SS4HG % nested)) then ! classical Newton iterations
 
    associate(&
     dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
@@ -1158,7 +1158,7 @@ contains
 
   else ! nested iterations
 !*** Commented out because f1 and f2 need to be evaluated at different state vectors ***
-   if ((in_SS4HG % nested).and.(in_SS4HG % inner)) then
+   if (in_SS4HG % inner) then ! inner iterations
 
     associate(&
      dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
