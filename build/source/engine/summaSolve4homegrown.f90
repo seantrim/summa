@@ -1107,6 +1107,7 @@ contains
   real(rkind)            :: resVecScaled(1:in_SS4HG % nState)  ! scaled residual vector
   real(rkind)            :: stateVec1New(1:in_SS4HG % nState)  ! state vector for inner iteration component
   real(rkind)            :: stateVec2New(1:in_SS4HG % nState)  ! state vector for outer iteration component
+  logical(lgt)           :: feasible1,feasible2                ! feasibility flags inner and outer iteration components 
   ! ----------------------------------------------------------------------------------------------------------
   ! initialize error control
   err=0; message='eval8summa_wrapper/'
@@ -1189,7 +1190,7 @@ contains
      computeVegFlux => in_SS4HG % computeVegFlux ,& ! intent(in): flag to indicate if computing fluxes over vegetation
      scalarSolution => in_SS4HG % scalarSolution ,& ! intent(in): flag to denote if implementing the scalar solution
      firstFluxCall  => io_SS4HG % firstFluxCall  ,& ! intent(inout): flag to indicate if we are processing the first flux call  
-     ixSaturation   => io_SS4HG % ixSaturation    & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)    
+     ixSaturation   => io_SS4HG % ixSaturation    & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration) 
      &)
 
      ! * evaluation for inner (f1) component of line search objective function *
@@ -1231,7 +1232,7 @@ contains
                      ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
                      dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
                      ! output
-                     feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                     feasible1,               & ! intent(out):   flag to denote the feasibility of the solution
                      fluxVecNew,              & ! intent(out):   new flux vector
                      fRHS,                    & ! intent(out):   RHS function for ARKODE
                      resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
@@ -1283,7 +1284,7 @@ contains
                      ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
                      dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
                      ! output
-                     feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                     feasible2,               & ! intent(out):   flag to denote the feasibility of the solution
                      fluxVecNew,              & ! intent(out):   new flux vector
                      fRHS,                    & ! intent(out):   RHS function for ARKODE
                      resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
@@ -1303,6 +1304,9 @@ contains
 
     resVecScaled(:) = fScale(:) * resVecNew(:)
     fNew = 0.5_rkind*dot_product(resVecScaled,resVecScaled)
+
+    ! feasibility flag
+    feasible = (feasible1.and.feasible2)
    end if
   end if
  end subroutine eval8summa_wrapper
