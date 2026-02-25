@@ -98,7 +98,6 @@ contains
   case('nrgConserv'      ); get_ixdecisions=iLookDECISIONS%nrgConserv  ! choice of variable in either energy backward Euler residual or IDA state variable
   case('aquiferIni'      ); get_ixdecisions=iLookDECISIONS%aquiferIni  ! choice of full or empty aquifer at start
   case('infRateMax'      ); get_ixdecisions=iLookDECISIONS%infRateMax  ! choice of maximum infiltration rate method
-  case('surfRun_IE'      ); get_ixdecisions=iLookDECISIONS%surfRun_IE  ! choice of parameterization for infiltration excess surface runoff
   case('surfRun_SE'      ); get_ixdecisions=iLookDECISIONS%surfRun_SE  ! choice of parameterization for saturation excess surface runoff
   ! get to here if cannot find the variable
   case default
@@ -381,6 +380,14 @@ contains
   case('f_impede'                 ); get_ixParam = iLookPARAM%f_impede               ! ice impedence factor (-)
   case('soilIceScale'             ); get_ixParam = iLookPARAM%soilIceScale           ! scaling factor for depth of soil ice, used to get frozen fraction (m)
   case('soilIceCV'                ); get_ixParam = iLookPARAM%soilIceCV              ! CV of depth of soil ice, used to get frozen fraction (-)
+  ! conceptual parameters for surface runoff
+  case('FUSE_Ac_max'              ); get_ixParam = iLookPARAM%FUSE_Ac_max            ! FUSE PRMS max saturated area                            
+  case('FUSE_phi_tens'            ); get_ixParam = iLookPARAM%FUSE_phi_tens          ! FUSE PRMS tension storage fraction                      
+  case('FUSE_b'                   ); get_ixParam = iLookPARAM%FUSE_b                 ! FUSE ARNO/VIC exponent                                  
+  case('FUSE_lambda'              ); get_ixParam = iLookPARAM%FUSE_lambda            ! FUSE TOPMODEL gamma distribution lambda parameter       
+  case('FUSE_chi'                 ); get_ixParam = iLookPARAM%FUSE_chi               ! FUSE TOPMODEL gamma distribution chi    parameter       
+  case('FUSE_mu'                  ); get_ixParam = iLookPARAM%FUSE_mu                ! FUSE TOPMODEL gamma distribution mu     parameter       
+  case('FUSE_n'                   ); get_ixParam = iLookPARAM%FUSE_n                 ! FUSE TOPMODEL exponent   
   ! algorithmic control parameters
   case('minwind'                  ); get_ixParam = iLookPARAM%minwind                ! minimum wind speed (m s-1)
   case('minstep'                  ); get_ixParam = iLookPARAM%minstep                ! minimum length of the time step homegrown
@@ -416,7 +423,8 @@ contains
   case('idaMinStepSize'           ); get_ixParam = iLookPARAM%idaMinStepSize         ! minimum step size for IDA
   case('idaMaxStepSize'           ); get_ixParam = iLookPARAM%idaMaxStepSize         ! maximum step size for IDA
   case('idaMaxErrTestFail'        ); get_ixParam = iLookPARAM%idaMaxErrTestFail      ! maximum number of error test failures for IDA
-  case('idaMaxDataWindowSteps'    ); get_ixParam = iLookPARAM%idaMaxDataWindowSteps  ! maximum number of steps for IDA within one data window
+  case('idaMaxDataWindowSteps'    ); get_ixParam = iLookPARAM%idaMaxDataWindowSteps  ! maximum number of steps with event detection for IDA per data window
+  case('idaDetectEvents'          ); get_ixParam = iLookPARAM%idaDetectEvents        ! flag to turn on event detection in IDA, 0=off, 1=on
   case('zmin'                     ); get_ixParam = iLookPARAM%zmin                   ! minimum layer depth (m)
   case('zmax'                     ); get_ixParam = iLookPARAM%zmax                   ! maximum layer depth (m)
   case('zminLayer1'               ); get_ixParam = iLookPARAM%zminLayer1             ! minimum layer depth for the 1st (top) layer (m)
@@ -431,15 +439,7 @@ contains
   case('zmaxLayer1_upper'         ); get_ixParam = iLookPARAM%zmaxLayer1_upper       ! maximum layer depth for the 1st (top) layer when > 1 layer (m)
   case('zmaxLayer2_upper'         ); get_ixParam = iLookPARAM%zmaxLayer2_upper       ! maximum layer depth for the 2nd layer when > 2 layers (m)
   case('zmaxLayer3_upper'         ); get_ixParam = iLookPARAM%zmaxLayer3_upper       ! maximum layer depth for the 3rd layer when > 3 layers (m)
-  case('zmaxLayer4_upper'         ); get_ixParam = iLookPARAM%zmaxLayer4_upper       ! maximum layer depth for the 4th layer when > 4 layers (m)
-  ! FUSE surface runoff
-  case('FUSE_Ac_max  '            ); get_ixParam = iLookPARAM%FUSE_Ac_max            ! FUSE PRMS max saturated area                            
-  case('FUSE_phi_tens'            ); get_ixParam = iLookPARAM%FUSE_phi_tens          ! FUSE PRMS tension storage fraction                      
-  case('FUSE_b       '            ); get_ixParam = iLookPARAM%FUSE_b                 ! FUSE ARNO/VIC exponent                                  
-  case('FUSE_lambda  '            ); get_ixParam = iLookPARAM%FUSE_lambda            ! FUSE TOPMODEL gamma distribution lambda parameter       
-  case('FUSE_chi     '            ); get_ixParam = iLookPARAM%FUSE_chi               ! FUSE TOPMODEL gamma distribution chi    parameter       
-  case('FUSE_mu      '            ); get_ixParam = iLookPARAM%FUSE_mu                ! FUSE TOPMODEL gamma distribution mu     parameter       
-  case('FUSE_n       '            ); get_ixParam = iLookPARAM%FUSE_n                 ! FUSE TOPMODEL exponent                                  
+  case('zmaxLayer4_upper'         ); get_ixParam = iLookPARAM%zmaxLayer4_upper       ! maximum layer depth for the 4th layer when > 4 layers (m)                              
   ! get to here if cannot find the variable
   case default
    get_ixParam = integerMissing
@@ -589,7 +589,8 @@ contains
   case('mLayerPoreSpace'                ); get_ixDiag = iLookDIAG%mLayerPoreSpace                  ! total pore space in each snow layer (-)
   case('mLayerMeltFreeze'               ); get_ixDiag = iLookDIAG%mLayerMeltFreeze                 ! ice content change from melt/freeze in each layer (kg m-3)
   ! soil hydrology
-  case('scalarInfilArea'                ); get_ixDiag = iLookDIAG%scalarInfilArea                  ! fraction of unfrozen area where water can infiltrate (-)
+  case('scalarInfilArea'                ); get_ixDiag = iLookDIAG%scalarInfilArea                  ! fraction of area where water can infiltrate, may be frozen (-)
+  case('scalarSaturatedArea'            ); get_ixDiag = iLookDIAG%scalarSaturatedArea              ! fraction of area that is considered saturated (-)
   case('scalarFrozenArea'               ); get_ixDiag = iLookDIAG%scalarFrozenArea                 ! fraction of area that is considered impermeable due to soil ice (-)
   case('scalarSoilControl'              ); get_ixDiag = iLookDIAG%scalarSoilControl                ! soil control on infiltration for derivative
   case('mLayerVolFracAir'               ); get_ixDiag = iLookDIAG%mLayerVolFracAir                 ! volumetric fraction of air in each layer (-)

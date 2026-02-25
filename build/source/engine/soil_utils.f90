@@ -125,8 +125,8 @@ subroutine liquidHead(&
   real(rkind),intent(out) ,optional :: dPsiLiq_dPsi0                             ! derivative in the liquid water matric potential w.r.t. the total water matric potential (-)
   real(rkind),intent(out) ,optional :: dPsiLiq_dTemp                             ! derivative in the liquid water matric potential w.r.t. temperature (m K-1)
   ! output: error control
-  integer(i4b),intent(out)       :: err                                       ! error code
-  character(*),intent(out)       :: message                                   ! error message
+  integer(i4b),intent(out)          :: err                                       ! error code
+  character(*),intent(out)          :: message                                   ! error message
   ! local
   real(rkind)                       :: xNum,xDen                                 ! temporary variables (numeratir, denominator)
   real(rkind)                       :: effSat                                    ! effective saturation (-)
@@ -155,7 +155,7 @@ subroutine liquidHead(&
 
     ! compute derivative in liquid water matric potential w.r.t. effective saturation (m)
     if(present(dPsiLiq_dPsi0).or.present(dPsiLiq_dTemp))then
-    dPsiLiq_dEffSat = dPsi_dTheta(effSat,vGn_alpha,0._rkind,1._rkind,vGn_n,vGn_m)
+      dPsiLiq_dEffSat = dPsi_dTheta(effSat,vGn_alpha,0._rkind,1._rkind,vGn_n,vGn_m)
     endif
 
     ! -----
@@ -163,17 +163,14 @@ subroutine liquidHead(&
     ! ----------------------------------------------------------------------------------------------------
 
     ! check if the derivative is desired
-    if(present(dPsiLiq_dTemp))then
-
-    ! (check required input derivative is present)
-    if(.not.present(dVolTot_dPsi0))then
-      message=trim(message)//'dVolTot_dPsi0 argument is missing'
-      err=20; return
-    endif
-
-    ! (compute derivative in the liquid water matric potential w.r.t. the total water matric potential)
-    dPsiLiq_dPsi0 = dVolTot_dPsi0*dPsiLiq_dEffSat*xNum/(xDen**2_i4b)
-
+    if(present(dPsiLiq_dPsi0))then
+      ! (check required input derivative is present)
+      if(.not.present(dVolTot_dPsi0))then
+        message=trim(message)//'dVolTot_dPsi0 argument is missing'
+        err=20; return
+      endif
+      ! (compute derivative in the liquid water matric potential w.r.t. the total water matric potential)
+      dPsiLiq_dPsi0 = dVolTot_dPsi0*dPsiLiq_dEffSat*xNum/(xDen**2_i4b)
     endif  ! if dPsiLiq_dTemp is desired
 
     ! -----
@@ -182,23 +179,20 @@ subroutine liquidHead(&
 
     ! check if the derivative is desired
     if(present(dPsiLiq_dTemp))then
-
-    ! (check required input derivative is present)
-    if(.not.present(dTheta_dT))then
-      message=trim(message)//'dTheta_dT argument is missing'
-      err=20; return
-    endif
-
-    ! (compute the derivative in the liquid water matric potential w.r.t. temperature)
-    dEffSat_dTemp = -dTheta_dT*xNum/(xDen**2_i4b) + dTheta_dT/xDen
-    dPsiLiq_dTemp = dPsiLiq_dEffSat*dEffSat_dTemp
-
+      ! (check required input derivative is present)
+      if(.not.present(dTheta_dT))then
+        message=trim(message)//'dTheta_dT argument is missing'
+        err=20; return
+      endif
+      ! (compute the derivative in the liquid water matric potential w.r.t. temperature)
+      dEffSat_dTemp = -dTheta_dT*xNum/(xDen**2_i4b) + dTheta_dT/xDen
+      dPsiLiq_dTemp = dPsiLiq_dEffSat*dEffSat_dTemp
     endif  ! if dPsiLiq_dTemp is desired
 
   ! ** unfrozen soil
   else   ! (no ice)
     matricHeadLiq = matricHeadTotal
-    if(present(dPsiLiq_dTemp)) dPsiLiq_dPsi0 = 1._rkind  ! derivative=1 because values are identical
+    if(present(dPsiLiq_dPsi0)) dPsiLiq_dPsi0 = 1._rkind  ! derivative=1 because values are identical
     if(present(dPsiLiq_dTemp)) dPsiLiq_dTemp = 0._rkind  ! derivative=0 because no impact of temperature for unfrozen conditions
   end if  ! (if ice exists)
 
@@ -843,6 +837,7 @@ function LogSumExp(alpha,x,err) result(LSE)
 
   ! use quadruple precision variables to prevent over/underflow
   alpha_qp = real(alpha,real128)
+  allocate(x_qp(size(x)))
   x_qp     = real(x,real128)
 
   ! shift value to improve numerical stability
@@ -887,11 +882,13 @@ function SoftArgMax(alpha,x) result(SAM)
 
   ! use quadruple precision variables to prevent over/underflow
   alpha_qp = real(alpha,real128)
+  allocate(x_qp(size(x)))
   x_qp     = real(x,real128)
 
   ! shift value to improve numerical stability
   x_star = maxval(abs(x_qp))
 
+  allocate(SAM_qp(size(x)))
   SAM_qp = exp(alpha_qp*(x_qp-x_star)) / sum(exp(alpha_qp*(x_qp-x_star)))
   SAM = real(SAM_qp,rkind)
 

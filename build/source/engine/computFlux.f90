@@ -273,7 +273,7 @@ subroutine computFlux(&
         call zeroBaseflowFluxes
       else ! compute the baseflow flux for topmodel-ish shallow groundwater
         call initialize_groundwatr; if(err/=0)then; return; endif
-        call groundwatr(in_groundwatr,attr_data,mpar_data,prog_data,diag_data,flux_data,io_groundwatr,out_groundwatr)
+        call groundwatr(in_groundwatr,attr_data,mpar_data,prog_data,flux_data,io_groundwatr,out_groundwatr)
         call finalize_groundwatr;   if(err/=0)then; return; endif
       end if
       call computeBaseflowRunoff ! compute total baseflow from soil and runoff

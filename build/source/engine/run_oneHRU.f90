@@ -146,7 +146,6 @@ contains
 
  ! local variables
  character(len=256)                   :: cmessage            ! error message
- real(rkind)          , allocatable   :: zSoilReverseSign(:) ! height at bottom of each soil layer, negative downwards (m)
 
  ! initialize error control
  err=0; write(message, '(A21,I0,A10,I0,A2)' ) 'run_oneHRU (hru nc = ',hru_nc ,', hruId = ',hruId,')/'
@@ -162,30 +161,14 @@ contains
    return
  endif
 
- ! get height at bottom of each soil layer, negative downwards (used in Noah MP)
- allocate(zSoilReverseSign(nSoil),stat=err)
- if(err/=0)then
-  message=trim(message)//'problem allocating space for zSoilReverseSign'
-  err=20; return
- endif
- zSoilReverseSign(:) = -progData%var(iLookPROG%iLayerHeight)%dat(nSnow+1:nLayers)
-
  ! populate parameters in Noah-MP modules
  ! Passing a maxSoilLayer in order to pass the check for NROOT, that is done to avoid making any changes to Noah-MP code.
  !  --> NROOT from Noah-MP veg tables (as read here) is not used in SUMMA
  call REDPRM(typeData%var(iLookTYPE%vegTypeIndex),      & ! vegetation type index
              typeData%var(iLookTYPE%soilTypeIndex),     & ! soil type
              typeData%var(iLookTYPE%slopeTypeIndex),    & ! slope type index
-             zSoilReverseSign,                          & ! * not used: height at bottom of each layer [NOTE: negative] (m)
              maxSoilLayers,                             & ! number of soil layers
              urbanVegCategory)                            ! vegetation category for urban areas
-
- ! deallocate height at bottom of each soil layer(used in Noah MP)
- deallocate(zSoilReverseSign,stat=err)
- if(err/=0)then
-  message=trim(message)//'problem deallocating space for zSoilReverseSign'
-  err=20; return
- endif
 
  ! overwrite the minimum resistance
  if(overwriteRSMIN) RSMIN = mparData%var(iLookPARAM%minStomatalResistance)%dat(1)

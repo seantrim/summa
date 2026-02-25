@@ -170,7 +170,6 @@ subroutine T2L_lookup_soil(nSoil,                         &  ! intent(in):    nu
   real(rkind),dimension(nLook)  :: xTemp                ! temporary vector
   real(rkind)                   :: xIncr                ! temporary increment
   real(rkind)                   :: T_incr               ! temperature increment
-  real(rkind)                   :: dL                   ! derivative of integral with temperature at T_test
   integer(i4b)                  :: iVar                 ! loop through variables
   integer(i4b)                  :: iSoil                ! loop through soil layers
   integer(i4b)                  :: iLook                ! loop through lookup table
@@ -1223,7 +1222,7 @@ subroutine enthalpy2T_soil(&
     if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
     T = T_out
 
-  ! compute Jacobian terms
+    ! compute Jacobian terms
     if(computJac)then
       ! NOTE: here fLiq is the total liquid fraction, not fraction of water fraction that is liquid
       xConst       = LH_fus/(gravity*Tfreeze)        ! m K-1 (NOTE: J = kg m2 s-2)

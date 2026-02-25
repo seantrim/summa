@@ -340,7 +340,6 @@ end subroutine computHeatCapAnalytic
 ! **********************************************************************************************************
 subroutine computCm(&
                       ! input: state variables
-                      canopyDepth,             & ! intent(in):  depth of the vegetation canopy (m)
                       scalarCanopyTemp,        & ! intent(in):  value of canopy temperature (K)
                       mLayerTemp,              & ! intent(in):  vector of temperature (K)
                       mLayerMatricHead,        & ! intent(in):  vector of total water matric potential (-)
@@ -362,7 +361,6 @@ subroutine computCm(&
   USE soil_utils_module,only:crit_soilT     ! compute critical temperature below which ice exists (soil)
   ! --------------------------------------------------------------------------------------------------------------------------------------
   ! input: state variables
-  real(rkind),intent(in)               :: canopyDepth            ! depth of the vegetation canopy (m)
   real(rkind),intent(in)               :: scalarCanopyTemp       ! value of canopy temperature (K)
   real(rkind),intent(in)               :: mLayerTemp(:)          ! vector of temperature (K)
   real(rkind),intent(in)               :: mLayerMatricHead(:)    ! vector of total water matric potential (-)
