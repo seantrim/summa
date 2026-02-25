@@ -514,8 +514,6 @@ contains
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
   real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)       ! search increment vector (all elements)
-  !real(rkind)                    :: stateVecTrialNested(2 * in_SS4HG % nState)       ! search increment vector (all elements)
-  !real(rkind)                    :: stateVecNewNested(2 * in_SS4HG % nState)       ! search increment vector (all elements)
   ! --------------------------------------------------------------------------------------------------------
   associate(&
    ! intent(in) variables
@@ -558,7 +556,7 @@ contains
       io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
       p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
       p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
-      p(:) = p(:) / xScale(:) ! scale     
+      p(:) = p(:) / xScale(:) ! scale
  
       ! compute the initial slope
       slopeInit = dot_product(gradScaledNested,p)
@@ -589,6 +587,7 @@ contains
    ! ***** LINE SEARCH LOOP...
    lineSearch: do iLine=1,maxLineSearch  ! try to refine the function by shrinking the step size
 
+    ! compute proposed state vector
     if (in_SS4HG % nested) then ! nested Newton iterations
       ! back-track along the search direction
       ! NOTE: start with back-tracking the scaled step
@@ -613,11 +612,30 @@ contains
 
     ! impose solution constraints adjusting state vector and iteration increment
     ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
-    call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,stateVecNew,stateVecTrial,nState,nSoil,nSnow,cmessage,err)
-    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
-    xInc = stateVecNew - stateVecTrial
+    if (in_SS4HG % nested) then ! nested Newton iterations
+      ! apply constraints for inner Newton step
+      call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
+                            &io_SS4HG % stateVecNewNested(1:nState),io_SS4HG % stateVecTrialNested(1:nState),&
+                            &nState,nSoil,nSnow,cmessage,err)
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
-    ! compute the residual vector and function
+      ! apply constraints for outer Newton step
+      call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
+                            &io_SS4HG % stateVecNewNested(nState+1:2*nState),io_SS4HG % stateVecTrialNested(nState+1:2*nState),&
+                            &nState,nSoil,nSnow,cmessage,err)
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+
+      ! update the proposed iteration increment based on constrained stateVecNew
+      xIncNested(:) = io_SS4HG % stateVecNewNested(:) - io_SS4HG % stateVecTrialNested(:) ! ------- may not be needed -------
+    else ! classical Newton iterations
+      ! impose solution constraints adjusting state vector and iteration increment
+      ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
+      call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,stateVecNew,stateVecTrial,nState,nSoil,nSnow,cmessage,err)
+      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+      xInc = stateVecNew - stateVecTrial
+    end if   
+
+    ! compute the residual vector and objective function
     ! NOTE: This calls eval8summa in a wrapper subroutine
     call eval8summa_wrapper(stateVecNew,fScale,in_SS4HG,model_decisions,&
                            &lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&
