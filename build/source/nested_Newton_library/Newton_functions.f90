@@ -760,7 +760,7 @@ contains
    ! * Get Scaled Jacobians *
    if (f_obj % nested) then ! nested iterations
 
-    ! get SUMMA Jacobian from solver Jacobian for total non-linear function f1
+    ! get SUMMA Jacobian from solver Jacobian for non-linear function f1
     if (f_obj % banded) then ! banded storage
      associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
       nBands=nrow_banded+subdiag
@@ -781,7 +781,7 @@ contains
      end if
     end if
 
-    ! get SUMMA Jacobian from solver Jacobian for total non-linear function f2
+    ! get SUMMA Jacobian from solver Jacobian for non-linear function f2
     if (f_obj % banded) then ! banded storage
      associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
       nBands=nrow_banded+subdiag
@@ -850,7 +850,6 @@ contains
     newtStepScaled(:) = xStep(:) / f_obj % xScale(:)             ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
     f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
    end if
-
 
   end if
 

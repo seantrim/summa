@@ -656,15 +656,42 @@ contains
     if (.not.feasible) cycle ! go back and impose constraints again (does this do anything?)
 
     ! check convergence
-    ! NOTE: some efficiency gains possible by scaling the full newton step outside the line search loop
-    converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,newtStepScaled*xScale,stateVecNew,out_SS4HG)
-    if (converged) return
+    if (in_SS4HG % nested) then ! nested Newton iterations
+      ! inner iteration component
+      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,&
+                & p(1:nState)*xScale(:),io_SS4HG % stateVecNewNested(1:nState),out_SS4HG)
+      if (converged) then ! if converged, accept inner iteration solution
+        stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState)
+        return
+      end if
+
+      ! outer iteration component
+      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,&
+                & p(nState+1:2*nState)*xScale(:),io_SS4HG % stateVecNewNested(nState+1:2*nState),out_SS4HG)
+      if (converged) then ! if converged, accept outer iteration solution
+        stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState)
+        return
+      end if
+    else ! classical Newton iterations
+      ! NOTE: some efficiency gains possible by scaling the full newton step outside the line search loop
+      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,newtStepScaled*xScale,stateVecNew,out_SS4HG)
+      if (converged) return
+    end if
 
     ! early return if not computing the line search
     if (.not.doLineSearch) return
 
-    ! check if the function is accepted
-    if (fNew < fOld + alpha*slopeInit*xLambda) return
+    ! check if the objective function is accepted using the Armijo-Goldstein Criterion
+    if (in_SS4HG % nested) then ! nested Newton iterations
+      if (fNew < fOld + alpha*slopeInit*xLambda) then
+        stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution
+
+        !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
+        return
+      end if
+    else ! classical Newton iterations
+      if (fNew < fOld + alpha*slopeInit*xLambda) return
+    end if
 
     ! ***
     ! *** IF GET TO HERE WE BACKTRACK
@@ -1176,8 +1203,6 @@ contains
    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
   else ! nested iterations
-!*** Commented out because f1 and f2 need to be evaluated at different state vectors ***
-   if (in_SS4HG % inner) then ! inner iterations
 
     associate(&
      dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
@@ -1307,7 +1332,6 @@ contains
 
     ! feasibility flag
     feasible = (feasible1.and.feasible2)
-   end if
   end if
  end subroutine eval8summa_wrapper
 
