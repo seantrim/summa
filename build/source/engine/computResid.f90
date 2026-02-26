@@ -329,10 +329,11 @@ subroutine computResid(&
         !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow)&
         !                            & - mLayerCompress(iLayer)
         ! note: mLayerCompress = fRHS * mLayerdPsi_dTheta* dCompress_dPsi
-        ! isolating fRHS: 
-        fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )&
-                                    & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) )&
-                                    & / (1._rkind + mLayerdPsi_dTheta(iLayer) * dCompress_dPsi(iLayer))
+        ! isolating fRHS: --------- SJT: FIX THIS for fRHS (indexing problem) ----------------------------------------- 
+        !fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )&
+        !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) )&
+        !                            & / (1._rkind + mLayerdPsi_dTheta(iLayer) * dCompress_dPsi(iLayer))
+        fRHS( ixSnowSoilHyd(iLayer) ) = 0._rkind !! SJT: temporary value that needs to be fixed
         rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
                                     & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
       end do 

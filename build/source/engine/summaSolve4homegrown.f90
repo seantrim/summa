@@ -556,7 +556,8 @@ contains
       io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
       p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
       p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
-      p(:) = p(:) / xScale(:) ! scale
+      p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
+      p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
  
       ! compute the initial slope
       slopeInit = dot_product(gradScaledNested,p)
@@ -594,7 +595,8 @@ contains
       xIncNested(:) = xLambda*p(:)
 
       ! re-scale the iteration increment (descale)
-      xIncNested(:) = xIncNested(:)*xScale(:)
+      xIncNested(1:nState)          = xIncNested(1:nState)*xScale(:)          ! inner iteration component
+      xIncNested(nState+1:2*nState) = xIncNested(nState+1:2*nState)*xScale(:) ! outer iteration component
 
       ! state vector with proposed iteration increment
       io_SS4HG % stateVecNewNested(:) = io_SS4HG % stateVecTrialNested(:) + xIncNested(:)
