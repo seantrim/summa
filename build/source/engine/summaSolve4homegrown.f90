@@ -578,6 +578,15 @@ contains
 
       ! compute the initial slope
       slopeInit = dot_product(gradScaled,newtStepScaled)
+
+      ! SJT: testing the addition of an initial slope check --- not originally present
+      ! check that initial slope is negative (needed to reduce the line search objective function)
+      if (slopeInit >= 0._rkind) then
+       cmessage="slopeInit is non-negative"
+       message=trim(message)//trim(cmessage)
+       err = 20 ! non-recoverable error
+       return
+      end if
     end if
 
    end if  ! if computing the line search
@@ -685,10 +694,9 @@ contains
 
     ! check if the objective function is accepted using the Armijo-Goldstein Criterion
     if (in_SS4HG % nested) then ! nested Newton iterations
+      stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution
+      !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
       if (fNew < fOld + alpha*slopeInit*xLambda) then
-        stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution
-
-        !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
         return
       end if
     else ! classical Newton iterations
