@@ -412,6 +412,7 @@ contains
                                &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
                                &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
                                &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,out_LSR)                            ! output
+      !stop !!!!!!!!!!! SJT: debug --- take out
       call out_LSR % finalize(fNew,converged,err,cmessage)
      case(ixTrustRegion)
       call in_TRR % initialize(doRefine,fOld)
@@ -429,6 +430,7 @@ contains
                               &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
                               &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
                               &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,out_LSR)                            ! output
+     !stop !!!!!!!!!!! SJT: debug --- take out
      call out_LSR % finalize(fNew,converged,err,cmessage)
     end if
  
@@ -513,7 +515,10 @@ contains
   real(rkind)                    :: grad2Scaled(in_SS4HG % nState)       ! scaled gradient (of line search scalar function)
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
-  real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)       ! search increment vector (all elements)
+  real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)    ! search increment vector (all elements)
+  real(rkind)                    :: stateVecNew1(1:in_SS4HG % nstate)    ! new state vector for f1 input
+  real(rkind)                    :: stateVecNew2(1:in_SS4HG % nstate)    ! new state vector for f2 input
+  logical(lgt),parameter         :: debug_output=.true. ! for optional debug output
   ! --------------------------------------------------------------------------------------------------------
   associate(&
    ! intent(in) variables
@@ -561,15 +566,6 @@ contains
  
       ! compute the initial slope
       slopeInit = dot_product(gradScaledNested,p)
-
-      ! check that initial slope is negative (needed to reduce the line search objective function)
-      if (slopeInit >= 0._rkind) then
-       cmessage="slopeInit is non-negative"
-       message=trim(message)//trim(cmessage)
-       err = 20 ! non-recoverable error
-       return
-      end if
-
     else ! classical Newton iterations
       ! compute the gradient (gradScaled) of the line search scalar objective function
       ! NOTE: function = 0.5 * dot_product(rVecScaled,rVecScaled)
@@ -578,15 +574,23 @@ contains
 
       ! compute the initial slope
       slopeInit = dot_product(gradScaled,newtStepScaled)
+    end if
 
-      ! SJT: testing the addition of an initial slope check --- not originally present
-      ! check that initial slope is negative (needed to reduce the line search objective function)
-      if (slopeInit >= 0._rkind) then
-       cmessage="slopeInit is non-negative"
-       message=trim(message)//trim(cmessage)
-       err = 20 ! non-recoverable error
-       return
-      end if
+    ! debug output
+    if (debug_output) then
+      print *, "Line Search:"
+      print *, "nested=",in_SS4HG % nested
+      print *, "slopeInit=",slopeInit
+    end if
+
+    ! SJT: testing the addition of an initial slope check --- not originally present
+    ! check that initial slope is negative (needed to reduce the line search objective function)
+    if (slopeInit >= 0._rkind) then
+     print *, "slopeInit=",slopeInit
+     cmessage="slopeInit is non-negative"
+     message=trim(message)//trim(cmessage)
+     err = 20 ! non-recoverable error
+     return
     end if
 
    end if  ! if computing the line search
@@ -609,6 +613,8 @@ contains
 
       ! state vector with proposed iteration increment
       io_SS4HG % stateVecNewNested(:) = io_SS4HG % stateVecTrialNested(:) + xIncNested(:)
+
+      stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution --- assignement may not be required here
     else ! classical Newton iterations
       ! back-track along the search direction
       ! NOTE: start with back-tracking the scaled step
@@ -621,23 +627,40 @@ contains
       stateVecNew = stateVecTrial + xInc
     end if   
 
+    ! debug
+    if (debug_output) then
+      print *, "before constraints:"
+      print *, "sum(stateVecNew)=",sum(stateVecNew)
+    end if
+
     ! impose solution constraints adjusting state vector and iteration increment
     ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
     if (in_SS4HG % nested) then ! nested Newton iterations
       ! apply constraints for inner Newton step
+      stateVecNew1(:) = io_SS4HG % stateVecNewNested(1:nState) ! ----------------------- may be able to use stateVecNewNested directly, avoiding data transfers
       call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
-                            &io_SS4HG % stateVecNewNested(1:nState),io_SS4HG % stateVecTrialNested(1:nState),&
+                            &stateVecNew1,io_SS4HG % stateVecTrialNested(1:nState),&
                             &nState,nSoil,nSnow,cmessage,err)
+      io_SS4HG % stateVecNewNested(1:nState) = stateVecNew1(:)
       if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
       ! apply constraints for outer Newton step
+      stateVecNew2(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState)
       call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
-                            &io_SS4HG % stateVecNewNested(nState+1:2*nState),io_SS4HG % stateVecTrialNested(nState+1:2*nState),&
+                            &stateVecNew2,io_SS4HG % stateVecTrialNested(nState+1:2*nState),&
                             &nState,nSoil,nSnow,cmessage,err)
+      io_SS4HG % stateVecNewNested(nState+1:2*nState) = stateVecNew2(:)
       if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
       ! update the proposed iteration increment based on constrained stateVecNew
       xIncNested(:) = io_SS4HG % stateVecNewNested(:) - io_SS4HG % stateVecTrialNested(:) ! ------- may not be needed -------
+
+      ! update stateVecNew for nested Newton case
+      if (in_SS4HG % nested) then ! nested Newton iterations
+        stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution
+        !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
+      end if
+
     else ! classical Newton iterations
       ! impose solution constraints adjusting state vector and iteration increment
       ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
@@ -646,6 +669,12 @@ contains
       xInc = stateVecNew - stateVecTrial
     end if   
 
+    ! debug
+    if (debug_output) then
+      print *, "after constraints:"
+      print *, "sum(stateVecNew)=",sum(stateVecNew)
+    end if
+
     ! compute the residual vector and objective function
     ! NOTE: This calls eval8summa in a wrapper subroutine
     call eval8summa_wrapper(stateVecNew,fScale,in_SS4HG,model_decisions,&
@@ -653,6 +682,18 @@ contains
                            &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&
                            &fluxVecNew,resSinkNew,resVecNew,fNew,feasible,err,cmessage)
     if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+
+    ! debug
+    if (debug_output) then
+      print *, 'iLine, xLambda                 = ', iLine, xLambda
+      print *, 'fOld                           = ', fOld
+      print *, 'fNew                           = ', fNew
+      print *, 'fOld + alpha*slopeInit*xLambda = ', fOld + alpha*slopeInit*xLambda
+      print *, 'sum(resVecNew) = ', sum(resVecNew)
+      print *, 'feasible = ',feasible
+      !print *, 'xInc                           = ', xInc(min(iJac1,nState):min(iJac2,nState))
+      !stop
+    end if
 
     ! check line search
     if (globalPrintFlag) then
@@ -693,15 +734,7 @@ contains
     if (.not.doLineSearch) return
 
     ! check if the objective function is accepted using the Armijo-Goldstein Criterion
-    if (in_SS4HG % nested) then ! nested Newton iterations
-      stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution
-      !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
-      if (fNew < fOld + alpha*slopeInit*xLambda) then
-        return
-      end if
-    else ! classical Newton iterations
-      if (fNew < fOld + alpha*slopeInit*xLambda) return
-    end if
+    if (fNew < fOld + alpha*slopeInit*xLambda) return
 
     ! ***
     ! *** IF GET TO HERE WE BACKTRACK
@@ -1279,6 +1312,7 @@ contains
      ! update f1: assign non-zero function values based on logical mask
      io_SS4HG % f1_vec(:)=0._rkind
      io_SS4HG % f1_vec(:)=merge(real(resVecNew,rkind),io_SS4HG % f1_vec,in_SS4HG % stateMask1)
+     !print *, "eval8wrap 1:",sum(resVecNew)
 
      ! * evaluation for outer (f2) component of line search objective function *
      stateVec2New(1:nState) = io_SS4HG % stateVecNewNested(nState+1:2*nState) 
@@ -1330,7 +1364,8 @@ contains
 
      ! update f1: assign non-zero function values based on logical mask
      io_SS4HG % f2_vec(:)=0._rkind
-     io_SS4HG % f2_vec(:)=merge(real(resVecNew,rkind),io_SS4HG % f2_vec,in_SS4HG % stateMask2)
+     io_SS4HG % f2_vec(:)=merge(-real(resVecNew,rkind),io_SS4HG % f2_vec,in_SS4HG % stateMask2) ! negative sign so that f = f1-f2
+     !print *, "eval8wrap 2:",sum(resVecNew)
     end associate
 
     ! update residual for line search
