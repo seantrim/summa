@@ -903,7 +903,7 @@ contains
   ! store refined guess
   xvec1(:) = stateVecNew(:)
 
-  print *, "f_obj % out_SS4HG % converged = ",f_obj % out_SS4HG % converged
+  !print *, "f_obj % out_SS4HG % converged = ",f_obj % out_SS4HG % converged
   !stop ! ********************************************** DEBUG --- take out ******************************************************
  end subroutine SUMMA_refine_Newton_step
 
@@ -973,7 +973,7 @@ contains
  function SUMMA_checkConv(f_obj) result(converged)
   ! ** interface for SUMMA's checkConv subroutine **
   ! input
-  class(f_obj_type),intent(in)   :: f_obj
+  class(f_obj_type),intent(inout) :: f_obj
 
   ! output
   logical :: converged

@@ -998,6 +998,8 @@ MODULE data_types
    real(rkind) ,allocatable :: f2_vec(:)       ! intent(inout): component non-linear function f2 (constant in inner iterations)
    real(rkind) ,allocatable :: stateVecTrialNested(:) ! intent(inout): trial total state vector containing elements for inner and outer iterations 
    real(rkind) ,allocatable :: stateVecNewNested(:)   ! intent(inout): new total state vector containing elements for inner and outer iterations 
+   real(rkind) ,allocatable :: resVecNew_inner(:)   ! intent(inout): new residual vector for inner iteration line search solution 
+   real(rkind) ,allocatable :: resVecNew_outer(:)   ! intent(inout): new residual vector for outer iteration line search solution 
   contains
    procedure :: initialize => initialize_io_summaSolve4homegrown
    procedure :: finalize   => finalize_io_summaSolve4homegrown

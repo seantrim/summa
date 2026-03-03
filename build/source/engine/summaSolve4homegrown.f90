@@ -585,13 +585,13 @@ contains
 
     ! SJT: testing the addition of an initial slope check --- not originally present
     ! check that initial slope is negative (needed to reduce the line search objective function)
-    if (slopeInit >= 0._rkind) then
-     print *, "slopeInit=",slopeInit
-     cmessage="slopeInit is non-negative"
-     message=trim(message)//trim(cmessage)
-     err = 20 ! non-recoverable error
-     return
-    end if
+    !if (slopeInit >= 0._rkind) then
+    ! print *, "slopeInit=",slopeInit
+    ! cmessage="slopeInit is non-negative"
+    ! message=trim(message)//trim(cmessage)
+    ! err = 20 ! non-recoverable error
+    ! return
+    !end if
 
    end if  ! if computing the line search
 
@@ -710,16 +710,22 @@ contains
     ! check convergence
     if (in_SS4HG % nested) then ! nested Newton iterations
       ! inner iteration component
-      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,&
+      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,io_SS4HG % resVecNew_inner,&
                 & p(1:nState)*xScale(:),io_SS4HG % stateVecNewNested(1:nState),out_SS4HG)
+      if (debug_output) then
+        print *, "converged = ", out_SS4HG % converged
+      end if
       if (converged) then ! if converged, accept inner iteration solution
         stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState)
         return
       end if
 
       ! outer iteration component
-      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,&
+      converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,io_SS4HG % resVecNew_outer,&
                 & p(nState+1:2*nState)*xScale(:),io_SS4HG % stateVecNewNested(nState+1:2*nState),out_SS4HG)
+      if (debug_output) then
+        print *, "converged = ", out_SS4HG % converged
+      end if
       if (converged) then ! if converged, accept outer iteration solution
         stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState)
         return
@@ -727,6 +733,11 @@ contains
     else ! classical Newton iterations
       ! NOTE: some efficiency gains possible by scaling the full newton step outside the line search loop
       converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,newtStepScaled*xScale,stateVecNew,out_SS4HG)
+      ! debug
+      if (debug_output) then
+        print *, "converged = ", out_SS4HG % converged, converged
+        print *, "" ! add line to match line numbers with nested case
+      end if
       if (converged) return
     end if
 
@@ -1304,14 +1315,14 @@ contains
                      fluxVecNew,              & ! intent(out):   new flux vector
                      fRHS,                    & ! intent(out):   RHS function for ARKODE
                      resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
-                     resVecNew,               & ! intent(out):   new residual vector
+                     io_SS4HG % resVecNew_inner, & ! intent(out):   new residual vector
                      fNew,                    & ! intent(out):   new function evaluation
                      err,cmessage)              ! intent(out):   error control
      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
      ! update f1: assign non-zero function values based on logical mask
      io_SS4HG % f1_vec(:)=0._rkind
-     io_SS4HG % f1_vec(:)=merge(real(resVecNew,rkind),io_SS4HG % f1_vec,in_SS4HG % stateMask1)
+     io_SS4HG % f1_vec(:)=merge(real(io_SS4HG % resVecNew_inner,rkind),io_SS4HG % f1_vec,in_SS4HG % stateMask1)
      !print *, "eval8wrap 1:",sum(resVecNew)
 
      ! * evaluation for outer (f2) component of line search objective function *
@@ -1357,14 +1368,14 @@ contains
                      fluxVecNew,              & ! intent(out):   new flux vector
                      fRHS,                    & ! intent(out):   RHS function for ARKODE
                      resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
-                     resVecNew,               & ! intent(out):   new residual vector
+                     io_SS4HG % resVecNew_outer, & ! intent(out):   new residual vector
                      fNew,                    & ! intent(out):   new function evaluation
                      err,cmessage)              ! intent(out):   error control
      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
      ! update f1: assign non-zero function values based on logical mask
      io_SS4HG % f2_vec(:)=0._rkind
-     io_SS4HG % f2_vec(:)=merge(-real(resVecNew,rkind),io_SS4HG % f2_vec,in_SS4HG % stateMask2) ! negative sign so that f = f1-f2
+     io_SS4HG % f2_vec(:)=merge(-real(io_SS4HG % resVecNew_outer,rkind),io_SS4HG % f2_vec,in_SS4HG % stateMask2) ! negative sign so that f = f1-f2
      !print *, "eval8wrap 2:",sum(resVecNew)
     end associate
 
@@ -1396,7 +1407,7 @@ contains
   real(rkind),intent(in)       :: rVec(:)                      ! residual vector (mixed units)
   real(rkind),intent(in)       :: xInc(:)                      ! iteration increment (mixed units)
   real(rkind),intent(in)       :: xVec(:)                      ! state vector (mixed units)
-  type(out_type_summaSolve4homegrown),intent(in) :: out_SS4HG  ! new function evaluation, convergence flag, and error control
+  type(out_type_summaSolve4homegrown),intent(inout) :: out_SS4HG  ! new function evaluation, convergence flag, and error control
   ! locals
   real(rkind),dimension(mSoil) :: psiScale                ! scaling factor for matric head
   real(rkind),parameter        :: xSmall=1.e-0_rkind      ! a small offset
@@ -1499,7 +1510,9 @@ contains
    end if
 
    ! final convergence check
-   checkConv = (canopyConv .and. watbalConv .and. matricConv .and. liquidConv .and. energyConv .and. aquiferConv)
+   !checkConv = (canopyConv .and. watbalConv .and. matricConv .and. liquidConv .and. energyConv .and. aquiferConv)
+   out_SS4HG % converged = (canopyConv .and. watbalConv .and. matricConv .and. liquidConv .and. energyConv .and. aquiferConv)
+   checkConv = out_SS4HG % converged
 
    ! print progress towards solution
    if (globalPrintFlag) then

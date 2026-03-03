@@ -1171,6 +1171,8 @@ contains
    allocate(nested_Newton % io_SS4HG % f_vec , mold = nested_Newton % f_vec )
    allocate(nested_Newton % io_SS4HG % f1_vec, mold = nested_Newton % f1_vec)
    allocate(nested_Newton % io_SS4HG % f2_vec, mold = nested_Newton % f2_vec)
+   allocate(nested_Newton % io_SS4HG % resVecNew_inner, mold = nested_Newton % f_vec )
+   allocate(nested_Newton % io_SS4HG % resVecNew_outer, mold = nested_Newton % f_vec )
 
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
    nested_Newton % f1_vec(:)=0._r8b
