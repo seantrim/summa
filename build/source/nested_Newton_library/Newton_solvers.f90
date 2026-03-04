@@ -123,10 +123,15 @@ contains
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
     ! begin LAPACK operations
-    ! initialize right-side vector used by LAPACK
-    B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
-    call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output -- M is the # of rows/columns of A
-    f_obj % xkp1lp1(:)=B(:,1) ! update guess
+    ! initialize right-side vector used by LAPACK ---------- OG method (solve for updated inner iteration solution directly)
+    !B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
+    !call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output
+    !f_obj % xkp1lp1(:)=B(:,1) ! update guess
+
+    ! SJT: solve for inner step using LAPACK ------- testing ----------------
+    B(:,1) = -(f_obj % f1_vec(:) - f_obj % f2_vec(:)) + matrix_vector_product(f_obj,f_obj % J2,f_obj % xkp1l - f_obj % xk0) 
+    call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
+    f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
     if (f_obj % refinement_inner) then
      ! f_obj % J updated on last J1 evaluation

@@ -460,6 +460,7 @@ contains
   ! provide access to the external procedures
   USE matrixOper_module, only: computeGradient
   USE eval8summa_module, only: imposeConstraints
+  USE iso_fortran_env,only: real128 !!!!!!!!!!!!!!!!!!!!!! SJT: testing with quad precision
   implicit none
   ! input
   type(in_type_lineSearchRefinement),intent(in) :: in_LSR      ! class object for intent(in) arguments
@@ -539,6 +540,18 @@ contains
    err=0; message='lineSearchRefinement/'
    converged = .false.
 
+    ! debug output
+    if (debug_output) then
+      print *, "Line Search:"
+      print *, "nested=",in_SS4HG % nested
+      print *, "sum(rVecScaled)=",sum(rVecScaled)
+      if (in_SS4HG % nested) then
+        print *, "sum(aJac1Scaled-aJac2Scaled)=",sum(in_SS4HG % aJac1Scaled - in_SS4HG % aJac2Scaled)
+      else
+        print *, "sum(aJacScaled)=",sum(aJacScaled)
+      end if
+    end if
+
    ! check the need to compute the line search
    if (doLineSearch) then
 
@@ -566,6 +579,7 @@ contains
  
       ! compute the initial slope
       slopeInit = dot_product(gradScaledNested,p)
+      !slopeInit = real(dot_product(real(gradScaledNested,real128),real(p,real128)),rkind) ! quad precision had no significant effect
     else ! classical Newton iterations
       ! compute the gradient (gradScaled) of the line search scalar objective function
       ! NOTE: function = 0.5 * dot_product(rVecScaled,rVecScaled)
@@ -578,20 +592,23 @@ contains
 
     ! debug output
     if (debug_output) then
-      print *, "Line Search:"
-      print *, "nested=",in_SS4HG % nested
+      if (in_SS4HG % nested) then
+        print *, "sum(inner),sum(outer)=",sum(p(1:nState)),sum(p(nState+1:2*nState))
+      else
+        print *, "sum(newtStepScaled)=",sum(newtStepScaled)
+      end if
       print *, "slopeInit=",slopeInit
     end if
 
     ! SJT: testing the addition of an initial slope check --- not originally present
     ! check that initial slope is negative (needed to reduce the line search objective function)
-    !if (slopeInit >= 0._rkind) then
-    ! print *, "slopeInit=",slopeInit
-    ! cmessage="slopeInit is non-negative"
-    ! message=trim(message)//trim(cmessage)
-    ! err = 20 ! non-recoverable error
-    ! return
-    !end if
+    if (slopeInit >= 0._rkind) then
+     print *, "slopeInit=",slopeInit
+     cmessage="slopeInit is non-negative"
+     message=trim(message)//trim(cmessage)
+     err = 20 ! non-recoverable error
+     return
+    end if
 
    end if  ! if computing the line search
 
