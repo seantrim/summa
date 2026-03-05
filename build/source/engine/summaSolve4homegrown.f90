@@ -412,7 +412,6 @@ contains
                                &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
                                &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
                                &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,out_LSR)                            ! output
-      !stop !!!!!!!!!!! SJT: debug --- take out
       call out_LSR % finalize(fNew,converged,err,cmessage)
      case(ixTrustRegion)
       call in_TRR % initialize(doRefine,fOld)
@@ -520,6 +519,7 @@ contains
   real(rkind)                    :: stateVecNew1(1:in_SS4HG % nstate)    ! new state vector for f1 input
   real(rkind)                    :: stateVecNew2(1:in_SS4HG % nstate)    ! new state vector for f2 input
   logical(lgt),parameter         :: debug_output=.true. ! for optional debug output
+  logical(lgt),parameter         :: allow_nested=.true. ! allow nested Newton line search method (else revert to homegrown)
   ! --------------------------------------------------------------------------------------------------------
   associate(&
    ! intent(in) variables
@@ -545,18 +545,30 @@ contains
       print *, "Line Search:"
       print *, "nested=",in_SS4HG % nested
       print *, "sum(rVecScaled)=",sum(rVecScaled)
-      if (in_SS4HG % nested) then
+      if (in_SS4HG % nested.and.allow_nested) then
         print *, "sum(aJac1Scaled-aJac2Scaled)=",sum(in_SS4HG % aJac1Scaled - in_SS4HG % aJac2Scaled)
       else
         print *, "sum(aJacScaled)=",sum(aJacScaled)
       end if
     end if
 
+   ! initialize for nested Newton line search
+   if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
+      ! trial solution vector
+      io_SS4HG % stateVecTrialNested(1:nState)          = in_SS4HG % xkp1l(1:nState) ! set trial state vector
+      io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
+      ! scaled search direction vector
+      p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
+      p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
+      p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
+      p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
+   end if
+
    ! check the need to compute the line search
    if (doLineSearch) then
 
     ! compute the local slope from initial data
-    if (in_SS4HG % nested) then ! nested Newton iterations
+    if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
       ! compute the gradient of the line search scalar objective function
       ! NOTE: function = 0.5 * dot_product(rVecScaled,rVecScaled)
       call computeGradient(ixMatrix,nState,in_SS4HG % aJac1Scaled,rVecScaled,gradScaled,err,cmessage)
@@ -569,17 +581,20 @@ contains
       gradScaledNested(1:nState)          = gradScaled(1:nState)
       gradScaledNested(nState+1:2*nState) = -grad2Scaled(1:nState) ! negative sign
 
-      ! scaled search direction vector
-      io_SS4HG % stateVecTrialNested(1:nState)          = in_SS4HG % xkp1l(1:nState) ! set trial state vector
-      io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
-      p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
-      p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
-      p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
-      p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
+      !! scaled search direction vector
+      !io_SS4HG % stateVecTrialNested(1:nState)          = in_SS4HG % xkp1l(1:nState) ! set trial state vector
+      !io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
+      !p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
+      !p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
+      !p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
+      !p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
  
       ! compute the initial slope
       slopeInit = dot_product(gradScaledNested,p)
       !slopeInit = real(dot_product(real(gradScaledNested,real128),real(p,real128)),rkind) ! quad precision had no significant effect
+      !slopeInit = real(sum(real(gradScaledNested(:),real128)*real(p(:),real128)),rkind) ! no significant difference
+      !slopeInit = real( real(sum(gradScaled(:)*p(1:nState)),real128) + real(sum(-grad2Scaled(:)*p(nState+1:2*nState)),real128) ,rkind)
+      !print *, "SJT: ",sum(gradScaled(:)*p(1:nState)),sum(-grad2Scaled(:)*p(nState+1:2*nState))
     else ! classical Newton iterations
       ! compute the gradient (gradScaled) of the line search scalar objective function
       ! NOTE: function = 0.5 * dot_product(rVecScaled,rVecScaled)
@@ -592,9 +607,11 @@ contains
 
     ! debug output
     if (debug_output) then
-      if (in_SS4HG % nested) then
+      if (in_SS4HG % nested.and.allow_nested) then
+        print *, "sum(gradScaled-grad2Scaled)", sum(gradScaled(:)-grad2Scaled(:))
         print *, "sum(inner),sum(outer)=",sum(p(1:nState)),sum(p(nState+1:2*nState))
       else
+        print *, "sum(gradScaled)", sum(gradScaled(:))
         print *, "sum(newtStepScaled)=",sum(newtStepScaled)
       end if
       print *, "slopeInit=",slopeInit
@@ -619,7 +636,7 @@ contains
    lineSearch: do iLine=1,maxLineSearch  ! try to refine the function by shrinking the step size
 
     ! compute proposed state vector
-    if (in_SS4HG % nested) then ! nested Newton iterations
+    if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
       ! back-track along the search direction
       ! NOTE: start with back-tracking the scaled step
       xIncNested(:) = xLambda*p(:)
@@ -652,13 +669,14 @@ contains
 
     ! impose solution constraints adjusting state vector and iteration increment
     ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
-    if (in_SS4HG % nested) then ! nested Newton iterations
+    if (in_SS4HG % nested.and.allow_nested) then ! nested Newton iterations
       ! apply constraints for inner Newton step
       stateVecNew1(:) = io_SS4HG % stateVecNewNested(1:nState) ! ----------------------- may be able to use stateVecNewNested directly, avoiding data transfers
       call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
                             &stateVecNew1,io_SS4HG % stateVecTrialNested(1:nState),&
                             &nState,nSoil,nSnow,cmessage,err)
       io_SS4HG % stateVecNewNested(1:nState) = stateVecNew1(:)
+      stateVecNew(:) = stateVecNew1(:) ! set updated proposed solution (in case of early exit)
       if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
       ! apply constraints for outer Newton step
@@ -673,10 +691,8 @@ contains
       xIncNested(:) = io_SS4HG % stateVecNewNested(:) - io_SS4HG % stateVecTrialNested(:) ! ------- may not be needed -------
 
       ! update stateVecNew for nested Newton case
-      if (in_SS4HG % nested) then ! nested Newton iterations
-        stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution
-        !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
-      end if
+      stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution ---- may not be needed (set above) ----
+      !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
 
     else ! classical Newton iterations
       ! impose solution constraints adjusting state vector and iteration increment
@@ -725,12 +741,13 @@ contains
     if (.not.feasible) cycle ! go back and impose constraints again (does this do anything?)
 
     ! check convergence
-    if (in_SS4HG % nested) then ! nested Newton iterations
+    if (in_SS4HG % nested.and.allow_nested) then ! nested Newton iterations
       ! inner iteration component
       converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,io_SS4HG % resVecNew_inner,&
                 & p(1:nState)*xScale(:),io_SS4HG % stateVecNewNested(1:nState),out_SS4HG)
       if (debug_output) then
         print *, "converged = ", out_SS4HG % converged
+        if (converged) print *, "" ! for debug line numbers to match classical case
       end if
       if (converged) then ! if converged, accept inner iteration solution
         stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState)
@@ -778,8 +795,13 @@ contains
 
      ! check that we did not back-track all the way back to the original value
      if (iLine == maxLineSearch) then
-      message=trim(message)//'backtracked all the way back to the original value'
-      err=-20; return
+      !if (in_SS4HG % nested.and.allow_nested) then ! nested Newton iterations --- this improved performance in testing but skips calls to imposeConstraints and checkConv
+      !  stateVecNew(:) = in_SS4HG % xkp1lp1(1:nState) ! set output vector to original inner Newton iteration solution
+      !  return
+      !else ! classical iterations
+        message=trim(message)//'backtracked all the way back to the original value'
+        err=-20; return
+      !end if
      end if
 
      ! define rhs
@@ -1206,74 +1228,12 @@ contains
   real(rkind)            :: stateVec1New(1:in_SS4HG % nState)  ! state vector for inner iteration component
   real(rkind)            :: stateVec2New(1:in_SS4HG % nState)  ! state vector for outer iteration component
   logical(lgt)           :: feasible1,feasible2                ! feasibility flags inner and outer iteration components 
+  logical(lgt),parameter :: allow_nested=.true.                ! allow nested Newton line search (else revert to homegrown)
   ! ----------------------------------------------------------------------------------------------------------
   ! initialize error control
   err=0; message='eval8summa_wrapper/'
 
-  if (.not.(in_SS4HG % nested)) then ! classical Newton iterations
-
-   associate(&
-    dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
-    dt             => in_SS4HG % dt             ,& ! intent(in): entire time step for drainage pond rate
-    nSnow          => in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
-    nSoil          => in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
-    nLayers        => in_SS4HG % nLayers        ,& ! intent(in): total number of layers
-    nState         => in_SS4HG % nState         ,& ! intent(in): total number of state variables
-    firstSubStep   => in_SS4HG % firstSubStep   ,& ! intent(in): flag to indicate if we are processing the first sub-step
-    computeVegFlux => in_SS4HG % computeVegFlux ,& ! intent(in): flag to indicate if computing fluxes over vegetation
-    scalarSolution => in_SS4HG % scalarSolution ,& ! intent(in): flag to denote if implementing the scalar solution
-    firstFluxCall  => io_SS4HG % firstFluxCall  ,& ! intent(inout): flag to indicate if we are processing the first flux call  
-    ixSaturation   => io_SS4HG % ixSaturation    & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)    
-    &)
-    ! compute the flux and the residual vector for a given state vector
-    call eval8summa(&
-                    ! input: model control
-                    dt_cur,                  & ! intent(in):    current stepsize
-                    dt,                      & ! intent(in):    length of the time step (seconds)
-                    nSnow,                   & ! intent(in):    number of snow layers
-                    nSoil,                   & ! intent(in):    number of soil layers
-                    nLayers,                 & ! intent(in):    total number of layers
-                    nState,                  & ! intent(in):    total number of state variables
-                    .false.,                 & ! intent(in):    not inside Sundials solver
-                    firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
-                    firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
-                    .false.,                 & ! intent(in):    not processing the first iteration in a splitting operation
-                    computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
-                    scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
-                    ! input: state vectors
-                    stateVecNew,             & ! intent(in):    updated model state vector
-                    fScale,                  & ! intent(in):    characteristic scale of the function evaluations
-                    sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
-                    ! input: data structures
-                    model_decisions,         & ! intent(in):    model decisions
-                    lookup_data,             & ! intent(in):    lookup tables
-                    type_data,               & ! intent(in):    type of vegetation and soil
-                    attr_data,               & ! intent(in):    spatial attributes
-                    mpar_data,               & ! intent(in):    model parameters
-                    forc_data,               & ! intent(in):    model forcing data
-                    bvar_data,               & ! intent(in):    average model variables for the entire basin
-                    prog_data,               & ! intent(in):    model prognostic variables for a local HRU
-                    ! input-output: data structures
-                    indx_data,               & ! intent(inout): index data
-                    diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
-                    flux_data,               & ! intent(inout): model fluxes for a local HRU
-                    deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
-                    ! input-output: baseflow
-                    ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                    dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
-                    ! output
-                    feasible,                & ! intent(out):   flag to denote the feasibility of the solution
-                    fluxVecNew,              & ! intent(out):   new flux vector
-                    fRHS,                    & ! intent(out):   RHS function for ARKODE
-                    resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
-                    resVecNew,               & ! intent(out):   new residual vector
-                    fNew,                    & ! intent(out):   new function evaluation
-                    err,cmessage)              ! intent(out):   error control
-   end associate
- 
-   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
-
-  else ! nested iterations
+  if (in_SS4HG % nested.and.allow_nested) then ! classical Newton iterations
 
     associate(&
      dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
@@ -1405,7 +1365,72 @@ contains
 
     ! feasibility flag
     feasible = (feasible1.and.feasible2)
+
+  else ! classical Newton iterations
+
+   associate(&
+    dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
+    dt             => in_SS4HG % dt             ,& ! intent(in): entire time step for drainage pond rate
+    nSnow          => in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+    nSoil          => in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+    nLayers        => in_SS4HG % nLayers        ,& ! intent(in): total number of layers
+    nState         => in_SS4HG % nState         ,& ! intent(in): total number of state variables
+    firstSubStep   => in_SS4HG % firstSubStep   ,& ! intent(in): flag to indicate if we are processing the first sub-step
+    computeVegFlux => in_SS4HG % computeVegFlux ,& ! intent(in): flag to indicate if computing fluxes over vegetation
+    scalarSolution => in_SS4HG % scalarSolution ,& ! intent(in): flag to denote if implementing the scalar solution
+    firstFluxCall  => io_SS4HG % firstFluxCall  ,& ! intent(inout): flag to indicate if we are processing the first flux call  
+    ixSaturation   => io_SS4HG % ixSaturation    & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)    
+    &)
+    ! compute the flux and the residual vector for a given state vector
+    call eval8summa(&
+                    ! input: model control
+                    dt_cur,                  & ! intent(in):    current stepsize
+                    dt,                      & ! intent(in):    length of the time step (seconds)
+                    nSnow,                   & ! intent(in):    number of snow layers
+                    nSoil,                   & ! intent(in):    number of soil layers
+                    nLayers,                 & ! intent(in):    total number of layers
+                    nState,                  & ! intent(in):    total number of state variables
+                    .false.,                 & ! intent(in):    not inside Sundials solver
+                    firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                    firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
+                    .false.,                 & ! intent(in):    not processing the first iteration in a splitting operation
+                    computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                    scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                    ! input: state vectors
+                    stateVecNew,             & ! intent(in):    updated model state vector
+                    fScale,                  & ! intent(in):    characteristic scale of the function evaluations
+                    sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                    ! input: data structures
+                    model_decisions,         & ! intent(in):    model decisions
+                    lookup_data,             & ! intent(in):    lookup tables
+                    type_data,               & ! intent(in):    type of vegetation and soil
+                    attr_data,               & ! intent(in):    spatial attributes
+                    mpar_data,               & ! intent(in):    model parameters
+                    forc_data,               & ! intent(in):    model forcing data
+                    bvar_data,               & ! intent(in):    average model variables for the entire basin
+                    prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                    ! input-output: data structures
+                    indx_data,               & ! intent(inout): index data
+                    diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                    flux_data,               & ! intent(inout): model fluxes for a local HRU
+                    deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                    ! input-output: baseflow
+                    ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                    dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    ! output
+                    feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                    fluxVecNew,              & ! intent(out):   new flux vector
+                    fRHS,                    & ! intent(out):   RHS function for ARKODE
+                    resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                    resVecNew,               & ! intent(out):   new residual vector
+                    fNew,                    & ! intent(out):   new function evaluation
+                    err,cmessage)              ! intent(out):   error control
+   end associate
+ 
+   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+
   end if
+
  end subroutine eval8summa_wrapper
 
  ! *********************************************************************************************************
