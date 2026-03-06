@@ -516,8 +516,6 @@ contains
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
   real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)    ! search increment vector (all elements)
-  real(rkind)                    :: stateVecNew1(1:in_SS4HG % nstate)    ! new state vector for f1 input
-  real(rkind)                    :: stateVecNew2(1:in_SS4HG % nstate)    ! new state vector for f2 input
   logical(lgt),parameter         :: debug_output=.true. ! for optional debug output
   logical(lgt),parameter         :: allow_nested=.true. ! allow nested Newton line search method (else revert to homegrown)
   ! --------------------------------------------------------------------------------------------------------
@@ -580,21 +578,9 @@ contains
       ! assemble total gradient vector
       gradScaledNested(1:nState)          = gradScaled(1:nState)
       gradScaledNested(nState+1:2*nState) = -grad2Scaled(1:nState) ! negative sign
-
-      !! scaled search direction vector
-      !io_SS4HG % stateVecTrialNested(1:nState)          = in_SS4HG % xkp1l(1:nState) ! set trial state vector
-      !io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
-      !p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
-      !p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
-      !p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
-      !p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
  
       ! compute the initial slope
       slopeInit = dot_product(gradScaledNested,p)
-      !slopeInit = real(dot_product(real(gradScaledNested,real128),real(p,real128)),rkind) ! quad precision had no significant effect
-      !slopeInit = real(sum(real(gradScaledNested(:),real128)*real(p(:),real128)),rkind) ! no significant difference
-      !slopeInit = real( real(sum(gradScaled(:)*p(1:nState)),real128) + real(sum(-grad2Scaled(:)*p(nState+1:2*nState)),real128) ,rkind)
-      !print *, "SJT: ",sum(gradScaled(:)*p(1:nState)),sum(-grad2Scaled(:)*p(nState+1:2*nState))
     else ! classical Newton iterations
       ! compute the gradient (gradScaled) of the line search scalar objective function
       ! NOTE: function = 0.5 * dot_product(rVecScaled,rVecScaled)
@@ -671,29 +657,20 @@ contains
     ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
     if (in_SS4HG % nested.and.allow_nested) then ! nested Newton iterations
       ! apply constraints for inner Newton step
-      stateVecNew1(:) = io_SS4HG % stateVecNewNested(1:nState) ! ----------------------- may be able to use stateVecNewNested directly, avoiding data transfers
       call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
-                            &stateVecNew1,io_SS4HG % stateVecTrialNested(1:nState),&
+                            &io_SS4HG % stateVecNewNested(1:nState),io_SS4HG % stateVecTrialNested(1:nState),&
                             &nState,nSoil,nSnow,cmessage,err)
-      io_SS4HG % stateVecNewNested(1:nState) = stateVecNew1(:)
-      stateVecNew(:) = stateVecNew1(:) ! set updated proposed solution (in case of early exit)
+      stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! set updated proposed solution (in case of early exit)
       if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
       ! apply constraints for outer Newton step
-      stateVecNew2(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState)
       call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,&
-                            &stateVecNew2,io_SS4HG % stateVecTrialNested(nState+1:2*nState),&
+                            &io_SS4HG % stateVecNewNested(nState+1:2*nState),io_SS4HG % stateVecTrialNested(nState+1:2*nState),&
                             &nState,nSoil,nSnow,cmessage,err)
-      io_SS4HG % stateVecNewNested(nState+1:2*nState) = stateVecNew2(:)
       if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
       ! update the proposed iteration increment based on constrained stateVecNew
       xIncNested(:) = io_SS4HG % stateVecNewNested(:) - io_SS4HG % stateVecTrialNested(:) ! ------- may not be needed -------
-
-      ! update stateVecNew for nested Newton case
-      stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState) ! accept inner iteration solution ---- may not be needed (set above) ----
-      !stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState) ! accept outer iteration solution
-
     else ! classical Newton iterations
       ! impose solution constraints adjusting state vector and iteration increment
       ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
@@ -724,8 +701,6 @@ contains
       print *, 'fOld + alpha*slopeInit*xLambda = ', fOld + alpha*slopeInit*xLambda
       print *, 'sum(resVecNew) = ', sum(resVecNew)
       print *, 'feasible = ',feasible
-      !print *, 'xInc                           = ', xInc(min(iJac1,nState):min(iJac2,nState))
-      !stop
     end if
 
     ! check line search

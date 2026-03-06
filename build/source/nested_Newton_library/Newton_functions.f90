@@ -903,8 +903,6 @@ contains
   ! store refined guess
   xvec1(:) = stateVecNew(:)
 
-  !print *, "f_obj % out_SS4HG % converged = ",f_obj % out_SS4HG % converged
-  !stop ! ********************************************** DEBUG --- take out ******************************************************
  end subroutine SUMMA_refine_Newton_step
 
  subroutine SUMMA_scaling(f_obj,B)
