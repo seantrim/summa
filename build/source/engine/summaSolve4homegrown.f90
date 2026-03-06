@@ -516,7 +516,7 @@ contains
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
   real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)    ! search increment vector (all elements)
-  logical(lgt),parameter         :: debug_output=.true. ! for optional debug output
+  logical(lgt),parameter         :: debug_output=.false. ! for optional debug output
   logical(lgt),parameter         :: allow_nested=.true. ! allow nested Newton line search method (else revert to homegrown)
   ! --------------------------------------------------------------------------------------------------------
   associate(&
@@ -605,12 +605,14 @@ contains
 
     ! SJT: testing the addition of an initial slope check --- not originally present
     ! check that initial slope is negative (needed to reduce the line search objective function)
-    if (slopeInit >= 0._rkind) then
-     print *, "slopeInit=",slopeInit
-     cmessage="slopeInit is non-negative"
-     message=trim(message)//trim(cmessage)
-     err = 20 ! non-recoverable error
-     return
+    if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
+     if (slopeInit >= 0._rkind) then
+      print *, "slopeInit=",slopeInit
+      cmessage="slopeInit is non-negative"
+      message=trim(message)//trim(cmessage)
+      err = 20 ! non-recoverable error
+      return
+     end if
     end if
 
    end if  ! if computing the line search
