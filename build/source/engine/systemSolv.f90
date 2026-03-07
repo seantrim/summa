@@ -278,7 +278,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1073,7 +1073,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 5_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1171,6 +1171,9 @@ contains
    allocate(nested_Newton % io_SS4HG % f_vec , mold = nested_Newton % f_vec )
    allocate(nested_Newton % io_SS4HG % f1_vec, mold = nested_Newton % f1_vec)
    allocate(nested_Newton % io_SS4HG % f2_vec, mold = nested_Newton % f2_vec)
+   allocate(nested_Newton % io_SS4HG % aJac1(nested_Newton % in_SS4HG % nLeadDim,nested_Newton % in_SS4HG % nState))
+   allocate(nested_Newton % io_SS4HG % aJac2(nested_Newton % in_SS4HG % nLeadDim,nested_Newton % in_SS4HG % nState))
+   allocate(nested_Newton % io_SS4HG % dMat, source = nested_Newton % dMat) ! note: allocate and initialize
    allocate(nested_Newton % io_SS4HG % resVecNew_inner, mold = nested_Newton % f_vec )
    allocate(nested_Newton % io_SS4HG % resVecNew_outer, mold = nested_Newton % f_vec )
 

@@ -516,7 +516,7 @@ contains
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
   real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)    ! search increment vector (all elements)
-  logical(lgt),parameter         :: debug_output=.false. ! for optional debug output
+  logical(lgt),parameter         :: debug_output=.true. ! for optional debug output
   logical(lgt),parameter         :: allow_nested=.true. ! allow nested Newton line search method (else revert to homegrown)
   ! --------------------------------------------------------------------------------------------------------
   associate(&
@@ -603,7 +603,7 @@ contains
       print *, "slopeInit=",slopeInit
     end if
 
-    ! SJT: testing the addition of an initial slope check --- not originally present
+    ! SJT: testing the addition of an initial slope check --- not originally present (homegrown solver triggers this error for Miller Sand)
     ! check that initial slope is negative (needed to reduce the line search objective function)
     if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
      if (slopeInit >= 0._rkind) then
@@ -1166,7 +1166,8 @@ contains
                               &lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&
                               &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&
                               &fluxVecNew,resSinkNew,resVecNew,fNew,feasible,err,message)
-  USE eval8summa_module,only:eval8summa                        ! simulation of fluxes and residuals given a trial state vector
+  USE eval8summa_module,  only: eval8summa                     ! simulation of fluxes and residuals given a trial state vector
+  USE computJacob_module, only: computJacob                    ! Jacobian evaluations (used for nested Newton)
   implicit none
   ! input
   real(rkind),intent(in)          :: stateVecNew(:)            ! updated state vector
@@ -1201,6 +1202,8 @@ contains
   real(rkind)                     :: fRHS(1:in_SS4HG % nState) ! RHS function for ARKODE (not used here)
   character(len=256)              :: cmessage                  ! error message of downwind routine
   !!!! SJT: nested Newton variables
+  type(in_type_computJacob)       :: in_computJacob                ! computJacob object
+  type(out_type_computJacob)      :: out_computJacob               ! computJacob object 
   real(rkind)            :: resVecScaled(1:in_SS4HG % nState)  ! scaled residual vector
   real(rkind)            :: stateVec1New(1:in_SS4HG % nState)  ! state vector for inner iteration component
   real(rkind)            :: stateVec2New(1:in_SS4HG % nState)  ! state vector for outer iteration component
@@ -1213,6 +1216,8 @@ contains
   if (in_SS4HG % nested.and.allow_nested) then ! classical Newton iterations
 
     associate(&
+     ixGroundwater  => model_decisions(iLookDECISIONS%groundwatr)%iDecision,&  ! intent(in): [i4b] groundwater parameterization
+     ixMatrix       => in_SS4HG % ixMatrix       ,& ! type of matrix (full or band diagonal)
      dt_cur         => in_SS4HG % dt_cur         ,& ! intent(in): current stepsize
      dt             => in_SS4HG % dt             ,& ! intent(in): entire time step for drainage pond rate
      nSnow          => in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
@@ -1274,6 +1279,12 @@ contains
                      err,cmessage)              ! intent(out):   error control
      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
+     ! Compute total Jacobian based on inner Newton iteration solutation from the line search (aJac1) 
+     call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),ixMatrix)
+     call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,io_SS4HG % dMat,io_SS4HG % aJac1,out_computJacob)
+     call out_computJacob % finalize(err,cmessage)
+     if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+
      ! update f1: assign non-zero function values based on logical mask
      io_SS4HG % f1_vec(:)=0._rkind
      io_SS4HG % f1_vec(:)=merge(real(io_SS4HG % resVecNew_inner,rkind),io_SS4HG % f1_vec,in_SS4HG % stateMask1)
@@ -1327,7 +1338,13 @@ contains
                      err,cmessage)              ! intent(out):   error control
      if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
-     ! update f1: assign non-zero function values based on logical mask
+     ! Compute total Jacobian based on outer Newton iteration solutation from the line search (aJac2) 
+     call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),ixMatrix)
+     call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,io_SS4HG % dMat,io_SS4HG % aJac2,out_computJacob)
+     call out_computJacob % finalize(err,cmessage)
+     if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
+
+     ! update f2: assign non-zero function values based on logical mask
      io_SS4HG % f2_vec(:)=0._rkind
      io_SS4HG % f2_vec(:)=merge(-real(io_SS4HG % resVecNew_outer,rkind),io_SS4HG % f2_vec,in_SS4HG % stateMask2) ! negative sign so that f = f1-f2
      !print *, "eval8wrap 2:",sum(resVecNew)

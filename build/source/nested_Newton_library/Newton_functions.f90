@@ -175,8 +175,8 @@ module Newton_functions
    procedure :: J_eval  => Jacobian_f_SUMMA_vec  ! solver
    !procedure :: J1_eval => Jacobian_f1_SUMMA_vec ! solver -- trivial split
    !procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver -- trivial split
-   procedure :: J1_eval => Jacobian_f_mass_SUMMA_vec_full   ! solver -- trivial split
-   procedure :: J2_eval => Jacobian_f_energy_SUMMA_vec_full ! solver -- trivial split
+   procedure :: J1_eval => Jacobian_f_mass_SUMMA_vec_full   ! solver
+   procedure :: J2_eval => Jacobian_f_energy_SUMMA_vec_full ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_refinement_classical   => SUMMA_refine_Newton_step_classical
    procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
@@ -900,6 +900,20 @@ contains
    end if
   end if
 
+  ! update inner and outer iteration solutions based on line search
+  if (f_obj % nested) then
+   associate(nState => f_obj % in_SS4HG % nState)
+    ! update inner iteration values
+    f_obj % xkp1lp1(:) = f_obj % io_SS4HG % stateVecNewNested(1:nState) ! solution vector
+    f_obj % f1_vec(:) = f_obj % io_SS4HG % f1_vec(:)                    ! non-linear function f1
+    call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,f_obj % io_SS4HG % aJac1,f_obj % J,f_obj % J1) ! transform aJac1 into J1
+    ! update outer iteration values
+    f_obj % xk0(:) = f_obj % io_SS4HG % stateVecNewNested(nState+1:2*nState) ! solution vector
+    f_obj % f2_vec(:) = f_obj % io_SS4HG % f2_vec(:)                    ! non-linear function f1
+    call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,f_obj % io_SS4HG % aJac2,f_obj % J,f_obj % J2) ! transform aJac2 into J2 (negative sign applied)
+   end associate
+  end if
+
   ! store refined guess
   xvec1(:) = stateVecNew(:)
 
@@ -1251,27 +1265,81 @@ contains
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
+  ! get nested Newton solver Jacobian J1
+  call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
+
+  !! store Jacobian used in solver
+  !if (f_obj % banded) then ! banded storage
+  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+  !  nBands=nrow_banded+subdiag ! number of non-zero bands
+  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
+  !  do j=1,n ! column index for dense and banded storage
+  !   do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+  !    k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+  !    aJac(k,j) = merge(aJac(k,j),0._rkind,f_obj % stateMask1(i)) ! zero the elements that are not included in J1
+  !   end do
+  !  end do
+  !  f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+  ! end associate
+  !else ! full matrix storage
+  ! f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
+  ! f_obj % J1(:,:) = 0._r8b
+  ! do i=1,f_obj % n
+  !  f_obj % J1(:,i) = merge(aJac(:,i),f_obj % J1(:,i),f_obj % stateMask1(:))
+  ! end do
+  !end if
+ end subroutine Jacobian_f_mass_SUMMA_vec_full
+
+ subroutine filter_SUMMA_Jacobian(f_obj,negative,stateMask,aJac,J_total,J_filter)
+  ! filter total Jacobian from SUMMA into J1 or J2 for use in nested Newton solver (use appropriate stateMask)
+  ! arguments
+  type(f_obj_type),intent(inout) :: f_obj         ! nested Newton object
+  logical         ,intent(in)    :: negative      ! apply a negative sign to J_filter?
+  logical(lgt)    ,intent(in)    :: stateMask(:)  ! logical mask for filtering
+  real(rkind)     ,intent(inout) :: aJac(:,:)     ! total Jacobian from SUMMA
+  real(r8b)       ,intent(out)   :: J_total(:,:)  ! total Jacobian in nested Newton solver storage scheme
+  real(r8b)       ,intent(out)   :: J_filter(:,:) ! filtered Jacobian in nested Newton solver storage scheme 
+
+  ! local variables
+  integer(i4b) :: i,j,k  ! loop indices
+  integer(i4b) :: nBands ! # of bands for banded storage
+
   ! store Jacobian used in solver
   if (f_obj % banded) then ! banded storage
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
     nBands=nrow_banded+subdiag ! number of non-zero bands
-    f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
-    do j=1,n ! column index for dense and banded storage
-     do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
-      k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-      aJac(k,j) = merge(aJac(k,j),0._rkind,f_obj % stateMask1(i)) ! zero the elements that are not included in J1
+    J_total(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (store total Jacobian)
+    if (negative) then
+     do j=1,n ! column index for dense and banded storage
+      do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+       k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+       aJac(k,j) = merge(-aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J1
+      end do
      end do
-    end do
-    f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+    else
+     do j=1,n ! column index for dense and banded storage
+      do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+       k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+       aJac(k,j) = merge(aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J1
+      end do
+     end do
+    end if
+    J_filter(1:nrow_banded,1:n) =  aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
-   f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
-   f_obj % J1(:,:) = 0._r8b
-   do i=1,f_obj % n
-    f_obj % J1(:,i) = merge(aJac(:,i),f_obj % J1(:,i),f_obj % stateMask1(:))
-   end do
+   J_total(:,:) = aJac(:,:) ! store total Jacobian (for Newton step refinement)
+   J_filter(:,:) = 0._r8b   ! initialize
+   if (negative) then
+    do i=1,f_obj % n
+     J_filter(:,i) = merge(-aJac(:,i),J_filter(:,i),stateMask(:)) ! negative sign
+    end do
+   else
+    do i=1,f_obj % n
+     J_filter(:,i) = merge(aJac(:,i),J_filter(:,i),stateMask(:))
+    end do
+   end if
   end if
- end subroutine Jacobian_f_mass_SUMMA_vec_full
+ end subroutine filter_SUMMA_Jacobian
 
  subroutine f_energy_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute energy non-linear function --- use fully-coupled eval8summa call and filter results ***
@@ -1315,26 +1383,29 @@ contains
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
-  ! store Jacobian used in solver
-  if (f_obj % banded) then ! banded storage
-   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nBands=nrow_banded+subdiag ! number of non-zero bands
-    f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
-    do j=1,n ! column index for dense and banded storage
-     do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
-      k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-      aJac(k,j) = merge(-aJac(k,j),0._rkind,f_obj % stateMask2(i)) ! zero the elements that are not included in J2 (sign change so that J=J1-J2)
-     end do
-    end do
-    f_obj % J2(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-   end associate
-  else ! full matrix storage
-   f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
-   f_obj % J2(:,:) = 0._r8b
-   do j=1,f_obj % n
-    f_obj % J2(:,j) = merge(-aJac(:,j),f_obj % J2(:,j),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
-   end do
-  end if
+  ! get nested Newton solver Jacobian J2
+  call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
+
+  !! store Jacobian used in solver
+  !if (f_obj % banded) then ! banded storage
+  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+  !  nBands=nrow_banded+subdiag ! number of non-zero bands
+  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
+  !  do j=1,n ! column index for dense and banded storage
+  !   do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+  !    k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+  !    aJac(k,j) = merge(-aJac(k,j),0._rkind,f_obj % stateMask2(i)) ! zero the elements that are not included in J2 (sign change so that J=J1-J2)
+  !   end do
+  !  end do
+  !  f_obj % J2(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+  ! end associate
+  !else ! full matrix storage
+  ! f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
+  ! f_obj % J2(:,:) = 0._r8b
+  ! do j=1,f_obj % n
+  !  f_obj % J2(:,j) = merge(-aJac(:,j),f_obj % J2(:,j),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
+  ! end do
+  !end if
 
  end subroutine Jacobian_f_energy_SUMMA_vec_full
 

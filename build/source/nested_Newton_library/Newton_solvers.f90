@@ -99,7 +99,7 @@ contains
   logical      :: exit_outer,exit_inner 
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
-  real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
+  !real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
 
   ! initialize convergence flag
   f_obj % converged = .false.
@@ -112,7 +112,7 @@ contains
 
    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
-   f2mJ2xk0(:) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)
+   !f2mJ2xk0(:) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)
    exit_inner=.false.
    f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
 

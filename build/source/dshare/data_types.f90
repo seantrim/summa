@@ -996,6 +996,9 @@ MODULE data_types
    real(rkind) ,allocatable :: f_vec(:)        ! intent(inout): total non-linear function f (f = f1-f2)
    real(rkind) ,allocatable :: f1_vec(:)       ! intent(inout): component non-linear function f1 (constant in outer iterations)
    real(rkind) ,allocatable :: f2_vec(:)       ! intent(inout): component non-linear function f2 (constant in inner iterations)
+   real(rkind) ,allocatable :: aJac1(:,:)      ! intent(inout): component Jacobian J1 (SUMMA storage scheme)
+   real(rkind) ,allocatable :: aJac2(:,:)      ! intent(inout): component Jacobian J2 (SUMMA storage scheme)
+   real(rkind) ,allocatable :: dMat(:)         ! intent(inout): diagonal matrix (excludes flux derivatives)
    real(rkind) ,allocatable :: stateVecTrialNested(:) ! intent(inout): trial total state vector containing elements for inner and outer iterations 
    real(rkind) ,allocatable :: stateVecNewNested(:)   ! intent(inout): new total state vector containing elements for inner and outer iterations 
    real(rkind) ,allocatable :: resVecNew_inner(:)   ! intent(inout): new residual vector for inner iteration line search solution 
