@@ -135,10 +135,8 @@ contains
 
     if (f_obj % refinement_inner) then
      ! f_obj % J updated on last J1 evaluation
-     ! fOld (L2 norm for scaled f) taken from last f1 evaluatopn
      call f_obj % apply_refinement_inner(f_obj % J,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
      !call f_obj % apply_refinement_inner(f_obj % Jdiff,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
-     !call f_obj % apply_refinement_inner(f_obj % J1,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)

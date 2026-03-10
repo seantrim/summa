@@ -512,11 +512,12 @@ contains
   real(rkind)                    :: xLambdaPrev                   ! previous lambda value (used in the cubic)
   real(rkind)                    :: fPrev                         ! previous function evaluation (used in the cubic)
   ! local: nested Newton iterations
+  real(rkind),parameter          :: slope_tolerance=100._rkind*epsilon(1._rkind) ! tolerance for initial slope value to be positive due to round-off error 
   real(rkind)                    :: grad2Scaled(in_SS4HG % nState)       ! scaled gradient (of line search scalar function)
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
   real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)    ! search increment vector (all elements)
-  logical(lgt),parameter         :: debug_output=.true. ! for optional debug output
+  logical(lgt),parameter         :: debug_output=.false. ! for optional debug output
   logical(lgt),parameter         :: allow_nested=.true. ! allow nested Newton line search method (else revert to homegrown)
   ! --------------------------------------------------------------------------------------------------------
   associate(&
@@ -606,7 +607,12 @@ contains
     ! SJT: testing the addition of an initial slope check --- not originally present (homegrown solver triggers this error for Miller Sand)
     ! check that initial slope is negative (needed to reduce the line search objective function)
     if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
-     if (slopeInit >= 0._rkind) then
+     if ((0._rkind <= slopeInit).and.(slopeInit <= slope_tolerance)) then ! non-negative slope with allowance for round-off error
+      cmessage="slopeInit is non-negative but within tolerance"
+      message=trim(message)//trim(cmessage)
+      err = -20 ! recoverable error (try again without doing the line search)
+      return
+     else if (slopeInit > slope_tolerance) then ! non-negative but exceeding tolerance
       print *, "slopeInit=",slopeInit
       cmessage="slopeInit is non-negative"
       message=trim(message)//trim(cmessage)
@@ -672,7 +678,7 @@ contains
       if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
       ! update the proposed iteration increment based on constrained stateVecNew
-      xIncNested(:) = io_SS4HG % stateVecNewNested(:) - io_SS4HG % stateVecTrialNested(:) ! ------- may not be needed -------
+      !xIncNested(:) = io_SS4HG % stateVecNewNested(:) - io_SS4HG % stateVecTrialNested(:) ! ------- may not be needed -------
     else ! classical Newton iterations
       ! impose solution constraints adjusting state vector and iteration increment
       ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
@@ -1205,15 +1211,13 @@ contains
   type(in_type_computJacob)       :: in_computJacob                ! computJacob object
   type(out_type_computJacob)      :: out_computJacob               ! computJacob object 
   real(rkind)            :: resVecScaled(1:in_SS4HG % nState)  ! scaled residual vector
-  real(rkind)            :: stateVec1New(1:in_SS4HG % nState)  ! state vector for inner iteration component
-  real(rkind)            :: stateVec2New(1:in_SS4HG % nState)  ! state vector for outer iteration component
   logical(lgt)           :: feasible1,feasible2                ! feasibility flags inner and outer iteration components 
   logical(lgt),parameter :: allow_nested=.true.                ! allow nested Newton line search (else revert to homegrown)
   ! ----------------------------------------------------------------------------------------------------------
   ! initialize error control
   err=0; message='eval8summa_wrapper/'
 
-  if (in_SS4HG % nested.and.allow_nested) then ! classical Newton iterations
+  if (in_SS4HG % nested.and.allow_nested) then ! nested Newton iterations
 
     associate(&
      ixGroundwater  => model_decisions(iLookDECISIONS%groundwatr)%iDecision,&  ! intent(in): [i4b] groundwater parameterization
@@ -1232,7 +1236,6 @@ contains
      &)
 
      ! * evaluation for inner (f1) component of line search objective function *
-     stateVec1New(1:nState) = io_SS4HG % stateVecNewNested(1:nState) 
      ! compute the flux and the residual vector for a given state vector
      call eval8summa(&
                      ! input: model control
@@ -1249,7 +1252,7 @@ contains
                      computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                      scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                      ! input: state vectors
-                     stateVec1New,             & ! intent(in):    updated model state vector
+                     io_SS4HG % stateVecNewNested(1:nState),             & ! intent(in):    updated model state vector
                      fScale,                  & ! intent(in):    characteristic scale of the function evaluations
                      sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
                      ! input: data structures
@@ -1288,10 +1291,8 @@ contains
      ! update f1: assign non-zero function values based on logical mask
      io_SS4HG % f1_vec(:)=0._rkind
      io_SS4HG % f1_vec(:)=merge(real(io_SS4HG % resVecNew_inner,rkind),io_SS4HG % f1_vec,in_SS4HG % stateMask1)
-     !print *, "eval8wrap 1:",sum(resVecNew)
 
      ! * evaluation for outer (f2) component of line search objective function *
-     stateVec2New(1:nState) = io_SS4HG % stateVecNewNested(nState+1:2*nState) 
      ! compute the flux and the residual vector for a given state vector
      call eval8summa(&
                      ! input: model control
@@ -1308,7 +1309,7 @@ contains
                      computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                      scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                      ! input: state vectors
-                     stateVec2New,             & ! intent(in):    updated model state vector
+                     io_SS4HG % stateVecNewNested(nState+1:2*nState),             & ! intent(in):    updated model state vector
                      fScale,                  & ! intent(in):    characteristic scale of the function evaluations
                      sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
                      ! input: data structures
@@ -1347,7 +1348,6 @@ contains
      ! update f2: assign non-zero function values based on logical mask
      io_SS4HG % f2_vec(:)=0._rkind
      io_SS4HG % f2_vec(:)=merge(-real(io_SS4HG % resVecNew_outer,rkind),io_SS4HG % f2_vec,in_SS4HG % stateMask2) ! negative sign so that f = f1-f2
-     !print *, "eval8wrap 2:",sum(resVecNew)
     end associate
 
     ! update residual for line search

@@ -177,6 +177,7 @@ module Newton_functions
    !procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver -- trivial split
    procedure :: J1_eval => Jacobian_f_mass_SUMMA_vec_full   ! solver
    procedure :: J2_eval => Jacobian_f_energy_SUMMA_vec_full ! solver
+   procedure :: J1_J2_eval => Jacobian_f_mass_energy_SUMMA_vec_full ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_refinement_classical   => SUMMA_refine_Newton_step_classical
    procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
@@ -694,8 +695,6 @@ contains
   ! store non-linear function vector for next Newton iteration
   if (trivial_decomposition) then
    f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b) ! trivial decomposition (f2=0)
-  else
-   if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec1) ! non-trivial decomposition (assume f2_vec does not change during inner iterations)
   end if
 
  end subroutine SUMMA_refine_Newton_step_inner
@@ -1251,6 +1250,7 @@ contains
 
  subroutine Jacobian_f_mass_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for mass non-linear function --- use fully-coupled computJacob call and filter results ***
+  ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
@@ -1368,7 +1368,7 @@ contains
 
  subroutine Jacobian_f_energy_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for energy non-linear function --- use fully-coupled computJacob call and filter results ***
-  ! Note: assumes corresponding eval8summa call has already occurred
+  ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
@@ -1408,6 +1408,31 @@ contains
   !end if
 
  end subroutine Jacobian_f_energy_SUMMA_vec_full
+
+ subroutine Jacobian_f_mass_energy_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute Jacobian for mass and energy non-linear functions --- use fully-coupled computJacob call and filter results ***
+  ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
+
+  ! local
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  integer(i4b) :: i,j,k ! loop indices
+  integer(i4b) :: nBands ! # of bands for banded storage
+
+  call f_obj % SUMMA_computJacob(&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+               &aJac)
+
+  ! get nested Newton solver Jacobian J1
+  call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
+
+  ! get nested Newton solver Jacobian J2
+  call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
+
+ end subroutine Jacobian_f_mass_energy_SUMMA_vec_full
 
  subroutine f_state_SUMMA_vec_full(f_obj,xvec,&
                                   &indx_data,diag_data,flux_data,deriv_data,sMul,&
