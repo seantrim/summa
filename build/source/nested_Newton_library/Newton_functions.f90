@@ -908,7 +908,7 @@ contains
     call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,f_obj % io_SS4HG % aJac1,f_obj % J,f_obj % J1) ! transform aJac1 into J1
     ! update outer iteration values
     f_obj % xk0(:) = f_obj % io_SS4HG % stateVecNewNested(nState+1:2*nState) ! solution vector
-    f_obj % f2_vec(:) = f_obj % io_SS4HG % f2_vec(:)                    ! non-linear function f1
+    f_obj % f2_vec(:) = f_obj % io_SS4HG % f2_vec(:)                    ! non-linear function f2
     call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,f_obj % io_SS4HG % aJac2,f_obj % J,f_obj % J2) ! transform aJac2 into J2 (negative sign applied)
    end associate
   end if
@@ -917,6 +917,53 @@ contains
   xvec1(:) = stateVecNew(:)
 
  end subroutine SUMMA_refine_Newton_step
+
+ subroutine SUMMA_nested_line_search(f_obj)
+  ! ** nested Newton line search **
+  ! input
+  class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
+
+  ! local
+  real(r8b) :: initial_solution(1:f_obj % n) ! intial solution vector
+  real(r8b) :: updated_solution(1:f_obj % n) ! updated solution vector
+  real(r8b) :: p(1:f_obj % n) ! search direction
+  real(r8b) :: grad_L(1:f_obj % n) ! gradient of objective function L
+  real(r8b) :: m ! initial slope
+  real(r8b), parameter :: m_tol=100._r8b*epsilon(1._r8b)
+  real(r8b) :: lambda ! step size
+  logical   :: do_line_search
+
+  ! compute search direction
+  p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
+
+  ! compute gradient of objective function
+  if (f_obj % banded) then
+   print *, "Error in SUMMA_nested_line_search: banded Jacobians not implemented"
+  else
+   grad_L(:) = matmul(f_obj % f_vec(:),f_obj % J(:,:)) ! based on total f and total J
+  end if
+
+  ! compute initial slope
+  m = dot_product(grad_L,p)
+
+  ! check that initial slope is negative (needed to reduce the line search objective function)
+  if (m < 0._rkind) then
+   do_line_search = .true.
+  else if ((0._r8b <= m).and.(m <= m_tol)) then ! non-negative slope with allowance for round-off error
+   do_line_search = .false. ! skip line search (there would be no improvement anyway)
+  else ! non-negative but exceeding tolerance
+   print *, "m=",m
+   print *, "Error in SUMMA_nested_line_search: initial slope is non-negative"
+   stop
+  end if
+
+  ! initialize line search loop
+  lambda = 1._r8b
+  initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
+
+  updated_solution(:) = initial_solution(:) + lambda*p(:)
+
+ end subroutine SUMMA_nested_line_search
 
  subroutine SUMMA_scaling(f_obj,B)
   ! ** apply scaling from SUMMA's fScale and xScale vectors to matrix and RHS for LAPACK **

@@ -103,6 +103,10 @@ contains
 
   ! initialize convergence flag
   f_obj % converged = .false.
+
+  ! initialize residual values
+  f_obj % R(:)       = 0._r8b ! use default residual value used as solver output for early exit
+  f_obj % R_inner(:) = 0._r8b ! use default residual value used as solver output for early exit
  
   l_total=0
   exit_outer=.false.
@@ -236,7 +240,7 @@ contains
 
   if (convergence.eq.'custom') then ! use custom convergence criterion
    exit_flag = f_obj % custom_convergence()
-   if (exit_flag)  return  ! set exit flag if criterion is satisfied
+   if (exit_flag) return  ! set exit flag if criterion is satisfied
   else
 
    ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
@@ -273,7 +277,7 @@ contains
     R(1)=R(0) ! estimated residual for iteration+1
    else if ((convergence.eq.'predictive').or.(convergence.eq.'custom-predictive')) then
     if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
-     R(1)=R(0) ! estimated residual for iteration+1   
+     R(1)=R(0) ! estimated residual for iteration+1 
     else ! compute prediction based on power function
      b=log10(R(0)/R(-1)) ! exponent
      R(1)=R(0)*10**b     ! power function -- estimated residual for iteration+1

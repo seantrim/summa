@@ -1067,13 +1067,13 @@ contains
    nested_Newton % convergence_inner = 'custom-strict' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
    ! solver output
-   call nested_Newton % solver_output('silent') ! standard output used by default 
+   call nested_Newton % solver_output('verbose') ! standard output used by default 
 
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
-   call nested_Newton % set_tolerance('strict',1.0e-14_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+   call nested_Newton % set_tolerance('strict',1.0e-8_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 10_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 5_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"

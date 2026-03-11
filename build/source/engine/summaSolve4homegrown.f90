@@ -539,28 +539,28 @@ contains
    err=0; message='lineSearchRefinement/'
    converged = .false.
 
-    ! debug output
-    if (debug_output) then
-      print *, "Line Search:"
-      print *, "nested=",in_SS4HG % nested
-      print *, "sum(rVecScaled)=",sum(rVecScaled)
-      if (in_SS4HG % nested.and.allow_nested) then
-        print *, "sum(aJac1Scaled-aJac2Scaled)=",sum(in_SS4HG % aJac1Scaled - in_SS4HG % aJac2Scaled)
-      else
-        print *, "sum(aJacScaled)=",sum(aJacScaled)
-      end if
-    end if
+   ! debug output
+   if (debug_output) then
+     print *, "Line Search:"
+     print *, "nested=",in_SS4HG % nested
+     print *, "sum(rVecScaled)=",sum(rVecScaled)
+     if (in_SS4HG % nested.and.allow_nested) then
+       print *, "sum(aJac1Scaled-aJac2Scaled)=",sum(in_SS4HG % aJac1Scaled - in_SS4HG % aJac2Scaled)
+     else
+       print *, "sum(aJacScaled)=",sum(aJacScaled)
+     end if
+   end if
 
    ! initialize for nested Newton line search
    if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
-      ! trial solution vector
-      io_SS4HG % stateVecTrialNested(1:nState)          = in_SS4HG % xkp1l(1:nState) ! set trial state vector
-      io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
-      ! scaled search direction vector
-      p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
-      p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
-      p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
-      p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
+     ! trial solution vector
+     io_SS4HG % stateVecTrialNested(1:nState)          = in_SS4HG % xkp1l(1:nState) ! set trial state vector
+     io_SS4HG % stateVecTrialNested(nState+1:2*nState) = in_SS4HG % xk0(1:nState)
+     ! scaled search direction vector
+     p(1:nState)          = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xkp1l(1:nState) ! initial Newton step for inner iterations
+     p(nState+1:2*nState) = in_SS4HG % xkp1lp1(1:nState) - in_SS4HG % xk0(1:nState)   ! initial Newton step for outer iterations
+     p(1:nState)          = p(1:nState) / xScale(:)          ! scale inner iteration component
+     p(nState+1:2*nState) = p(nState+1:2*nState) / xScale(:) ! scale outer iteration component
    end if
 
    ! check the need to compute the line search
@@ -596,6 +596,7 @@ contains
     if (debug_output) then
       if (in_SS4HG % nested.and.allow_nested) then
         print *, "sum(gradScaled-grad2Scaled)", sum(gradScaled(:)-grad2Scaled(:))
+        print *, "sum(xkp1l),sum(xk0)=",sum(in_SS4HG % xkp1l(1:nState)),sum(in_SS4HG % xk0(1:nState))
         print *, "sum(inner),sum(outer)=",sum(p(1:nState)),sum(p(nState+1:2*nState))
       else
         print *, "sum(gradScaled)", sum(gradScaled(:))
@@ -658,7 +659,11 @@ contains
     ! debug
     if (debug_output) then
       print *, "before constraints:"
-      print *, "sum(stateVecNew)=",sum(stateVecNew)
+      if (in_SS4HG % nested) then
+       print *, "sum(stateVecNew)=",sum(io_SS4HG % stateVecNewNested(1:nState)),sum(io_SS4HG % stateVecNewNested(nState+1:2*nState))
+      else
+       print *, "sum(stateVecNew)=",sum(stateVecNew)
+      end if
     end if
 
     ! impose solution constraints adjusting state vector and iteration increment
@@ -690,7 +695,11 @@ contains
     ! debug
     if (debug_output) then
       print *, "after constraints:"
-      print *, "sum(stateVecNew)=",sum(stateVecNew)
+      if (in_SS4HG % nested) then
+       print *, "sum(stateVecNew)=",sum(io_SS4HG % stateVecNewNested(1:nState)),sum(io_SS4HG % stateVecNewNested(nState+1:2*nState))
+      else
+       print *, "sum(stateVecNew)=",sum(stateVecNew)
+      end if
     end if
 
     ! compute the residual vector and objective function
