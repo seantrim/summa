@@ -182,6 +182,7 @@ module Newton_functions
    procedure :: apply_refinement_classical   => SUMMA_refine_Newton_step_classical
    procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
    procedure :: apply_refinement_outer       => SUMMA_refine_Newton_step_outer
+   procedure :: apply_nested_line_search     => SUMMA_nested_line_search
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
    procedure :: custom_descaling   => SUMMA_descaling  
@@ -918,52 +919,268 @@ contains
 
  end subroutine SUMMA_refine_Newton_step
 
- subroutine SUMMA_nested_line_search(f_obj)
-  ! ** nested Newton line search **
-  ! input
-  class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
+ subroutine SUMMA_get_scaled_Jacobian(f_obj,J,aJacScaled)
+  ! ** Get scaled SUMMA Jacobian from nested Newton solver Jacobian **
+  use matrixOper_module,  only: scaleMatrices
+  ! arguments
+  type(f_obj_type),intent(inout) :: f_obj ! nested Newton object
+  real(rkind),intent(in)         :: J(1:f_obj % nrow_banded,1:f_obj % n)                              ! nested Newton solver Jacobian
+  real(rkind),intent(out)        :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
 
   ! local
+  real(rkind)    :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA Jacobian matrix (descaled)
+  integer(i4b)   :: nBands   ! SUMMA's leading dimension for banded Jacobians
+  integer(i4b)   :: err      ! SUMMA error code
+  character(256) :: cmessage ! error message from SUMMA
+
+    ! get SUMMA Jacobian from solver Jacobian
+    if (f_obj % banded) then ! banded storage
+     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+      nBands=nrow_banded+subdiag
+      aJac(1:subdiag,1:n) = 0._rkind
+      aJac(subdiag+1:nBands,1:n) = J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
+     end associate
+    else ! full matrix storage
+     aJac(:,:) = f_obj % J(:,:)
+    end if
+
+    ! Scale Jacobian
+    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
+     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,aJacScaled,err,cmessage) ! matches solve_linear_system
+    end associate
+    if (err/=0) then
+     if (f_obj % out_error) then
+      write(f_obj % unit,*) "Error in SUMMA_get_scaled_Jacobian: scaleMatrices message="//trim(cmessage); stop
+     end if
+    end if
+
+ end subroutine SUMMA_get_scaled_Jacobian
+
+ subroutine SUMMA_nested_line_search(f_obj,option)
+  ! ** nested Newton line search **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
+  character(1) :: option
+
+  ! local
+  real(r8b) :: L0,L1 ! objective function values
+  real(r8b) :: L1_prev ! objective function value from previous line search iteration
   real(r8b) :: initial_solution(1:f_obj % n) ! intial solution vector
   real(r8b) :: updated_solution(1:f_obj % n) ! updated solution vector
   real(r8b) :: p(1:f_obj % n) ! search direction
   real(r8b) :: grad_L(1:f_obj % n) ! gradient of objective function L
-  real(r8b) :: m ! initial slope
-  real(r8b), parameter :: m_tol=100._r8b*epsilon(1._r8b)
-  real(r8b) :: lambda ! step size
+  real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
+  real(r8b)            :: m ! local slope
+  real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
+  real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
+  real(r8b), parameter :: m_tol=1.e0_r8b !100._r8b*epsilon(1._r8b)
+  real(r8b)            :: alpha ! step size
+  real(r8b)            :: alpha_temp ! step size (temporary)
+  real(r8b)            :: alpha_prev ! step size (from previous line search iteration)
+  real(r8b)            :: rhs1,rhs2,aCoef,bCoef,disc ! constants for cubic interpolant
   logical   :: do_line_search
+  logical   :: converged ! checkConv convergence flag
+  integer(i4b), parameter :: i_max = 5_i4b ! max number of line search iterations
+  integer(i4b)   :: i ! loop index
+  integer(i4b)   :: err      ! SUMMA error code
+  character(256) :: cmessage ! error message from SUMMA
+
+  ! **** initial setup operations to be moved outside of nested Newton solver loop ****
+  ! compute initial objective function (scaled)
+  f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
+  L0 = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+
+  ! compute initial Jacobian (scaled)
+  if (option == 'N') then ! nested case
+   f_obj % J(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:) ! solver Jacobian
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J,aJacScaled) ! get scaled SUMMA Jacobian
+  else if (option == 'I') then ! inner case
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J1,aJacScaled) ! get scaled SUMMA Jacobian
+  else if (option == 'O') then ! outer case
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J2,aJacScaled) ! get scaled SUMMA Jacobian  
+   L0=-L0 ! negative sign in front of objective function
+  else
+   print *, "Error in SUMMA_nested_line_search: option is not supported"
+  end if
+  ! **** end initial setup operations to be moved outside of nested Newton solver loop ****
+
+
 
   ! compute search direction
-  p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
-
-  ! compute gradient of objective function
-  if (f_obj % banded) then
-   print *, "Error in SUMMA_nested_line_search: banded Jacobians not implemented"
-  else
-   grad_L(:) = matmul(f_obj % f_vec(:),f_obj % J(:,:)) ! based on total f and total J
+  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
+   p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
+  else if (option == 'O') then ! outer case
+   p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
   end if
 
-  ! compute initial slope
-  m = dot_product(grad_L,p)
+  ! compute gradient of objective function (scaled)
+  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
+   call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)
+  else if (option == 'O') then ! outer case
+   !call SUMMA_computeGradient(f_obj,-aJacScaled,f_obj % rVecScaled,grad_L) ! negative sign (due to minus sign in front of f2 in total f)
+   call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)  ! positive sign
+  end if
 
-  ! check that initial slope is negative (needed to reduce the line search objective function)
+  ! compute local slope (use scaled values)
+  m = dot_product(grad_L,p(:)/f_obj % xScale(:)) ! confirmed against homegrown line search
+
+  ! check that local slope is negative (needed to reduce the line search objective function)
   if (m < 0._rkind) then
    do_line_search = .true.
   else if ((0._r8b <= m).and.(m <= m_tol)) then ! non-negative slope with allowance for round-off error
    do_line_search = .false. ! skip line search (there would be no improvement anyway)
   else ! non-negative but exceeding tolerance
    print *, "m=",m
+   print *, "option=",option
    print *, "Error in SUMMA_nested_line_search: initial slope is non-negative"
    stop
   end if
 
   ! initialize line search loop
-  lambda = 1._r8b
-  initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
+  alpha = 1._r8b
+  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
+   initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
+  else if (option == 'O') then ! outer case
+   initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
+  end if
+  
+  line_search: do i=1_i4b,i_max+1_i4b
+   updated_solution(:) = initial_solution(:) + alpha*p(:)
 
-  updated_solution(:) = initial_solution(:) + lambda*p(:)
+   ! impose constraints (calls SUMMA's imposeConstraints routine)
+   call f_obj % apply_constraints(initial_solution,updated_solution)
 
+   ! compute objective function
+   if (option == 'N') then ! nested case
+    call f_obj % f_vec_eval(updated_solution) ! update total f
+    L1=f_obj % out_SS4HG % fNew ! scaled
+   else if (option == 'I') then ! inner case
+    call f_obj % f1_vec_eval(updated_solution) ! update f1
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
+    L1 = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+   else if (option == 'O') then ! outer case
+    call f_obj % f2_vec_eval(updated_solution) ! update f2
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f1 during outer iterations
+    !L1 = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+    L1 = -0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+   end if
+
+   ! update variables in nested Newton algorithm
+   if (option == 'N') then ! nested case
+    ! f1 quantities
+    call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
+    ! f2 quantities
+    call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
+    call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for total f 
+    f_obj % xk0(:) = updated_solution(:)     ! apply updated solution
+   else if (option == 'I') then ! inner case
+    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for f1 
+    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
+   else if (option == 'O') then ! outer case
+    !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f -------- testing
+    call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for f2 
+    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
+   end if
+
+   ! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
+   if (.not.(f_obj % feasible)) then
+    print *, "Error in SUMMA_nested_line_search: not feasible"
+    stop
+   end if
+
+   ! check convergence
+   converged = SUMMA_checkConv(f_obj,p,f_obj % xkp1lp1)
+   if (converged) then
+    f_obj % xkp1lp1(:) = updated_solution(:) ! accept updated solution and exit
+    return 
+   end if
+   
+   ! exit early if not doing the line search (only alpha=1.0 solution is used)
+   if (.not.do_line_search) return
+
+   ! check if the objective function is accepted using the Armijo-Goldstein Criterion
+   if (L1 <= L0 + alpha*c*m) return
+
+   ! * adjust the step size in preparation for next line search iteration *
+   !alpha = alpha * tao ! basic reduction by a constant factor
+
+   if (i == 1_i4b) then ! first backtrack: use quadratic
+    alpha_temp = -m / ( 2._r8b*(L1 - L0 - m) )
+    if (alpha_temp > 0.5_r8b*alpha) alpha_temp = 0.5_r8b*alpha
+
+   else ! subsequent backtracks: use cubic
+    ! define rhs
+    rhs1 = L1      - L0 - alpha     *m
+    rhs2 = L1_prev - L0 - alpha_prev*m
+
+    ! define coefficients
+    aCoef = (rhs1/(alpha**2_i4b) - rhs2/(alpha_prev**2_i4b))/(alpha - alpha_prev)
+    bCoef = (-alpha_prev*rhs1/(alpha**2_i4b) + alpha*rhs2/(alpha_prev**2_i4b)) / (alpha - alpha_prev)
+
+    if (aCoef == 0._r8b) then ! check if a quadratic
+     alpha_temp = -m/(2._r8b*bCoef)
+
+    else ! calculate cubic
+
+     ! only allow real roots of the cubic 
+     disc = bCoef**2_i4b - 3._r8b*aCoef*m ! discriminant?
+     if (disc < 0._r8b) then
+      alpha_temp = 0.5_r8b*alpha
+     else
+      alpha_temp = (-bCoef + sqrt(disc))/(3._r8b*aCoef)
+     end if
+
+    end if
+
+     ! constrain to <= 0.5*alpha
+     if (alpha_temp > 0.5_r8b*alpha) alpha_temp=0.5_r8b*alpha
+
+   end if
+
+   ! save results
+   alpha_prev = alpha
+   L1_prev = L1
+
+   ! constrain lambda and finalize
+   alpha = max(alpha_temp, 0.1_r8b*alpha)
+
+
+   ! if stopping criterion not reached within the max # of line search iterations, use full Newton step with constraints imposed
+   ! note: an extra loop iteration is performed to get the constrained full Newton step solution  --- may be able to reduce expense by saving this solution earlier
+   if (i == i_max) then
+    do_line_search = .false.
+    alpha = 1._r8b
+   end if
+
+  end do line_search
+
+  ! should not be able to reach this point
+  print *, "Error in SUMMA_nested_line_search: no return criteria were triggered"
  end subroutine SUMMA_nested_line_search
+
+ subroutine SUMMA_computeGradient(f_obj,aJacScaled,rVecScaled,gradScaled)
+  use matrixOper_module, only: computeGradient
+  ! ** compute product of scaled residual and scaled SUMMA Jacobian **
+  ! arguments
+  type(f_obj_type),intent(in) :: f_obj ! nested Newton object
+  real(rkind),intent(in) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
+  real(r8b),intent(in)   :: rVecScaled(1:f_obj % n) ! gradient of objective function L
+  real(r8b),intent(out)  :: gradScaled(1:f_obj % n) ! gradient of objective function L
+
+  ! local
+  integer(i4b)   :: err      ! SUMMA error code
+  character(256) :: cmessage ! error message from SUMMA
+
+  associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
+   call computeGradient(ixMatrix,nState,aJacScaled,rVecScaled,gradScaled,err,cmessage)
+  end associate
+  if (err/=0) then
+   print *, "Error in SUMMA_computeGradient: "//trim(cmessage)
+   stop
+  end if
+ end subroutine SUMMA_computeGradient
 
  subroutine SUMMA_scaling(f_obj,B)
   ! ** apply scaling from SUMMA's fScale and xScale vectors to matrix and RHS for LAPACK **
@@ -1028,25 +1245,24 @@ contains
 
  end function SUMMA_check_convergence_flag
 
- function SUMMA_checkConv(f_obj) result(converged)
+ function SUMMA_checkConv(f_obj,step,xvec1) result(converged)
   ! ** interface for SUMMA's checkConv subroutine **
-  ! input
+  ! arguments
   class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: step(1:f_obj % n)  ! Newton step (iteration increment)
+  real(r8b),intent(in)            :: xvec1(1:f_obj % n) ! updated solution vector
 
   ! output
   logical :: converged
 
   ! local variables
   integer(i4b) :: mSoil             ! number of soil layers in the solution vector
-  real(r8b)    :: xInc(1:f_obj % n) ! iteration increment (mixed units)
 
   ! get the number of soil layers in the solution vector
   mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
 
-  xInc=f_obj % xkp1(:)-f_obj % xk(:) ! iteration increment (mixed units)
-
   converged = checkConv(mSoil,f_obj % in_SS4HG,f_obj % mpar_data,f_obj % indx_data,f_obj % prog_data,&
-                       &f_obj % f_vec,xInc,f_obj % xkp1,f_obj % out_SS4HG)
+                       &f_obj % f_vec,step,xvec1,f_obj % out_SS4HG)
 
  end function SUMMA_checkConv
 
@@ -1270,72 +1486,22 @@ contains
   end if
  end subroutine get_SUMMA_mass_energy_masks
 
- subroutine f_mass_SUMMA_vec_full(f_obj,xvec)
-  ! *** Compute mass non-linear function --- use fully-coupled eval8summa call and filter results ***
+ subroutine filter_SUMMA_f(negative,stateMask,f_total,f_filter)
+  ! filter total f from SUMMA into f1 or f2 for use in nested Newton solver (use appropriate stateMask)
   ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-
-  ! local
-  real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
-
-  ! note: data structures and variables for f1 are initialized in systemSolv
-
-  call f_obj % f_state_SUMMA_vec_full(&
-               &xvec,&
-               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
-               &f_obj % dBaseflow_dMatric,resVec)
-
-  ! store total non-linear function
-  f_obj % f_vec(:) = resVec(:)
+  logical         ,intent(in)    :: negative      ! apply a negative sign to f_filter?
+  logical(lgt)    ,intent(in)    :: stateMask(:)  ! logical mask for filtering
+  real(r8b)       ,intent(in)    :: f_total(:)  ! total f in nested Newton solver
+  real(r8b)       ,intent(out)   :: f_filter(:) ! filtered f in nested Newton solver 
 
   ! assign non-zero function values based on logical mask
-  f_obj % f1_vec(:)=0._r8b
-  f_obj % f1_vec(:)=merge(real(resVec,r8b),f_obj % f1_vec,f_obj % stateMask1)
-
- end subroutine f_mass_SUMMA_vec_full
-
- subroutine Jacobian_f_mass_SUMMA_vec_full(f_obj,xvec)
-  ! *** Compute Jacobian for mass non-linear function --- use fully-coupled computJacob call and filter results ***
-  ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
-
-  ! local
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i,j,k  ! loop indices
-  integer(i4b) :: nBands ! # of bands for banded storage
-
-  call f_obj % SUMMA_computJacob(&
-               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
-               &aJac)
-
-  ! get nested Newton solver Jacobian J1
-  call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
-
-  !! store Jacobian used in solver
-  !if (f_obj % banded) then ! banded storage
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-  !  nBands=nrow_banded+subdiag ! number of non-zero bands
-  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
-  !  do j=1,n ! column index for dense and banded storage
-  !   do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
-  !    k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-  !    aJac(k,j) = merge(aJac(k,j),0._rkind,f_obj % stateMask1(i)) ! zero the elements that are not included in J1
-  !   end do
-  !  end do
-  !  f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-  ! end associate
-  !else ! full matrix storage
-  ! f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
-  ! f_obj % J1(:,:) = 0._r8b
-  ! do i=1,f_obj % n
-  !  f_obj % J1(:,i) = merge(aJac(:,i),f_obj % J1(:,i),f_obj % stateMask1(:))
-  ! end do
-  !end if
- end subroutine Jacobian_f_mass_SUMMA_vec_full
+  f_filter(:)=0._r8b
+  if (negative) then
+   f_filter(:)=merge(-f_total,f_filter,stateMask)
+  else
+   f_filter(:)=merge(f_total,f_filter,stateMask)
+  end if
+ end subroutine filter_SUMMA_f
 
  subroutine filter_SUMMA_Jacobian(f_obj,negative,stateMask,aJac,J_total,J_filter)
   ! filter total Jacobian from SUMMA into J1 or J2 for use in nested Newton solver (use appropriate stateMask)
@@ -1388,6 +1554,52 @@ contains
   end if
  end subroutine filter_SUMMA_Jacobian
 
+ subroutine f_mass_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute mass non-linear function --- use fully-coupled eval8summa call and filter results ***
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  ! local
+  real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
+
+  ! note: data structures and variables for f1 are initialized in systemSolv
+
+  call f_obj % f_state_SUMMA_vec_full(&
+               &xvec,&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+               &f_obj % dBaseflow_dMatric,resVec)
+
+  ! store total non-linear function
+  f_obj % f_vec(:) = real(resVec(:),r8b)
+
+  ! assign non-zero function values based on logical mask
+  call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
+
+ end subroutine f_mass_SUMMA_vec_full
+
+ subroutine Jacobian_f_mass_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute Jacobian for mass non-linear function --- use fully-coupled computJacob call and filter results ***
+  ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess (needed for interface)
+
+  ! local
+  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  integer(i4b) :: i,j,k  ! loop indices
+  integer(i4b) :: nBands ! # of bands for banded storage
+
+  call f_obj % SUMMA_computJacob(&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+               &aJac)
+
+  ! get nested Newton solver Jacobian J1
+  call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
+
+ end subroutine Jacobian_f_mass_SUMMA_vec_full
+
  subroutine f_energy_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute energy non-linear function --- use fully-coupled eval8summa call and filter results ***
   ! arguments
@@ -1405,11 +1617,10 @@ contains
                &f_obj % dBaseflow_dMatric,resVec)
 
   ! store total non-linear function
-  f_obj % f_vec(:) = resVec(:)
+  f_obj % f_vec(:) = real(resVec(:),r8b)
 
   ! assign non-zero function values based on logical mask
-  f_obj % f2_vec(:)=0._r8b
-  f_obj % f2_vec(:)=merge(-real(resVec,r8b),f_obj % f2_vec,f_obj % stateMask2) ! sign change so that f=f1-f2
+  call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
  end subroutine f_energy_SUMMA_vec_full
 
@@ -1432,27 +1643,6 @@ contains
 
   ! get nested Newton solver Jacobian J2
   call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
-
-  !! store Jacobian used in solver
-  !if (f_obj % banded) then ! banded storage
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-  !  nBands=nrow_banded+subdiag ! number of non-zero bands
-  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (total Jacobian for Newton step refinement)
-  !  do j=1,n ! column index for dense and banded storage
-  !   do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
-  !    k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-  !    aJac(k,j) = merge(-aJac(k,j),0._rkind,f_obj % stateMask2(i)) ! zero the elements that are not included in J2 (sign change so that J=J1-J2)
-  !   end do
-  !  end do
-  !  f_obj % J2(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-  ! end associate
-  !else ! full matrix storage
-  ! f_obj % J(:,:)  = aJac(:,:) ! store total Jacobian (for Newton step refinement)
-  ! f_obj % J2(:,:) = 0._r8b
-  ! do j=1,f_obj % n
-  !  f_obj % J2(:,j) = merge(-aJac(:,j),f_obj % J2(:,j),f_obj % stateMask2(:)) ! sign change so that J=J1-J2
-  ! end do
-  !end if
 
  end subroutine Jacobian_f_energy_SUMMA_vec_full
 
