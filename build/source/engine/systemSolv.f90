@@ -1082,7 +1082,7 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
-   nested_Newton % refinement        = .true.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement        = .false.  ! apply refine_Newton_step following outer/classical iterations
    nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
 
    ! constraints 
@@ -1188,9 +1188,7 @@ contains
    nested_Newton % f2_eval_flag = .true. 
    nested_Newton % J2_eval_flag = .true.
 
-   ! get intial Jacobians --- combine into a single class procedure since we are filtering the same total Jacobian?
-   !call nested_Newton % J1_eval(stateVecTrial) 
-   !call nested_Newton % J2_eval(stateVecTrial) 
+   ! get intial Jacobians
    call nested_Newton % J1_J2_eval(stateVecTrial) 
 
   else ! classical iterations
@@ -1268,7 +1266,7 @@ contains
 
   !print *, "niter=",niter ! SJT: --- take out ---
   !print *, "fOld=",fOld ! SJT: --- take out ---
-  !stop
+  stop
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown

@@ -183,6 +183,7 @@ module Newton_functions
    procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
    procedure :: apply_refinement_outer       => SUMMA_refine_Newton_step_outer
    procedure :: apply_nested_line_search     => SUMMA_nested_line_search
+   procedure :: line_search_objective => SUMMA_line_search_objective
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
    procedure :: custom_descaling   => SUMMA_descaling  
@@ -960,7 +961,7 @@ contains
   ! ** nested Newton line search **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
-  character(1) :: option
+  character(1)     ,intent(in)    :: option
 
   ! local
   real(r8b) :: L0,L1 ! objective function values
@@ -971,47 +972,49 @@ contains
   real(r8b) :: grad_L(1:f_obj % n) ! gradient of objective function L
   real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
   real(r8b)            :: m ! local slope
-  real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
+  real(r8b), parameter :: c=1.e-4_r8b!1.e-4_r8b   ! objective function check control parameter
   real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
-  real(r8b), parameter :: m_tol=1.e0_r8b !100._r8b*epsilon(1._r8b)
+  real(r8b), parameter :: m_tol=100._r8b*epsilon(1._r8b)
   real(r8b)            :: alpha ! step size
   real(r8b)            :: alpha_temp ! step size (temporary)
   real(r8b)            :: alpha_prev ! step size (from previous line search iteration)
   real(r8b)            :: rhs1,rhs2,aCoef,bCoef,disc ! constants for cubic interpolant
   logical   :: do_line_search
   logical   :: converged ! checkConv convergence flag
-  integer(i4b), parameter :: i_max = 5_i4b ! max number of line search iterations
+  integer(i4b), parameter :: i_max = 10_i4b!5_i4b ! max number of line search iterations
   integer(i4b)   :: i ! loop index
   integer(i4b)   :: err      ! SUMMA error code
   character(256) :: cmessage ! error message from SUMMA
+  logical, parameter :: debug_output=.true.
+
+  ! initial solutions
+  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
+   initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
+  else if (option == 'O') then ! outer case
+   initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
+  end if
 
   ! **** initial setup operations to be moved outside of nested Newton solver loop ****
   ! compute initial objective function (scaled)
-  f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
-  L0 = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+  call f_obj % line_search_objective(.true.,option,initial_solution,L0)
 
   ! compute initial Jacobian (scaled)
   if (option == 'N') then ! nested case
    f_obj % J(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:) ! solver Jacobian
    call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J,aJacScaled) ! get scaled SUMMA Jacobian
   else if (option == 'I') then ! inner case
-   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J1,aJacScaled) ! get scaled SUMMA Jacobian
+   !call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J1,aJacScaled) ! get scaled SUMMA Jacobian
+   f_obj % J(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:) ! solver Jacobian
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J,aJacScaled) ! get scaled SUMMA Jacobian
   else if (option == 'O') then ! outer case
    call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J2,aJacScaled) ! get scaled SUMMA Jacobian  
    L0=-L0 ! negative sign in front of objective function
   else
    print *, "Error in SUMMA_nested_line_search: option is not supported"
+   stop
   end if
   ! **** end initial setup operations to be moved outside of nested Newton solver loop ****
 
-
-
-  ! compute search direction
-  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
-   p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
-  else if (option == 'O') then ! outer case
-   p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
-  end if
 
   ! compute gradient of objective function (scaled)
   if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
@@ -1020,6 +1023,14 @@ contains
    !call SUMMA_computeGradient(f_obj,-aJacScaled,f_obj % rVecScaled,grad_L) ! negative sign (due to minus sign in front of f2 in total f)
    call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)  ! positive sign
   end if
+
+  ! compute search direction
+  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
+   p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
+  else if (option == 'O') then ! outer case
+   p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
+  end if
+
 
   ! compute local slope (use scaled values)
   m = dot_product(grad_L,p(:)/f_obj % xScale(:)) ! confirmed against homegrown line search
@@ -1036,14 +1047,13 @@ contains
    stop
   end if
 
-  ! initialize line search loop
-  alpha = 1._r8b
-  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
-   initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
-  else if (option == 'O') then ! outer case
-   initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
+  if (debug_output) then
+   print *, "NN Line Search:"
+   print *, "m=",m
+   print *, "L0=",L0
   end if
   
+  alpha = 1._r8b ! initialize line search step size
   line_search: do i=1_i4b,i_max+1_i4b
    updated_solution(:) = initial_solution(:) + alpha*p(:)
 
@@ -1051,19 +1061,7 @@ contains
    call f_obj % apply_constraints(initial_solution,updated_solution)
 
    ! compute objective function
-   if (option == 'N') then ! nested case
-    call f_obj % f_vec_eval(updated_solution) ! update total f
-    L1=f_obj % out_SS4HG % fNew ! scaled
-   else if (option == 'I') then ! inner case
-    call f_obj % f1_vec_eval(updated_solution) ! update f1
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
-    L1 = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-   else if (option == 'O') then ! outer case
-    call f_obj % f2_vec_eval(updated_solution) ! update f2
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f1 during outer iterations
-    !L1 = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-    L1 = -0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-   end if
+   call f_obj % line_search_objective(.true.,option,updated_solution,L1)
 
    ! update variables in nested Newton algorithm
    if (option == 'N') then ! nested case
@@ -1076,7 +1074,7 @@ contains
     call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for total f 
     f_obj % xk0(:) = updated_solution(:)     ! apply updated solution
    else if (option == 'I') then ! inner case
-    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for f1 
+    !call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for f1 
     f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
    else if (option == 'O') then ! outer case
     !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f -------- testing
@@ -1090,8 +1088,17 @@ contains
     stop
    end if
 
-   ! check convergence
+   ! get convergence flag
    converged = SUMMA_checkConv(f_obj,p,f_obj % xkp1lp1)
+   
+   if (debug_output) then
+    print *, "i=",i
+    print *, "alpha=",alpha
+    print *, "L1=",L1
+    print *, "L0 + alpha*c*m=",L0 + alpha*c*m
+   end if
+
+   ! check convergence
    if (converged) then
     f_obj % xkp1lp1(:) = updated_solution(:) ! accept updated solution and exit
     return 
@@ -1158,11 +1165,47 @@ contains
 
   ! should not be able to reach this point
   print *, "Error in SUMMA_nested_line_search: no return criteria were triggered"
+
  end subroutine SUMMA_nested_line_search
 
+ subroutine SUMMA_line_search_objective(f_obj,evaluate_f,option,solution,L)
+  ! ** compute line search objective function for SUMMA **
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
+  logical         ,intent(in)    :: evaluate_f ! perform evaluations for f, f1, or f2? (if not, use stored values)
+  character(1)    ,intent(in)    :: option ! line search option
+  real(r8b)       ,intent(in)    :: solution(1:f_obj % n) ! updated solution vector
+  real(r8b)       ,intent(out)   :: L ! objective function value
+
+  ! local
+  real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
+
+  if (option == 'N') then ! nested case
+   if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
+   L=f_obj % out_SS4HG % fNew ! scaled
+  else if (option == 'I') then ! inner case
+   if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1
+   !f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J2,aJacScaled)
+   if (f_obj % banded) then
+    print *, "Error in SUMMA_line_search_objective: banded Jacobians not implemented"; stop
+   else
+    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:))&
+                        & - matmul(aJacScaled,(solution - f_obj % xk0)/f_obj % xScale) ! uses constant f2 during inner iterations
+   end if
+   L = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+  else if (option == 'O') then ! outer case
+   if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2
+   f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f1 during outer iterations
+   L = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+  else 
+   print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
+  end if
+ end subroutine SUMMA_line_search_objective
+
  subroutine SUMMA_computeGradient(f_obj,aJacScaled,rVecScaled,gradScaled)
-  use matrixOper_module, only: computeGradient
   ! ** compute product of scaled residual and scaled SUMMA Jacobian **
+  use matrixOper_module, only: computeGradient
   ! arguments
   type(f_obj_type),intent(in) :: f_obj ! nested Newton object
   real(rkind),intent(in) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
