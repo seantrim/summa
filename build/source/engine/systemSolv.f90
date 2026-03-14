@@ -1082,7 +1082,7 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
-   nested_Newton % refinement        = .false.  ! apply refine_Newton_step following outer/classical iterations
+   nested_Newton % refinement        = .true. ! apply refine_Newton_step following outer/classical iterations
    nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
 
    ! constraints 
@@ -1266,7 +1266,7 @@ contains
 
   !print *, "niter=",niter ! SJT: --- take out ---
   !print *, "fOld=",fOld ! SJT: --- take out ---
-  stop
+  !stop
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown

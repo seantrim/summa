@@ -173,6 +173,9 @@ contains
    f_obj % inner=.false.
 
    if (f_obj % refinement) then
+    f_obj % xkp1l(:) = f_obj % xkp1lp1(:) ! store unrefined inner iteration solution
+    call f_obj % f1_vec_eval(f_obj % xkp1l(:))
+    call f_obj % J1_eval(f_obj % xkp1l(:))
     call f_obj % apply_nested_line_search('O')
    end if
 
