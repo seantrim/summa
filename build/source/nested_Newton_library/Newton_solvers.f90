@@ -141,7 +141,13 @@ contains
      ! f_obj % J updated on last J1 evaluation
      !call f_obj % apply_refinement_inner(f_obj % J,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
      !call f_obj % apply_nested_line_search('N')
-     call f_obj % apply_nested_line_search('I')
+     !if (l == 0_i4b) then ! first inner iteration
+     ! call f_obj % apply_nested_line_search('F')
+     if (l < f_obj % lmax) then ! initial inner iterations
+      call f_obj % apply_nested_line_search('I')
+     else ! last inner iteration
+      call f_obj % apply_nested_line_search('L')
+     end if
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
