@@ -23,7 +23,7 @@ MODULE var_lookup
 #ifdef ACTORS_ACTIVE
  USE, intrinsic :: iso_c_binding
 #endif
- USE nrtype, integerMissing=>nr_integerMissing
+ USE nr_type, integerMissing=>nr_integerMissing
  implicit none
  private
  ! local variables
@@ -78,6 +78,8 @@ MODULE var_lookup
   integer(i4b)    :: aquiferIni = integerMissing     ! choice of full or empty aquifer at start
   integer(i4b)    :: infRateMax = integerMissing     ! choice of method to determine maximum infiltration rate
   integer(i4b)    :: surfRun_SE = integerMissing     ! choice of parameterization for saturation excess surface runoff
+  integer(i4b)    :: read_force = integerMissing     ! method used to read forcing data (per step or full read)
+  integer(i4b)    :: write_buff = integerMissing     ! method used to buffer model write (none, per file)
 
  endtype iLook_decision
 
@@ -402,14 +404,8 @@ MODULE var_lookup
   integer(i4b)    :: scalarCanopyIceMax              = integerMissing ! maximum interception storage capacity for ice (kg m-2)
   integer(i4b)    :: scalarCanopyLiqMax              = integerMissing ! maximum interception storage capacity for liquid water (kg m-2)
   integer(i4b)    :: scalarGrowingSeasonIndex        = integerMissing ! growing season index (0=off, 1=on)
-  integer(i4b)    :: scalarVolHtCap_air              = integerMissing ! volumetric heat capacity air (J m-3 K-1)
-  integer(i4b)    :: scalarVolHtCap_ice              = integerMissing ! volumetric heat capacity ice (J m-3 K-1)
-  integer(i4b)    :: scalarVolHtCap_soil             = integerMissing ! volumetric heat capacity dry soil (J m-3 K-1)
-  integer(i4b)    :: scalarVolHtCap_water            = integerMissing ! volumetric heat capacity liquid wat (J m-3 K-1)
   integer(i4b)    :: mLayerVolHtCapBulk              = integerMissing ! volumetric heat capacity in each layer (J m-3 K-1)
   integer(i4b)    :: mLayerCm                        = integerMissing ! Cm for each layer (J m-3)
-  integer(i4b)    :: scalarLambda_drysoil            = integerMissing ! thermal conductivity of dry soil     (W m-1 K-1)
-  integer(i4b)    :: scalarLambda_wetsoil            = integerMissing ! thermal conductivity of wet soil     (W m-1 K-1)
   integer(i4b)    :: mLayerThermalC                  = integerMissing ! thermal conductivity at the mid-point of each layer (W m-1 K-1)
   integer(i4b)    :: iLayerThermalC                  = integerMissing ! thermal conductivity at the interface of each layer (W m-1 K-1)
   ! enthalpy
@@ -485,8 +481,6 @@ MODULE var_lookup
   integer(i4b)    :: scalarTotalSoilWat              = integerMissing ! total mass of water in the soil (kg m-2)
   ! variable shortcuts
   integer(i4b)    :: scalarVGn_m                     = integerMissing ! van Genuchten "m" parameter (-)
-  integer(i4b)    :: scalarKappa                     = integerMissing ! constant in the freezing curve function (m K-1)
-  integer(i4b)    :: scalarVolLatHt_fus              = integerMissing ! volumetric latent heat of fusion     (J m-3)
   ! number of function evaluations
   integer(i4b)    :: numFluxCalls                    = integerMissing ! number of flux calls (-)
   integer(i4b)    :: wallClockTime                   = integerMissing ! wall clock time for physics routines(s)
@@ -585,7 +579,6 @@ MODULE var_lookup
   integer(i4b)    :: scalarThroughfallRain           = integerMissing ! rain that reaches the ground without ever touching the canopy (kg m-2 s-1)
   integer(i4b)    :: scalarCanopySnowUnloading       = integerMissing ! unloading of snow from the vegetion canopy (kg m-2 s-1)
   integer(i4b)    :: scalarCanopyLiqDrainage         = integerMissing ! drainage of liquid water from the vegetation canopy (kg m-2 s-1)
-  integer(i4b)    :: scalarCanopyMeltFreeze          = integerMissing ! melt/freeze of water stored in the canopy (kg m-2 s-1)
   ! energy fluxes and for the snow and soil domains
   integer(i4b)    :: iLayerConductiveFlux            = integerMissing ! conductive energy flux at layer interfaces (W m-2)
   integer(i4b)    :: iLayerAdvectiveFlux             = integerMissing ! advective energy flux at layer interfaces (W m-2)
@@ -845,8 +838,7 @@ MODULE var_lookup
  endtype iLook_bvar
 
  ! ***********************************************************************************************************
- ! (13) structure for looking up the type of a model variable (this is only needed for backward
- ! compatability, and should be removed eventually)
+ ! (13) structure for looking up the type of a model variable
  ! ***********************************************************************************************************
 #ifdef ACTORS_ACTIVE
  type, public, bind(C) :: iLook_varType
@@ -877,7 +869,6 @@ MODULE var_lookup
   integer(i4b)    :: vari = integerMissing ! variance over period
   integer(i4b)    :: mini = integerMissing ! minimum over period
   integer(i4b)    :: maxi = integerMissing ! maximum over period
-  integer(i4b)    :: mode = integerMissing ! mode over period
  endtype iLook_stat
 
  ! ***********************************************************************************************************
@@ -908,7 +899,7 @@ MODULE var_lookup
                                                                          11, 12, 13, 14, 15, 16, 17, 18, 19, 20,&
                                                                          21, 22, 23, 24, 25, 26, 27, 28, 29, 30,&
                                                                          31, 32, 33, 34, 35, 36, 37, 38, 39, 40,&
-                                                                         41, 42)
+                                                                         41, 42, 43, 44)
  ! named variables: model time
  type(iLook_time),    public,parameter :: iLookTIME     =iLook_time    (  1,  2,  3,  4,  5,  6,  7)
  ! named variables: model forcing data
@@ -954,8 +945,7 @@ MODULE var_lookup
                                                                          71, 72, 73, 74, 75, 76, 77, 78, 79, 80,&
                                                                          81, 82, 83, 84, 85, 86, 87, 88, 89, 90,&
                                                                          91, 92, 93, 94, 95, 96, 97, 98, 99,100,&
-                                                                        101,102,103,104,105,106,107,108,109,110,&
-                                                                        111)
+                                                                        101,102,103)
  ! named variables: model fluxes
  type(iLook_flux),    public,parameter :: iLookFLUX     =iLook_flux    (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12, 13, 14, 15, 16, 17, 18, 19, 20,&
@@ -965,8 +955,7 @@ MODULE var_lookup
                                                                          51, 52, 53, 54, 55, 56, 57, 58, 59, 60,&
                                                                          61, 62, 63, 64, 65, 66, 67, 68, 69, 70,&
                                                                          71, 72, 73, 74, 75, 76, 77, 78, 79, 80,&
-                                                                         81, 82, 83, 84, 85, 86, 87, 88, 89, 90,&
-                                                                         91)
+                                                                         81, 82, 83, 84, 85, 86, 87, 88, 89, 90)
  ! named variables: derivatives in model fluxes w.r.t. relevant state variables
  type(iLook_deriv),   public,parameter :: iLookDERIV    =iLook_deriv   (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12, 13, 14, 15, 16, 17, 18, 19, 20,&
@@ -978,26 +967,26 @@ MODULE var_lookup
                                                                          71, 72, 73, 74, 75, 76, 77, 78, 79, 80,&
                                                                          81, 82)
  ! named variables: model indices
- type(iLook_index),   public,parameter :: iLookINDEX    =ilook_index   (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
+ type(iLook_index),   public,parameter :: iLookINDEX    =iLook_index   (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12, 13, 14, 15, 16, 17, 18, 19, 20,&
                                                                          21, 22, 23, 24, 25, 26, 27, 28, 29, 30,&
                                                                          31, 32, 33, 34, 35, 36, 37, 38, 39, 40,&
                                                                          41, 42, 43, 44, 45, 46, 47, 48, 49, 50,&
                                                                          51, 52, 53, 54, 55, 56, 57, 58, 59, 60)
  ! named variables: basin-average parameters
- type(iLook_bpar),    public,parameter :: iLookBPAR     =ilook_bpar    (  1,  2,  3,  4,  5)
+ type(iLook_bpar),    public,parameter :: iLookBPAR     =iLook_bpar    (  1,  2,  3,  4,  5)
  ! named variables: basin-average variables
- type(iLook_bvar),    public,parameter :: iLookBVAR     =ilook_bvar    (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
+ type(iLook_bvar),    public,parameter :: iLookBVAR     =iLook_bvar    (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12, 13)
- ! named variables in varibale type structure
- type(iLook_varType), public,parameter :: iLookVarType  =ilook_varType (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
+ ! named variables in variable type structure
+ type(iLook_varType), public,parameter :: iLookVarType  =iLook_varType (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12)
  ! number of possible output statistics
- type(iLook_stat),    public,parameter :: iLookSTAT     =ilook_stat    (  1,  2,  3,  4,  5,  6,  7)
+ type(iLook_stat),    public,parameter :: iLookSTAT     =iLook_stat    (  1,  2,  3,  4,  5,  6)
  ! number of possible output frequencies
- type(iLook_freq),    public,parameter :: iLookFREQ     =ilook_freq    (  1,  2,  3,  4)
+ type(iLook_freq),    public,parameter :: iLookFREQ     =iLook_freq    (  1,  2,  3,  4)
  ! named variables in the lookup table structure
- type(iLook_vLookup), public,parameter :: iLookLOOKUP   =ilook_vLookup (  1,  2,  3)
+ type(iLook_vLookup), public,parameter :: iLookLOOKUP   =iLook_vLookup (  1,  2,  3)
  ! define maximum number of variables of each type
  integer(i4b),parameter,public :: maxvarDecisions = storage_size(iLookDECISIONS)/iLength
  integer(i4b),parameter,public :: maxvarTime      = storage_size(iLookTIME)/iLength

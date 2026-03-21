@@ -18,10 +18,10 @@
 ! You should have received a copy of the GNU General Public License
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-module updateVarsWithPrime_module
+module updatDiagnWithPrime_module
 
 ! data types
-USE nrtype
+USE nr_type
 
 ! missing values
 USE globalData,only:integerMissing  ! missing integer
@@ -74,39 +74,39 @@ USE var_lookup,only:iLookPARAM            ! named variables for structure elemen
 USE var_lookup,only:iLookINDEX            ! named variables for structure elements
 
 ! provide access to routines to update states
-USE updatStateWithPrime_module,only:updateSnowPrime     ! update snow states
-USE updatStateWithPrime_module,only:updateSoilPrime     ! update soil states
+USE updatStateWithPrime_module,only:updatSnowPrime     ! update snow states
+USE updatStateWithPrime_module,only:updatSoilPrime     ! update soil states
 
 ! provide access to functions for the constitutive functions and derivatives
-USE snow_utils_module,only:fracliquid              ! compute the fraction of liquid water (snow)
-USE snow_utils_module,only:dFracLiq_dTk            ! differentiate the freezing curve w.r.t. temperature (snow)
-USE soil_utils_module,only:dTheta_dTk              ! differentiate the freezing curve w.r.t. temperature (soil)
-USE soil_utils_module,only:dTheta_dPsi             ! derivative in the soil water characteristic (soil)
-USE soil_utils_module,only:dPsi_dTheta             ! derivative in the soil water characteristic (soil)
-USE soil_utils_module,only:matricHead              ! compute the matric head based on volumetric water content
-USE soil_utils_module,only:volFracLiq              ! compute volumetric fraction of liquid water
-USE soil_utils_module,only:crit_soilT              ! compute critical temperature below which ice exists
-USE soil_utilsAddPrime_module,only:liquidHeadPrime ! compute the liquid water matric potential
-USE soil_utilsAddPrime_module,only:d2Theta_dPsi2   ! second derivative in the soil water characteristic (soil)
-USE soil_utilsAddPrime_module,only:d2Theta_dTk2    ! second derivative in the freezing curve w.r.t. temperature (soil)
-USE enthalpyTemp_module,only:enthalpy2T_cas        ! compute canopy air space temperature from enthalpy
-USE enthalpyTemp_module,only:enthalpy2T_veg        ! compute canopy temperature from enthalpy and water content
-USE enthalpyTemp_module,only:enthalpy2T_snow       ! compute snow layer temperature from enthalpy and water content
-USE enthalpyTemp_module,only:enthalpy2T_soil       ! compute soil layer temperature from enthalpy and matric potential
+USE snow_utils_module,only:fracliquid                     ! compute the fraction of liquid water (snow)
+USE snow_utils_module,only:dFracLiq_dTk                   ! differentiate the freezing curve w.r.t. temperature (snow)
+USE soil_utils_module,only:dTheta_dTk                     ! differentiate the freezing curve w.r.t. temperature (soil)
+USE soil_utils_module,only:dTheta_dPsi                    ! derivative in the soil water characteristic (soil)
+USE soil_utils_module,only:dPsi_dTheta                    ! derivative in the soil water characteristic (soil)
+USE soil_utils_module,only:matricHead                     ! compute the matric head based on volumetric water content
+USE soil_utils_module,only:volFracLiq                     ! compute volumetric fraction of liquid water
+USE soil_utils_module,only:crit_soilT                     ! compute critical temperature below which ice exists
+USE soil_utilsAddPrime_module,only:liquidHeadPrime        ! compute the liquid water matric potential
+USE soil_utilsAddPrime_module,only:d2Theta_dPsi2          ! second derivative in the soil water characteristic (soil)
+USE soil_utilsAddPrime_module,only:d2Theta_dTk2           ! second derivative in the freezing curve w.r.t. temperature (soil)
+USE convertEnthalpyTemp_module,only:enthalpy2T_cas        ! compute canopy air space temperature from enthalpy
+USE convertEnthalpyTemp_module,only:enthalpy2T_veg        ! compute canopy temperature from enthalpy and water content
+USE convertEnthalpyTemp_module,only:enthalpy2T_snow       ! compute snow layer temperature from enthalpy and water content
+USE convertEnthalpyTemp_module,only:enthalpy2T_soil       ! compute soil layer temperature from enthalpy and matric potential
 
 ! IEEE checks
 USE, intrinsic :: ieee_arithmetic            ! check values (NaN, etc.)
 
 implicit none
 private
-public::updateVarsWithPrime
+public::updatDiagnWithPrime
 
 contains
 
 ! **********************************************************************************************************
-! public subroutine updateVarsWithPrime: compute diagnostic variables and derivatives for Prime Jacobian
+! public subroutine updatDiagnWithPrime: compute diagnostic variables and derivatives for Prime Jacobian
 ! **********************************************************************************************************
-subroutine updateVarsWithPrime(&
+subroutine updatDiagnWithPrime(&
                      ! input
                      enthalpyStateVec,                          & ! intent(in):    flag if enthalpy is the state variable
                      use_lookup,                                & ! intent(in):    flag to use the lookup table for soil enthalpy
@@ -301,7 +301,7 @@ subroutine updateVarsWithPrime(&
     ! --------------------------------------------------------------------------------------------------------------------------------
 
     ! initialize error control
-    err=0; message='updateVarsWithPrime/'
+    err=0; message='updatDiagnWithPrime/'
 
     ! allocate space and assign values to the flag vector
     allocate(computedCoupling(size(ixMapSubset2Full)),stat=err)        ! .true. if computed the coupling for a given state variable
@@ -614,7 +614,7 @@ subroutine updateVarsWithPrime(&
             case(iname_veg)
 
               ! compute volumetric fraction of liquid water and ice
-              call updateSnowPrime(&
+              call updatSnowPrime(&
                               xTemp,                                        & ! intent(in):  temperature (K)
                               scalarCanopyWatTrial/(iden_water*canopyDepth),& ! intent(in):  volumetric fraction of total water (-)
                               snowfrz_scale,                                & ! intent(in):  scaling parameter for the snow freezing curve (K-1)
@@ -639,7 +639,7 @@ subroutine updateVarsWithPrime(&
             case(iname_snow)
 
               ! compute volumetric fraction of liquid water and ice
-              call updateSnowPrime(&
+              call updatSnowPrime(&
                               xTemp,                          & ! intent(in):  temperature (K)
                               mLayerVolFracWatTrial(iLayer),  & ! intent(in):  mass state variable = trial volumetric fraction of water (-)
                               snowfrz_scale,                  & ! intent(in):  scaling parameter for the snow freezing curve (K-1)
@@ -657,7 +657,7 @@ subroutine updateVarsWithPrime(&
             case(iname_soil)
 
               ! compute volumetric fraction of liquid water and ice
-              call updateSoilPrime(&
+              call updatSoilPrime(&
                               xTemp,                                  & ! intent(in):  temperature (K)
                               mLayerMatricHeadTrial(ixControlIndex),  & ! intent(in):  total water matric potential (m)
                               mLayerTempPrime(iLayer),                & ! intent(in):  temperature time derivative (K/s)
@@ -860,7 +860,7 @@ subroutine updateVarsWithPrime(&
     ! end association to the variables in the data structures
 end associate
 
-end subroutine updateVarsWithPrime
+end subroutine updatDiagnWithPrime
 
 
 ! **********************************************************************************************************
@@ -897,4 +897,4 @@ subroutine xTempSolve(&
   derivative = heatCap + LH_fus*iden_water*dLiq_dT  ! J m-3 K-1
 end subroutine xTempSolve
 
-end module updateVarsWithPrime_module
+end module updatDiagnWithPrime_module

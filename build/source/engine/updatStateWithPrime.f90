@@ -1,5 +1,5 @@
 module updatStateWithPrime_module
-USE nrtype
+USE nr_type
 ! physical constants
 USE multiconst,only:&
                     Tfreeze,     & ! freezing point of pure water  (K)
@@ -13,15 +13,15 @@ USE globalData,only:realMissing    ! missing real number
 
 implicit none
 private
-public::updateSnowPrime
-public::updateSoilPrime
+public::updatSnowPrime
+public::updatSoilPrime
 contains
 
 
 ! *************************************************************************************************************
-! public subroutine updateSnowPrime: compute phase change impacts on volumetric liquid water and ice
+! public subroutine updatSnowPrime: compute phase change impacts on volumetric liquid water and ice
 ! *************************************************************************************************************
-subroutine updateSnowPrime(&
+subroutine updatSnowPrime(&
                       ! input
                       mLayerTemp             ,& ! intent(in):  temperature (K)
                       mLayerTheta            ,& ! intent(in):  volume fraction of total water (-)
@@ -55,7 +55,7 @@ subroutine updateSnowPrime(&
   integer(i4b),intent(out)      :: err                   ! error code
   character(*),intent(out)      :: message               ! error message
   ! initialize error control
-  err=0; message="updateSnowPrime/"
+  err=0; message="updatSnowPrime/"
 
   ! compute the volumetric fraction of liquid water and ice (-)
   fLiq = fracliquid(mLayerTemp,snowfrz_scale)
@@ -70,12 +70,12 @@ subroutine updateSnowPrime(&
     mLayerVolFracIcePrime=realMissing
   end if
 
-end subroutine updateSnowPrime
+end subroutine updatSnowPrime
 
 ! ***********************************************************************************************************************************
-! public subroutine updateSoilPrime: compute phase change impacts on matric head and volumetric liquid water and ice (veg or soil)
+! public subroutine updatSoilPrime: compute phase change impacts on matric head and volumetric liquid water and ice (veg or soil)
 ! ***********************************************************************************************************************************
-subroutine updateSoilPrime(&
+subroutine updatSoilPrime(&
                       ! input
                       mLayerTemp             ,& ! intent(in):  temperature (K)
                       mLayerMatricHead       ,& ! intent(in):  total water matric potential (m)
@@ -123,7 +123,7 @@ subroutine updateSoilPrime(&
   real(rkind)                  :: xConst                    ! constant in the freezing curve function (m K-1)
   real(rkind)                  :: mLayerPsiLiq              ! liquid water matric potential (m)
   ! initialize error control
-  err=0; message="updateSoilPrime/"
+  err=0; message="updatSoilPrime/"
 
   ! compute fractional **volume** of total water (liquid plus ice)
   mLayerVolFracWat = volFracLiq(mLayerMatricHead,vGn_alpha,theta_res,theta_sat,vGn_n,vGn_m)
@@ -161,6 +161,6 @@ subroutine updateSoilPrime(&
     mLayerVolFracIcePrime=realMissing
   end if
 
-end subroutine updateSoilPrime
+end subroutine updatSoilPrime
 
 end module updatStateWithPrime_module

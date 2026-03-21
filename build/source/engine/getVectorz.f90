@@ -21,7 +21,7 @@
 module getVectorz_module
 
 ! data types
-USE nrtype
+USE nr_type
 
 ! missing values
 USE globalData,only:integerMissing  ! missing integer
@@ -249,7 +249,7 @@ end subroutine popStateVec
 
 
 ! **********************************************************************************************************
-! public subroutine getScaling: get scale factors
+! public subroutine getScaling: get scale factors and state multipliers for the function evaluations and state variables
 ! **********************************************************************************************************
 subroutine getScaling(&
                       ! input: data structures
@@ -261,9 +261,6 @@ subroutine getScaling(&
                       sMul,                    & ! intent(out):   multiplier for state vector (used in the residual calculations)
                       dMat,                    & ! intent(out):   diagonal of the Jacobian matrix excluding fluxes, not depending on the state vector
                       err,message)               ! intent(out):   error control
-  ! --------------------------------------------------------------------------------------------------------------------------------
-  USE nr_utility_module,only:arth                   ! get a sequence of numbers arth(start, incr, count)
-  USE f2008funcs_module,only:findIndex              ! finds the index of the first value within a vector
   ! --------------------------------------------------------------------------------------------------------------------------------
   ! input: data structures
   type(var_dlength),intent(in)    :: diag_data              ! diagnostic variables for a local HRU

@@ -20,9 +20,15 @@
 
 module coupled_em_module
 
-! homegrown solver data types
-USE nrtype
-USE globalData,only: verySmall ! a very small number used as an additive constant to check if substantial difference among real numbers
+! data types
+USE nr_type
+USE data_types,only:&
+                    var_i,               & ! x%var(:)                (i4b)
+                    var_d,               & ! x%var(:)                (rkind)
+                    var_ilength,         & ! x%var(:)%dat            (i4b)
+                    var_dlength,         & ! x%var(:)%dat            (rkind)
+                    zLookup,             & ! x%z(:)%var(:)%lookup(:) (rkind)
+                    convergence_stats_data ! convergence stats
 
 ! physical constants
 USE multiconst,only:&
@@ -32,14 +38,8 @@ USE multiconst,only:&
                     iden_ice,     & ! intrinsic density of ice             (kg m-3)
                     iden_water      ! intrinsic density of liquid water    (kg m-3)
 
-! data types
-USE data_types,only:&
-                    var_i,               & ! x%var(:)                (i4b)
-                    var_d,               & ! x%var(:)                (rkind)
-                    var_ilength,         & ! x%var(:)%dat            (i4b)
-                    var_dlength,         & ! x%var(:)%dat            (rkind)
-                    zLookup,             & ! x%z(:)%var(:)%lookup(:) (rkind)
-                    convergence_stats_data ! convergence stats
+! numerical constants
+USE globalData,only: verySmall      ! a small number
 
 ! named variables for parent structures
 USE var_lookup,only:iLookDECISIONS         ! named variables for elements of the decision structure
@@ -86,15 +86,15 @@ USE mDecisions_module,only:         &
 
 ! look-up values for the numerical method
 USE mDecisions_module,only:         &
-                      homegrown   ,&      ! homegrown backward Euler solution based on concepts from numerical recipes
+                      homegrown    ,&      ! homegrown backward Euler solution based on concepts from numerical recipes
                       kinsol       ,&      ! SUNDIALS backward Euler solution using Kinsol
                       ida                  ! SUNDIALS solution using IDA
 
 ! look-up values for the choice of variable in energy equations (BE residual or IDA state variable)
 USE mDecisions_module,only:         &
                     closedForm,     &      ! use temperature with closed form heat capacity
-                    enthalpyFormLU, &      ! use enthalpy with soil temperature-enthalpy lookup tables
-                    enthalpyForm           ! use enthalpy with soil temperature-enthalpy analytical solution
+                    enthalpyForm,   &      ! use enthalpy with soil temperature-enthalpy lookup tables
+                    enthalpyFormAN         ! use enthalpy with soil temperature-enthalpy analytical solution
 
 
 ! privacy
@@ -131,31 +131,32 @@ subroutine coupled_em(&
                       ! error control
                       err,message)         ! intent(out):   error control
   ! structure allocations
-  USE allocspace_module,only:allocLocal             ! allocate local data structures
-  USE allocspace_module,only:resizeData             ! clone a data structure
+  USE allocspace_module,only:allocLocal                         ! allocate local data structures
+  USE allocspace_module,only:resizeData                         ! clone a data structure
   ! simulation of fluxes and residuals given a trial state vector
-  USE soil_utils_module,only:liquidHead             ! compute the liquid water matric potential
+  USE soil_utils_module,only:liquidHead                         ! compute the liquid water matric potential
   ! preliminary subroutines
-  USE vegPhenlgy_module,only:vegPhenlgy             ! compute vegetation phenology
-  USE vegNrgFlux_module,only:wettedFrac             ! compute wetted fraction of the canopy (used in sw radiation fluxes)
-  USE snowAlbedo_module,only:snowAlbedo             ! compute snow albedo
-  USE vegSWavRad_module,only:vegSWavRad             ! compute canopy sw radiation fluxes
-  USE canopySnow_module,only:canopySnow             ! compute interception and unloading of snow from the vegetation canopy
-  USE volicePack_module,only:newsnwfall             ! compute change in the top snow layer due to throughfall and unloading
-  USE volicePack_module,only:volicePack             ! merge and sub-divide snow layers, if necessary
-  USE diagn_evar_module,only:diagn_evar             ! compute diagnostic energy variables -- thermal conductivity and heat capacity
+  USE vegPhenlgy_module,only:vegPhenlgy                         ! compute vegetation phenology
+  USE vegNrgFlux_module,only:wettedFrac                         ! compute wetted fraction of the canopy (used in sw radiation fluxes)
+  USE snowAlbedo_module,only:snowAlbedo                         ! compute snow albedo
+  USE vegSWavRad_module,only:vegSWavRad                         ! compute canopy sw radiation fluxes
+  USE canopySnow_module,only:canopySnow                         ! compute interception and unloading of snow from the vegetation canopy
+  USE volicePack_module,only:newsnwfall                         ! compute change in the top snow layer due to throughfall and unloading
+  USE volicePack_module,only:volicePack                         ! merge and sub-divide snow layers, if necessary
+  USE thermConductivity_module,only:init_thermConductivity      ! compute initialthermal conductivity of soil and snow layers  
+  USE heat_Cp_Cm_module,only:init_heatCapacity                  ! compute initial heat capacity (Cp)
   ! the model solver
-  USE indexState_module,only:indexState             ! define indices for all model state variables and layers
-  USE opSplittin_module,only:opSplittin             ! solve the system of thermodynamic and hydrology equations for a given substep
-  USE time_utils_module,only:elapsedSec             ! calculate the elapsed time
+  USE indexState_module,only:indexState                         ! define indices for all model state variables and layers
+  USE opSplittin_module,only:opSplittin                         ! solve the system of thermodynamic and hydrology equations for a given substep
+  USE time_utils_module,only:elapsedSec                         ! calculate the elapsed time
   ! additional subroutines
-  USE tempAdjust_module,only:tempAdjust             ! adjust snow temperature associated with new snowfall
-  USE var_derive_module,only:calcHeight             ! module to calculate height at layer interfaces and layer mid-point
-  USE computSnowDepth_module,only:computSnowDepth   ! compute snow depth
-  USE enthalpyTemp_module,only:T2enthTemp_veg       ! convert temperature to enthalpy for vegetation
-  USE enthalpyTemp_module,only:T2enthTemp_snow      ! convert temperature to enthalpy for snow
-  USE enthalpyTemp_module,only:T2enthTemp_soil      ! convert temperature to enthalpy for soil
-  USE enthalpyTemp_module,only:enthTemp_or_enthalpy ! add phase change terms to delta temperature component of enthalpy or vice versa
+  USE tempAdjust_module,only:tempAdjust                         ! adjust snow temperature associated with new snowfall
+  USE var_derive_module,only:calcHeight                         ! module to calculate height at layer interfaces and layer mid-point
+  USE snowDepth_module,only:snowDepth                           ! compute snow depth
+  USE convertEnthalpyTemp_module,only:T2enthTemp_veg            ! convert temperature to enthalpy for vegetation
+  USE convertEnthalpyTemp_module,only:T2enthTemp_snow           ! convert temperature to enthalpy for snow
+  USE convertEnthalpyTemp_module,only:T2enthTemp_soil           ! convert temperature to enthalpy for soil
+  USE convertEnthalpyTemp_module,only:enthTemp_or_enthalpy      ! add phase change terms to delta temperature component of enthalpy or vice versa
 
   implicit none
 
@@ -287,7 +288,7 @@ subroutine coupled_em(&
   logical(lgt)                         :: lastInnerStep          ! flag to denote if the last time step in maxstep subStep
   logical(lgt)                         :: do_outer               ! flag to denote if doing the outer steps surrounding the call to opSplittin
   real(rkind)                          :: dt_solvInner           ! seconds in the maxstep subStep that have been completed
-  logical(lgt),parameter               :: computNrgBalance_var=.true. ! flag to compute enthalpy, must have computNrgBalance true in varSubStep (will compute enthalpy for BE even if not using enthalpy formulation)
+  logical(lgt),parameter               :: computNrgBalance_var=.true. ! flag to compute enthalpy, must have computNrgBalance true in varSubstep (will compute enthalpy for BE even if not using enthalpy formulation)
   logical(lgt)                         :: computeEnthalpy        ! flag to compute enthalpy regardless of the model decision
   logical(lgt)                         :: enthalpyStateVec       ! flag if enthalpy is a state variable (IDA)
   logical(lgt)                         :: use_lookup             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
@@ -349,7 +350,7 @@ subroutine coupled_em(&
     call allocLocal(averageFlux_meta(:)%var_info,flux_inner,nSnow,nSoil,err,cmessage)
     if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; end if
 
-    ! initialize fluxes to average over data_step (averaged over substep in varSubStep)
+    ! initialize fluxes to average over data_step (averaged over substep in varSubstep)
     do iVar=1,size(averageFlux_meta)
       flux_mean%var(iVar)%dat(:) = 0._rkind
     end do
@@ -397,7 +398,7 @@ subroutine coupled_em(&
       else ! enthalpy state variable only implemented for IDA, energy conserved in IDA without using enthTemp
        if(ixNrgConserv.ne.closedForm) enthalpyStateVec = .true. ! enthalpy as state variable
       endif
-      if(ixNrgConserv==enthalpyFormLU) use_lookup = .true. ! use lookup tables for soil temperature-enthalpy instead of analytical solution
+      if(ixNrgConserv==enthalpyForm) use_lookup = .true. ! use lookup tables for soil temperature-enthalpy instead of analytical solution
 
       ! save the liquid water and ice on the vegetation canopy
       scalarInitCanopyLiq = scalarCanopyLiq    ! initial liquid water on the vegetation canopy (kg m-2)
@@ -845,20 +846,29 @@ subroutine coupled_em(&
 
         ! *** compute diagnostic variables for each layer...
         ! --------------------------------------------------
-        ! NOTE: this needs to be done AFTER volicePack, since layers may have been sub-divided and/or merged, and need to specifically send in canopy depth
-        call diagn_evar(&
-                        ! input: control variables
-                        computeVegFlux,         & ! intent(in): flag to denote if computing the vegetation flux
-                        diag_data%var(iLookDIAG%scalarCanopyDepth)%dat(1), & ! intent(in): canopy depth (m), send in specific value since diag_data may have changed
-                        ! input/output: data structures
-                        mpar_data,              & ! intent(in):    model parameters
-                        indx_data,              & ! intent(in):    model layer indices
-                        prog_data,              & ! intent(in):    model prognostic variables for a local HRU
-                        diag_data,              & ! intent(inout): model diagnostic variables for a local HRU
-                        ! output: error control
-                        err,cmessage)             ! intent(out): error control
+        ! NOTE: this needs to be done AFTER volicePack, since layers may have been sub-divided and/or merged
+        call init_heatCapacity(&
+                          ! input: control variables
+                          computeVegFlux,         & ! intent(in): flag to denote if computing the vegetation flux
+                          diag_data%var(iLookDIAG%scalarCanopyDepth)%dat(1), & ! intent(in): canopy depth (m), send in specific value since diag_data may have changed
+                          ! input/output: data structures
+                          mpar_data,              & ! intent(in):    model parameters
+                          indx_data,              & ! intent(in):    model layer indices
+                          prog_data,              & ! intent(in):    model prognostic variables for a local HRU
+                          diag_data,              & ! intent(inout): model diagnostic variables for a local HRU
+                          ! output: error control
+                          err,cmessage)             ! intent(out): error control
         if(err/=0)then; err=55; message=trim(message)//trim(cmessage); return; end if
-
+        call init_thermConductivity(&
+                          ! input/output: data structures
+                          mpar_data,              & ! intent(in):    model parameters
+                          indx_data,              & ! intent(in):    model layer indices
+                          prog_data,              & ! intent(in):    model prognostic variables for a local HRU
+                          diag_data,              & ! intent(inout): model diagnostic variables for a local HRU
+                          ! output: error control
+                          err,cmessage)             ! intent(out): error control
+        if(err/=0)then; err=55; message=trim(message)//trim(cmessage); return; end if
+        
         ! *** compute melt of the "snow without a layer"...
         ! -------------------------------------------------
         ! NOTE: forms a surface melt pond, which drains into the upper-most soil layer through the time step
@@ -884,7 +894,7 @@ subroutine coupled_em(&
         if (allocated(mLayerVolFracIceInit)) deallocate(mLayerVolFracIceInit) ! prep for potential size change
         allocate(mLayerVolFracIceInit(nLayers)); mLayerVolFracIceInit = prog_data%var(iLookPROG%mLayerVolFracIce)%dat
 
-        ! make sure have consistent state variables to start, later done in updateVars
+        ! make sure have consistent state variables to start, later done in updatDiagn
         ! associate local variables with information in the data structures
         init: associate(&
           ! depth-varying soil parameters
@@ -954,7 +964,7 @@ subroutine coupled_em(&
         sumSnowSublimation   = 0._rkind
         sumLatHeatCanopyEvap = 0._rkind
         sumSenHeatCanopy     = 0._rkind
-        ! initialize fluxes to average over whole_step (averaged over substep in varSubStep)
+        ! initialize fluxes to average over whole_step (averaged over substep in varSubstep)
         do iVar=1,size(averageFlux_meta)
           flux_inner%var(iVar)%dat(:) = 0._rkind
         end do
@@ -1132,7 +1142,7 @@ subroutine coupled_em(&
           ! * compute change in ice content of the top snow layer due to sublimation 
           !   and account for compaction and cavitation in the snowpack...
           ! ------------------------------------------------------------------------
-          call computSnowDepth(&
+          call snowDepth(&
                     whole_step,                               & ! intent(in)
                     nSnow,                                    & ! intent(in)
                     sumSnowSublimation/whole_step,            & ! intent(in)
@@ -1700,7 +1710,7 @@ contains
   ! initialize surface melt pond
   sfcMeltPond       = 0._rkind  ! change in storage associated with the surface melt pond (kg m-2)
 
-  ! initialize average over data_step (averaged over substep in varSubStep)
+  ! initialize average over data_step (averaged over substep in varSubstep)
   meanCanopySublimation = 0._rkind ! mean canopy sublimation
   meanLatHeatCanopyEvap = 0._rkind ! mean latent heat flux for evaporation from the canopy
   meanSenHeatCanopy     = 0._rkind ! mean sensible heat flux from the canopy

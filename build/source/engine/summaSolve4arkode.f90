@@ -22,7 +22,7 @@ module summaSolve4arkode_module
 
  !======= Inclusions ===========
  USE, intrinsic :: iso_c_binding
- USE nrtype
+ USE nr_type
  USE type4ida ! reusing IDA data type due to overlap with ARKODE (prime variables not used)
  
 ! ! access the global print flag
@@ -71,8 +71,8 @@ module summaSolve4arkode_module
  ! look-up values for the choice of variable in energy equations (BE residual or IDA state variable)
  USE mDecisions_module,only:       &
    closedForm,                     & ! use temperature with closed form heat capacity
-   enthalpyFormLU,                 & ! use enthalpy with soil temperature-enthalpy lookup tables
-   enthalpyForm                      ! use enthalpy with soil temperature-enthalpy analytical solution
+   enthalpyForm,                   & ! use enthalpy with soil temperature-enthalpy lookup tables
+   enthalpyFormAN                    ! use enthalpy with soil temperature-enthalpy analytical solution
  
  ! look-up values for method used to compute derivative
  USE mDecisions_module,only:       &
@@ -151,7 +151,7 @@ contains
    use fsunadaptcontroller_soderlind_mod ! Fortran interface to Soderlind controller
    use allocspace_module,only:allocLocal                  ! allocate local data structures
    use eval8summa_module,only: eval8summa4arkode          ! RHS function evaluations
-   use summaSolve4kinsol_module,only: setInitialCondition ! subroutine for setting initial condition (borrowed from KINSOL routines)
+   use summaSolv4kinsol_module,only: setInitialCondition  ! subroutine for setting initial condition (borrowed from KINSOL routines)
    use tol4ida_module,only:computWeight4ida               ! weight required for tolerances (borrowed from IDA routines)
    use getVectorz_module,only:checkFeas                   ! check feasibility of state vector
 
@@ -322,7 +322,7 @@ contains
     associate(&
      ixNrgConserv => model_decisions(iLookDECISIONS%nrgConserv)%iDecision & ! choice of energy formulation
     &)
-     if ((ixNrgConserv /= enthalpyFormLU).and.(ixNrgConserv /= enthalpyForm)) then
+     if ((ixNrgConserv /= enthalpyForm).and.(ixNrgConserv /= enthalpyFormAN)) then
       cmessage="enthalpy formulation required for ARKODE"
       err=20; message=trim(message)//trim(cmessage); return_flag=.true.; return
      end if

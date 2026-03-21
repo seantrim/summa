@@ -44,7 +44,7 @@ contains
  ! * desired modules
  ! ---------------------------------------------------------------------------------------
  ! data types
- USE nrtype                                                  ! variable types, etc.
+ USE nr_type                                                 ! variable types, etc.
  USE summa_type, only:summa1_type_dec                        ! master summa data type
  ! functions and subroutines
  USE time_utils_module,only:elapsedSec                       ! calculate the elapsed time
@@ -71,8 +71,8 @@ contains
  ! look-up values for the choice of variable in energy equations (BE residual or IDA state variable)
  USE mDecisions_module,only:&
    closedForm,     & ! use temperature with closed form heat capacity
-   enthalpyFormLU, & ! use enthalpy with soil temperature-enthalpy lookup tables
-   enthalpyForm      ! use enthalpy with soil temperature-enthalpy analytical solution
+   enthalpyForm,   & ! use enthalpy with soil temperature-enthalpy lookup tables
+   enthalpyFormAN    ! use enthalpy with soil temperature-enthalpy analytical solution
 ! look-up values for the choice of full or empty aquifer at start
  USE mDecisions_module,only:&
    fullStart,      & ! start with full aquifer
@@ -113,8 +113,7 @@ contains
   bvarStruct           => summa1_struc%bvarStruct          , & ! x%gru(:)%var(:)%dat        -- basin-average variables
   ! miscellaneous variables
   dt_init              => summa1_struc%dt_init             , & ! used to initialize the length of the sub-step for each HRU
-  nGRU                 => summa1_struc%nGRU                , & ! number of grouped response units
-  nHRU                 => summa1_struc%nHRU                  & ! number of global hydrologic response units
+  nGRU                 => summa1_struc%nGRU                  & ! number of grouped response units
  ) ! assignment to variables in the data structures
  
  ! ---------------------------------------------------------------------------------------
@@ -149,8 +148,8 @@ contains
 ! check initial conditions
  checkEnthalpy = .false.
  use_lookup    = .false.
- if(ixNrgConserv .ne. closedForm) checkEnthalpy = .true. ! check enthalpy either for mixed form energy equation or enthalpy state variable
- if(ixNrgConserv==enthalpyFormLU) use_lookup = .true.    ! use lookup tables for soil temperature-enthalpy instead of analytical solution
+ if(ixNrgConserv/=closedForm) checkEnthalpy = .true. ! check enthalpy either for mixed form energy equation or enthalpy state variable
+ if(ixNrgConserv==enthalpyForm) use_lookup  = .true. ! use lookup tables for soil temperature-enthalpy instead of analytical solution
  call check_icond(nGRU,                         & ! intent(in):    number of response units
                   progStruct,                   & ! intent(inout): model prognostic variables
                   diagStruct,                   & ! intent(inout): model diagnostic variables

@@ -21,15 +21,7 @@
 module vegNrgFlux_module
 
 ! data types
-USE nrtype
-
-! global variables
-USE globalData,only:&
-                    verySmall,          & ! a very small number used as an additive constant to check if substantial difference among real numbers
-                    realMissing,        & ! missing value for real numbers
-                    minExpLogHgtFac       ! factor for minimum height of transition from the exponential to the logarithmic wind profile
-
-! derived types to define the data structures
+USE nr_type
 USE data_types,only:&
                     var_i,              & ! data vector (i4b)
                     var_d,              & ! data vector (rkind)
@@ -38,6 +30,9 @@ USE data_types,only:&
                     model_options,      & ! defines the model decisions
                     in_type_vegNrgFlux, & ! intent(in) arguments for vegNrgFlux call 
                     out_type_vegNrgFlux   ! intent(out) arguments for vegNrgFlux call
+
+! access missing values
+USE globalData,only:realMissing     ! missing real number
 
 ! indices that define elements of the data structures
 USE var_lookup,only:iLookTYPE           ! named variables for structure elements
@@ -52,18 +47,20 @@ USE var_lookup,only:iLookDECISIONS      ! named variables for elements of the de
 
 ! constants
 USE multiconst,only:&
-                    gravity,   & ! acceleration of gravity          (m s-2)
-                    vkc,       & ! von Karman's constant            (-)
-                    w_ratio,   & ! molecular ratio water to dry air (-)
-                    R_wv,      & ! gas constant for water vapor     (Pa K-1 m3 kg-1; J kg-1 K-1)
-                    Cp_air,    & ! specific heat of air             (J kg-1 K-1)
-                    Cp_ice,    & ! specific heat of ice             (J kg-1 K-1)
-                    Cp_water,  & ! specific heat of liquid water    (J kg-1 K-1)
-                    Tfreeze,   & ! temperature at freezing          (K)
-                    LH_vap,    & ! latent heat of vaporization      (J kg-1)
-                    LH_sub,    & ! latent heat of sublimation       (J kg-1)
-                    sb,        & ! Stefan Boltzman constant         (W m-2 K-4)
-                    iden_air    ! intrinsic density of air          (kg m-3)
+                    gravity,       & ! acceleration of gravity          (m s-2)
+                    vkc,           & ! von Karman's constant            (-)
+                    w_ratio,       & ! molecular ratio water to dry air (-)
+                    R_wv,          & ! gas constant for water vapor     (Pa K-1 m3 kg-1; J kg-1 K-1)
+                    Cp_air,        & ! specific heat of air             (J kg-1 K-1)
+                    Cp_ice,        & ! specific heat of ice             (J kg-1 K-1)
+                    Cp_water,      & ! specific heat of liquid water    (J kg-1 K-1)
+                    Tfreeze,       & ! temperature at freezing          (K)
+                    LH_vap,        & ! latent heat of vaporization      (J kg-1)
+                    LH_sub,        & ! latent heat of sublimation       (J kg-1)
+                    sb,            & ! Stefan Boltzman constant         (W m-2 K-4)
+                    iden_air         ! intrinsic density of air         (kg m-3)
+USE globalData,only:verySmall        ! a small number
+USE globalData,only: minExpLogHgtFac ! factor for minimum height of transition from the exponential to the logarithmic wind profile
 
 ! look-up values for method used to compute derivative
 USE mDecisions_module,only:  &
@@ -102,16 +99,8 @@ implicit none
 private
 public :: vegNrgFlux
 public :: wettedFrac
-! named variables
-integer(i4b),parameter        :: ist     = 1                 ! Surface type:  IST=1 => soil;  IST=2 => lake
-integer(i4b),parameter        :: isc     = 4                 ! Soil color type
-integer(i4b),parameter        :: ice     = 0                 ! Surface type:  ICE=0 => soil;  ICE=1 => sea-ice
-! spatial indices
-integer(i4b),parameter        :: iLoc    = 1                 ! i-location
-integer(i4b),parameter        :: jLoc    = 1                 ! j-location
 ! algorithmic parameters
 real(rkind),parameter         :: mpe=1.e-6_rkind             ! prevents overflow error if division by zero, from NOAH mpe value
-real(rkind),parameter         :: dx=1.e-11_rkind             ! finite difference increment
 
 contains
 
@@ -137,8 +126,8 @@ subroutine vegNrgFlux(&
   ! utilities
   USE expIntegral_module,only:expInt                             ! function to calculate the exponential integral
   ! conversion functions
-  USE conv_funcs_module,only:satVapPress                         ! function to compute the saturated vapor pressure (Pa)
-  USE conv_funcs_module,only:getLatentHeatValue                  ! function to identify latent heat of vaporization/sublimation (J kg-1)
+  USE convert_funcs_module,only:satVapPress                         ! function to compute the saturated vapor pressure (Pa)
+  USE convert_funcs_module,only:getLatentHeatValue                  ! function to identify latent heat of vaporization/sublimation (J kg-1)
   ! stomatal resistance
   USE stomResist_module,only:stomResist                          ! subroutine to calculate stomatal resistance
   ! phase changes
@@ -516,8 +505,6 @@ subroutine vegNrgFlux(&
           groundNetFlux = -diag_data%var(iLookDIAG%iLayerThermalC)%dat(0)*(groundTempTrial - upperBoundTemp)/(prog_data%var(iLookPROG%mLayerDepth)%dat(1)*0.5_rkind)
         elseif (ix_bcUpprTdyn == zeroFlux) then
           groundNetFlux = 0._rkind
-        else
-          err=20; message=trim(message)//'unable to identify upper boundary condition for thermodynamics: expect the case to be prescribedTemp or zeroFlux'; return
         end if
 
       ! *****
@@ -972,7 +959,7 @@ subroutine vegNrgFlux(&
 
         ! check if evaporation or sublimation
         if (scalarLatHeatSubVapCanopy < LH_vap+verySmall) then ! evaporation
-          ! compute the liquid water derivarives
+          ! compute the liquid water derivatives
           dCanopyEvaporation_dCanWat  = dLatHeatCanopyEvap_dCanWat/LH_vap    ! (s-1)
           dCanopyEvaporation_dTCanair = dLatHeatCanopyEvap_dTCanair/LH_vap   ! (kg m-2 s-1 K-1)
           dCanopyEvaporation_dTCanopy = dLatHeatCanopyEvap_dTCanopy/LH_vap   ! (kg m-2 s-1 K-1)
@@ -997,7 +984,7 @@ subroutine vegNrgFlux(&
           dCanopyTrans_dTGround= dLatHeatCanopyTrans_dTGround/LH_vap
         end if
 
-        ! compute the liquid water derivarives (ground evap)
+        ! compute the liquid water derivatives (ground evap)
         dGroundEvaporation_dCanWat  = dLatHeatGroundEvap_dCanWat/LH_vap    ! (s-1)
         dGroundEvaporation_dTCanair = dLatHeatGroundEvap_dTCanair/LH_vap   ! (kg m-2 s-1 K-1)
         dGroundEvaporation_dTCanopy = dLatHeatGroundEvap_dTCanopy/LH_vap   ! (kg m-2 s-1 K-1)
@@ -1577,7 +1564,14 @@ subroutine aeroResist(&
     referenceHeight   = z0Canopy+zeroPlaneDisplacement
     windConvFactor    = exp(-windReductionFactor*(1._rkind - (referenceHeight/heightCanopyTopAboveSnow)))
     windspdRefHeight  = windspdCanopyTop*windConvFactor
-    if(heightCanopyTopAboveSnow < referenceHeight)then; err=20; message=trim(message)//'canopy top height above snow < reference height'; return; end if 
+    if(heightCanopyTopAboveSnow < referenceHeight)then
+      if(snowDepth>0 .and. ixVegTraits==vegTypeTable)then
+        message=trim(message)//'canopy top height above snow < reference height, decision veg_traits==vegTypeTable is inappropriate for snowy conditions'
+      else
+        message=trim(message)//'canopy top height above snow < reference height, check for parameter interdependency'
+      end if
+      err=20; return
+    end if 
 
     ! compute windspeed at the bottom of the canopy relative to the snow depth (m s-1)
     windConvFactor       = exp(-windReductionFactor*(1._rkind - (heightCanopyBottomAboveSnow/heightCanopyTopAboveSnow)))

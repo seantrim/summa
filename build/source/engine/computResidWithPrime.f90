@@ -3,7 +3,7 @@
 module computResidWithPrime_module
 
 ! data types
-USE nrtype
+USE nr_type
 
 ! derived types to define the data structures
 USE data_types,only:&
@@ -248,7 +248,7 @@ subroutine computResidWithPrime(&
         mLayerVolFracHydPrime(iLayer) = merge(mLayerVolFracWatPrime(iLayer), mLayerVolFracLiqPrime(iLayer), (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
         ! (compute the residual)
         rVec( ixSnowSoilHyd(iLayer) ) = mLayerVolFracHydPrime(iLayer) - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
-      end do  ! looping through non-missing energy state variables in the snow+soil domain
+      end do  ! looping through non-missing hydrology state variables in the snow+soil domain
     endif
 
     ! compute the residual vector for the aquifer
@@ -261,29 +261,28 @@ subroutine computResidWithPrime(&
       write(*,'(a,i4)') '  nSoil = ', nSoil
       write(*,'(a,i4)') '  nLayers = ', nLayers
       write(*,'(a,f12.5)') '  dt = ', dt
-      write(*,'(a,1x,100(e12.5,1x))') '  sMul = ', sMul(min(iJac1,size(sMul)):min(iJac2,size(sMul)))
-      write(*,'(a,1x,100(e12.5,1x))') '  fVec = ', fVec(min(iJac1,size(fVec)):min(iJac2,size(fVec)))
-      write(*,'(a,f12.5)') '  scalarCanairTempPrime = ', scalarCanairTempPrime
-      write(*,'(a,f12.5)') '  scalarCanopyTempPrime = ', scalarCanopyTempPrime
-      write(*,'(a,f12.5)') '  scalarCanopyWatPrime = ', scalarCanopyWatPrime
+      write(*,'(a,e12.5)') '  scalarCanairTempPrime = ', scalarCanairTempPrime
+      write(*,'(a,e12.5)') '  scalarCanopyTempPrime = ', scalarCanopyTempPrime
+      write(*,'(a,e12.5)') '  scalarCanopyWatPrime = ', scalarCanopyWatPrime
       write(*,'(a,1x,100(e12.5,1x))') '  mLayerTempPrime = ', mLayerTempPrime(min(iJac1,size(mLayerTempPrime)):min(iJac2,size(mLayerTempPrime)))
-      write(*,'(a,f12.5)') '  scalarAquiferStoragePrime = ', scalarAquiferStoragePrime
-      write(*,'(a,f12.5)') '  scalarCanopyIcePrime = ', scalarCanopyIcePrime
-      write(*,'(a,f12.5)') '  scalarCanopyLiqPrime = ', scalarCanopyLiqPrime
+      write(*,'(a,e12.5)') '  scalarAquiferStoragePrime = ', scalarAquiferStoragePrime
+      write(*,'(a,e12.5)') '  scalarCanopyIcePrime = ', scalarCanopyIcePrime
+      write(*,'(a,e12.5)') '  scalarCanopyLiqPrime = ', scalarCanopyLiqPrime
       write(*,'(a,1x,100(e12.5,1x))') '  mLayerVolFracIcePrime = ', mLayerVolFracIcePrime(min(iJac1,size(mLayerVolFracIcePrime)):min(iJac2,size(mLayerVolFracIcePrime)))
       write(*,'(a,1x,100(e12.5,1x))') '  mLayerVolFracWatPrime = ', mLayerVolFracWatPrime(min(iJac1,size(mLayerVolFracWatPrime)):min(iJac2,size(mLayerVolFracWatPrime)))
       write(*,'(a,1x,100(e12.5,1x))') '  mLayerVolFracLiqPrime = ', mLayerVolFracLiqPrime(min(iJac1,size(mLayerVolFracLiqPrime)):min(iJac2,size(mLayerVolFracLiqPrime)))
-      write(*,'(a,f12.5)') '  scalarCanopyCmTrial = ', scalarCanopyCmTrial
+      write(*,'(a,e12.5)') '  scalarCanopyCmTrial = ', scalarCanopyCmTrial
       write(*,'(a,1x,100(e12.5,1x))') '  mLayerCmTrial = ', mLayerCmTrial(min(iJac1,size(mLayerCmTrial)):min(iJac2,size(mLayerCmTrial)))
-      write(*,'(a,f12.5)') '  scalarCanairEnthalpyPrime = ', scalarCanairEnthalpyPrime 
-      write(*,'(a,f12.5)') '  scalarCanopyEnthalpyPrime = ', scalarCanopyEnthalpyPrime
+      write(*,'(a,e12.5)') '  scalarCanairEnthalpyPrime = ', scalarCanairEnthalpyPrime 
+      write(*,'(a,e12.5)') '  scalarCanopyEnthalpyPrime = ', scalarCanopyEnthalpyPrime
       write(*,'(a,1x,100(e12.5,1x))') '  mLayerEnthalpyPrime = ', mLayerEnthalpyPrime(min(iJac1,size(mLayerEnthalpyPrime)):min(iJac2,size(mLayerEnthalpyPrime)))
+      write(*,'(a,1x,100(e12.5,1x))') 'sMul = ', sMul(min(iJac1,size(sMul)):min(iJac2,size(sMul)))
     endif
 
     ! print result
     if(globalPrintFlag .or. any(isNan(rVec)))then
-      write(*,'(a,1x,100(e12.5,1x))') 'rVec = ', rVec(min(iJac1,size(rVec)):min(iJac2,size(rVec)))
       write(*,'(a,1x,100(e12.5,1x))') 'fVec = ', fVec(min(iJac1,size(rVec)):min(iJac2,size(rVec)))
+      write(*,'(a,1x,100(e12.5,1x))') 'rVec = ', rVec(min(iJac1,size(rVec)):min(iJac2,size(rVec)))
     endif
     if(any(isNan(rVec)))then; message=trim(message)//'NaN in residuals'; err=20; return; endif
     

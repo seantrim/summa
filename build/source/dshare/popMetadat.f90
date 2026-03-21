@@ -1,5 +1,5 @@
 module popMetadat_module
-USE nrtype, integerMissing=>nr_integerMissing
+USE nr_type, integerMissing=>nr_integerMissing
 implicit none
 ! define indices in metadata structures
 integer(i4b),parameter   :: nameIndex=1     ! index of the variable name
@@ -49,14 +49,15 @@ subroutine popMetadat(err,message)
   USE var_lookup, only: iLookLOOKUP         ! named variables for lookup tables
   USE var_lookup, only: maxvarFreq          ! number of output frequencies
   USE var_lookup, only: maxvarStat          ! number of statistics
-  USE get_ixName_module,only:get_ixVarType  ! to turn vartype strings to integers
+  USE get_ixName_module,only:get_ixVarType  ! to turn varType strings to integers
+  
   implicit none
   ! dummy variables
   integer(i4b),intent(out)      :: err      ! error code
   character(*),intent(out)      :: message  ! error message
   ! internals
   character(256)                :: cmessage ! error message
-  integer,dimension(maxVarFreq) :: iMissVec ! vector of missing integers
+  integer,dimension(maxvarFreq) :: iMissVec ! vector of missing integers
   ! initialize error control
   err=0; message='popMetadat/'
 
@@ -373,14 +374,8 @@ subroutine popMetadat(err,message)
   diag_meta(iLookDIAG%scalarCanopyIceMax)              = var_info('scalarCanopyIceMax'             , 'maximum interception storage capacity for ice'                    , 'kg m-2'          , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%scalarCanopyLiqMax)              = var_info('scalarCanopyLiqMax'             , 'maximum interception storage capacity for liquid water'           , 'kg m-2'          , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%scalarGrowingSeasonIndex)        = var_info('scalarGrowingSeasonIndex'       , 'growing season index (0=off, 1=on)'                               , '-'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarVolHtCap_air)              = var_info('scalarVolHtCap_air'             , 'volumetric heat capacity air'                                     , 'J m-3 K-1'       , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarVolHtCap_ice)              = var_info('scalarVolHtCap_ice'             , 'volumetric heat capacity ice'                                     , 'J m-3 K-1'       , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarVolHtCap_soil)             = var_info('scalarVolHtCap_soil'            , 'volumetric heat capacity dry soil'                                , 'J m-3 K-1'       , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarVolHtCap_water)            = var_info('scalarVolHtCap_water'           , 'volumetric heat capacity liquid wat'                              , 'J m-3 K-1'       , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%mLayerVolHtCapBulk)              = var_info('mLayerVolHtCapBulk'             , 'volumetric heat capacity in each layer'                           , 'J m-3 K-1'       , get_ixVarType('midToto'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%mLayerCm)                        = var_info('mLayerCm'                       , 'Cm for each layer'                                                , 'J m-3'           , get_ixVarType('midToto'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarLambda_drysoil)            = var_info('scalarLambda_drysoil'           , 'thermal conductivity of dry soil'                                 , 'W m-1'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarLambda_wetsoil)            = var_info('scalarLambda_wetsoil'           , 'thermal conductivity of wet soil'                                 , 'W m-1'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%mLayerThermalC)                  = var_info('mLayerThermalC'                 , 'thermal conductivity at the mid-point of each layer'              , 'W m-1 K-1'       , get_ixVarType('midToto'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%iLayerThermalC)                  = var_info('iLayerThermalC'                 , 'thermal conductivity at the interface of each layer'              , 'W m-1 K-1'       , get_ixVarType('ifcToto'), iMissVec, iMissVec, .false.)
   ! enthalpy
@@ -455,8 +450,6 @@ subroutine popMetadat(err,message)
   diag_meta(iLookDIAG%scalarTotalSoilWat)              = var_info('scalarTotalSoilWat'             , 'total mass of water in the soil'                                  , 'kg m-2'          , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   ! variable shortcuts
   diag_meta(iLookDIAG%scalarVGn_m)                     = var_info('scalarVGn_m'                    , 'van Genuchten "m" parameter'                                      , '-'               , get_ixVarType('midSoil'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarKappa)                     = var_info('scalarKappa'                    , 'constant in the freezing curve function'                          , 'm K-1'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarVolLatHt_fus)              = var_info('scalarVolLatHt_fus'             , 'volumetric latent heat of fusion'                                 , 'J m-3'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   ! timing information
   diag_meta(iLookDIAG%numFluxCalls)                    = var_info('numFluxCalls'                   , 'number of flux calls'                                             , '-'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%wallClockTime)                   = var_info('wallClockTime'                  , 'wall clock time for physics routines'                             , 's'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
@@ -483,7 +476,6 @@ subroutine popMetadat(err,message)
   diag_meta(iLookDIAG%hLast)                           = var_info('hLast'                          , 'step size used on the last internal step'                         , 's'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%hCur)                            = var_info('hCur'                           , 'step size to be used on the next internal step'                   , 's'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%tCur)                            = var_info('tCur'                           , 'current time reached by the integrator'                           , 's'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  
   ! -----
   ! * local model fluxes...
   ! -----------------------
@@ -553,7 +545,6 @@ subroutine popMetadat(err,message)
   flux_meta(iLookFLUX%scalarThroughfallRain)           = var_info('scalarThroughfallRain'          , 'rain that reaches the ground without ever touching the canopy'    , 'kg m-2 s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   flux_meta(iLookFLUX%scalarCanopySnowUnloading)       = var_info('scalarCanopySnowUnloading'      , 'unloading of snow from the vegetation canopy'                     , 'kg m-2 s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   flux_meta(iLookFLUX%scalarCanopyLiqDrainage)         = var_info('scalarCanopyLiqDrainage'        , 'drainage of liquid water from the vegetation canopy'              , 'kg m-2 s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  flux_meta(iLookFLUX%scalarCanopyMeltFreeze)          = var_info('scalarCanopyMeltFreeze'         , 'melt/freeze of water stored in the canopy'                        , 'kg m-2 s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   ! energy fluxes and for the snow and soil domains
   flux_meta(iLookFLUX%iLayerConductiveFlux)            = var_info('iLayerConductiveFlux'           , 'conductive energy flux at layer interfaces'                       , 'W m-2'           , get_ixVarType('ifcToto'), iMissVec, iMissVec, .false.)
   flux_meta(iLookFLUX%iLayerAdvectiveFlux)             = var_info('iLayerAdvectiveFlux'            , 'advective energy flux at layer interfaces'                        , 'W m-2'           , get_ixVarType('ifcToto'), iMissVec, iMissVec, .false.)
@@ -795,7 +786,7 @@ subroutine popMetadat(err,message)
 
   ! read file to define model output (modifies metadata structures)
   call read_output_file(err,cmessage)
-  if (err.ne.0) message=trim(message)//trim(cmessage)
+  if (err/=0) message=trim(message)//trim(cmessage)
 
 end subroutine popMetadat
 
@@ -808,31 +799,32 @@ subroutine read_output_file(err,message)
   USE summaFileManager,only:SETTINGS_PATH       ! path for metadata files
   USE summaFileManager,only:OUTPUT_CONTROL      ! file with output controls
   ! some dimensional parameters
-  USE globalData, only:outFreq                  ! output frequencies
-  USE var_lookup, only:maxvarFreq               ! maximum # of output files
-  USE var_lookup, only:maxvarStat               ! maximum # of statistics
+  USE globalData,only:outFreq                   ! output frequencies
+  USE globalData,only:allowRoutingOutput        ! flag to allow routing variable output
+  USE var_lookup,only:maxvarFreq                ! maximum # of output files
+  USE var_lookup,only:maxvarStat                ! maximum # of statistics
   ! metadata structures
-  USE globalData, only: time_meta               ! data structure for time metadata
-  USE globalData, only: forc_meta               ! data structure for forcing metadata
-  USE globalData, only: type_meta               ! data structure for categorical metadata
-  USE globalData, only: attr_meta               ! data structure for attribute metadata
-  USE globalData, only: mpar_meta               ! data structure for local parameter metadata
-  USE globalData, only: bpar_meta               ! data structure for basin parameter metadata
-  USE globalData, only: bvar_meta               ! data structure for basin model variable metadata
-  USE globalData, only: indx_meta               ! data structure for index metadata
-  USE globalData, only: prog_meta               ! data structure for local prognostic (state) variables
-  USE globalData, only: diag_meta               ! data structure for local diagnostic variables
-  USE globalData, only: flux_meta               ! data structure for local flux variables
-  USE globalData, only: deriv_meta              ! data structure for local flux derivatives
-  USE globalData, only: outputPrecision         ! data structure for output precision
-  USE globalData, only: outputCompressionLevel  ! data structure for output netcdf deflate level
+  USE globalData,only:time_meta                 ! data structure for time metadata
+  USE globalData,only:forc_meta                 ! data structure for forcing metadata
+  USE globalData,only:type_meta                 ! data structure for categorical metadata
+  USE globalData,only:attr_meta                 ! data structure for attribute metadata
+  USE globalData,only:mpar_meta                 ! data structure for local parameter metadata
+  USE globalData,only:bpar_meta                 ! data structure for basin parameter metadata
+  USE globalData,only:bvar_meta                 ! data structure for basin model variable metadata
+  USE globalData,only:indx_meta                 ! data structure for index metadata
+  USE globalData,only:prog_meta                 ! data structure for local prognostic (state) variables
+  USE globalData,only:diag_meta                 ! data structure for local diagnostic variables
+  USE globalData,only:flux_meta                 ! data structure for local flux variables
+  USE globalData,only:outputPrecision           ! data structure for output precision
+  USE globalData,only:outputCompressionLevel    ! data structure for output netcdf deflate level
   ! structures of named variables
-  USE var_lookup, only: iLookTYPE               ! named variables for categorical data
-  USE var_lookup, only: iLookID                 ! named variables for hru and gru ID metadata
-  USE var_lookup, only: iLookFORCE              ! named variables for forcing data structure
-  USE var_lookup, only: iLookINDEX              ! named variables for index variable data structure
-  USE var_lookup, only: iLookSTAT               ! named variables for statitics variable data structure
-  USE var_lookup, only: iLookFREQ               ! named variables for model output frequencies
+  USE var_lookup,only:iLookTYPE                 ! named variables for categorical data
+  USE var_lookup,only:iLookID                   ! named variables for hru and gru ID metadata
+  USE var_lookup,only:iLookFORCE                ! named variables for forcing data structure
+  USE var_lookup,only:iLookINDEX                ! named variables for index variable data structure
+  USE var_lookup,only:iLookSTAT                 ! named variables for statitics variable data structure
+  USE var_lookup,only:iLookFREQ                 ! named variables for model output frequencies
+  USE var_lookup,only:iLookVarType              ! named variables for variable types
   ! identify indices within structures
   USE get_ixName_module,only:get_ixUnknown      ! identify index in any structure
   USE get_ixname_module,only:get_ixFreq         ! identify index of model output frequency
@@ -849,28 +841,29 @@ subroutine read_output_file(err,message)
   integer(i4b),intent(out)             :: err          ! error code
   character(*),intent(out)             :: message      ! error message
   ! define file format
-  integer(i4b),parameter               :: noStatsDesired=1001   ! no statistic desired (temporally constant variables)
-  integer(i4b),parameter               :: provideStatName=1002  ! provide the name of the desired statistic
-  integer(i4b),parameter               :: provideStatFlags=1003 ! provide flags defining the desired statistic
-  integer(i4b)                         :: fileFormat   ! the file format
+  integer(i4b),parameter               :: noStatsDesired=1001      ! no statistic desired (temporally constant variables)
+  integer(i4b),parameter               :: provideStatName=1002     ! provide the name of the desired statistic
+  integer(i4b),parameter               :: provideStatFlags=1003    ! provide flags defining the desired statistic
+  integer(i4b)                         :: fileFormat               ! the file format
   ! define statistics flags
-  logical(lgt),dimension(maxvarStat)   :: statFlag     ! vector of statistics flags
-  character(len=32)                    :: statName     ! name of desired statistic
-  integer(i4b)                         :: iStat        ! index of statistics vector
+  logical(lgt),dimension(maxvarStat)   :: statFlag                 ! vector of statistics flags
+  character(len=32)                    :: statName                 ! name of desired statistic
+  integer(i4b)                         :: iStat                    ! index of statistics vector
+  integer(i4b)                         :: varType                  ! variable type
   ! define frequency of model output
-  character(len=64)                    :: freqName     ! name of desired output frequency
-  integer(i4b)                         :: iFreq        ! index of frequency vector
+  character(len=64)                    :: freqName                 ! name of desired output frequency
+  integer(i4b)                         :: iFreq                    ! index of frequency vector
   ! general local variables
-  character(LEN=256)                   :: cmessage     ! error message of downwind routine
-  character(LEN=256)                   :: outfile      ! full path of model output file
-  integer(i4b)                         :: unt          ! file unit
-  character(LEN=linewidth),allocatable :: charlines(:) ! vector of character strings
-  character(LEN=64),allocatable        :: lineWords(:) ! vector to parse textline
-  integer(i4b)                         :: nWords       ! number of words in line
-  character(LEN=128)                   :: varName      ! variable name
-  character(LEN=5)                     :: structName   ! name of structure
-  integer(i4b)                         :: vLine        ! index for loop through variables
-  integer(i4b)                         :: vDex         ! index into type lists
+  character(LEN=256)                   :: cmessage                 ! error message of downwind routine
+  character(LEN=256)                   :: outfile                  ! full path of model output file
+  integer(i4b)                         :: unt                      ! file unit
+  character(LEN=linewidth),allocatable :: charlines(:)             ! vector of character strings
+  character(LEN=64),allocatable        :: lineWords(:)             ! vector to parse textline
+  integer(i4b)                         :: nWords                   ! number of words in line
+  character(LEN=128)                   :: varName                  ! variable name
+  character(LEN=6)                     :: structName               ! name of structure
+  integer(i4b)                         :: vLine                    ! index for loop through variables
+  integer(i4b)                         :: vDex                     ! index into type lists
 
   ! initialize error control
   err=0; message='read_output_file/'
@@ -909,9 +902,9 @@ subroutine read_output_file(err,message)
     varName = trim(lineWords(nameIndex))
 
     ! user cannot control time output
-    if (trim(varName)=='time') cycle
+    if (varName=='time') cycle
     ! set precision if it is given
-    if (trim(varName)=='outputPrecision') then
+    if (varName=='outputPrecision') then
       statName = trim(lineWords(nWords))
       if (statName=='single' .or. statName=='float') then
         outputPrecision = nf90_float
@@ -945,17 +938,11 @@ subroutine read_output_file(err,message)
     call get_ixUnknown(trim(varName),structName,vDex,err,cmessage)
     if (err/=0) then; message=trim(message)//trim(cmessage)// ': deprecated variable name, remove from output file'; return; end if;
 
-    ! id variables should not be specified in output control file
-    if (trim(structName)=='id')then
-    print*,'id variable requested in outputControl, will be skipped: variable='//trim(varName)
-    cycle
-    end if
-
     ! --- identify the desired frequency in the metadata structure  -----------
 
     ! process time-varying variables
     select case(trim(structName))
-      case('indx','forc','prog','diag','flux','bvar','deriv')
+      case('forc','prog','diag','flux','bvar')
 
         ! * ensure that the frequency index exists for time varying variables
         if(nWords<freqIndex)then
@@ -978,29 +965,37 @@ subroutine read_output_file(err,message)
         ! * check that we could find the index
         if(iFreq<0 .or. iFreq>maxvarFreq)then
           message=trim(message)//'unable to identify desired output frequency for variable '//trim(varName)&
-                                //' [entered "'//trim(freqName)//'"]'
+                                //' [entered '//trim(freqName)//', names should be timestep (or 1), day (or 24), month, annual]'
           err=20; return
         endif
 
       ! time and temporally constant variables always outputted at timestep level (no aggregation)
-      case('bpar','attr','type','mpar','time')
+      case('bpar','attr','type','mpar','time','indx')
         if(nWords<freqIndex) then
           freqName = 'empty'
         else
           freqName = trim(lineWords(freqIndex))
         endif
-        if(trim(structName)=='time') then
-          if (freqName/='timestep'.or. freqName/='1') then
-            write(*,*)'WARNING: time variable '//trim(varName)//': outputting variable at timestep level since it cannot be aggregated [entered "'//trim(freqName)//'"]'
+        if(trim(structName)=='time' .or. trim(structName)=='indx') then
+          if (freqName/='timestep' .and. freqName/='1') then
+            write(*,*)'WARNING: timestep only variable '//trim(varName)//': outputting at timestep level since it cannot be aggregated'
           endif
         else
-          write(*,*)'WARNING: temporally constant variable '//trim(varName)//': outputting variable in timestep file with no time dimension'
+          write(*,*)'WARNING: temporally constant variable '//trim(varName)//': outputting parameter in timestep file with no time dimension'
         endif
         iFreq = iLookFREQ%timestep
         freqName = 'timestep'
 
+      case('deriv','lookup') ! we don't output these and keep for internal use only, but we could if there was a desire to do so
+        write(*,*)'WARNING: cannot output '//trim(structName)//' structure data, skipping variable '//trim(varName)
+        cycle
+      case('id') ! gruId and hruId are always written with the call to write_hru_info
+        if(trim(varName)/='hruId' .and. trim(varName)/='gruId')&
+        write(*,*)'WARNING: outputting id structure data gruId and hruId only, skipping variable '//trim(varName)
+        cycle
+
       ! error control
-      case default;  err=20;message=trim(message)//'unable to identify lookup structure';return
+      case default;  err=20;message=trim(message)//'unable to identify lookup structure'//trim(structName);return
     end select
 
     ! --- identify the desired statistic in the metadata structure  -----------
@@ -1009,15 +1004,16 @@ subroutine read_output_file(err,message)
     ! there are three options to define the statistic:
     ! option 0: file format = varName
     ! option 0: file format = varName | outFreq
-    ! option 1: file format = varName | outFreq | statisticName
-    ! option 2: file format = varName | outFreq | inst | sum | mean | var | min | max | mode
+    ! option 1: file format = varName | outFreq | statisticName (total, instant, mean, variance, minimum, maximum)
+    ! option 2: file format = varName | outFreq | totl | inst | mean | vari | mini | maxi
+    !              e.g.,      varName | outFreq |   0  |    0 |    1 |   0  |    0 |   0 
     select case(nWords)
       case(nameIndex + 2, nameIndex); fileFormat=noStatsDesired   ! no statistic desired (temporally constant variables)
       case(freqIndex + 2           ); fileFormat=provideStatName  ! provide the name of the desired statistic
-      case(freqIndex + 2*maxVarStat); fileFormat=provideStatFlags ! provide flags defining the desired statistic
+      case(freqIndex + 2*maxvarStat, freqIndex + 2*(maxvarStat+1)); fileFormat=provideStatFlags ! provide flags defining the desired statistic
       case default
         message=trim(message)//'unexpected format for variable '//trim(varName)&
-                            //' (format = "'//trim(charLines(vLine))//'")'
+                             //' (format = "'//trim(charLines(vLine))//'")'
         err=20; return
     end select
 
@@ -1031,21 +1027,27 @@ subroutine read_output_file(err,message)
       case(provideStatName); statName = trim(lineWords(freqIndex+2))
 
       ! extract the statistic name from the flags
-      ! NOTE: cannot imagine why someone would want to do this now since the other option is easier
-      !         --> included for backwards compatibility
       case(provideStatFlags)
         ! get statistic name
         statFlag(:) = .false.
-        do iStat = 1,maxVarStat
+        do iStat = 1,maxvarStat
           if (lineWords(freqIndex + 2*iStat)=='1') then
             statFlag(iStat)=.true.
-            statName = get_statName(istat)
+            statName = get_statName(iStat)
           end if
         end do
-        ! check actually defined the statistic (and only defined one statistic)
+        ! check actually defined the statistic (and only defined one statistic) that is not the deprecated mode statistic
+        if(nWords==freqIndex + 2*(maxvarStat+1))then
+          if(lineWords(freqIndex + 2*(maxvarStat+1))=='1')&
+          write(*,*)'WARNING: the mode statistic is no longer supported, ignorning mode flag for variable '//trim(varName) 
+        endif
         if(count(statFlag)/=1)then
-          message=trim(message)//'expect only one statistic is defined when using flags to define statistics'&
-                                //': entered "'//trim(charLines(vLine))//'"'
+          if(count(statFlag)==0)then
+             message=trim(message)//'no statistic was defined for variable '//trim(varName) 
+          else
+            message=trim(message)//'expect only one statistic is defined when using flags to define statistics'&
+                               //': entered "'//trim(charLines(vLine))//'"'
+          endif
           err=20; return
         endif
 
@@ -1057,42 +1059,40 @@ subroutine read_output_file(err,message)
     iStat = get_ixStat(trim(statName))
     if(iStat<0 .or. iStat>maxvarStat)then
       message=trim(message)//'unable to identify desired statistic for variable '//trim(varName)&
-                            //' [evaluating '//trim(statName)//']'
+                           //' [evaluating '//trim(statName)//', names should be total, instant, mean, variance, minimum, or maximum]'
       err=20; return
     endif
 
     ! --- populate the metadata that controls the model output  ---------------
 
+    varType = -1_i4b ! initialize variable type (only need for temporally varying structures)
     ! identify data structure
     select case (trim(structName))
+      
+      ! time and index structures -- request instantaneous, timestep-level output (no aggregation possible)
+      case('time' ); time_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; time_meta(vDex)%varDesire=.true. ! time variable 
+      case('indx' ); indx_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; indx_meta(vDex)%varDesire=.true. ! index variables
 
       ! temporally constant structures -- request instantaneous timestep-level output (no aggregation)
-      case('time' ); time_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; time_meta(vDex)%varDesire=.true.   ! timing data
-      case('bpar' ); bpar_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; bpar_meta(vDex)%varDesire=.true.   ! basin parameters
-      case('attr' ); attr_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; attr_meta(vDex)%varDesire=.true.   ! local attributes
-      case('type' ); type_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; type_meta(vDex)%varDesire=.true.   ! local classification
-      case('mpar' ); mpar_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; mpar_meta(vDex)%varDesire=.true.   ! model parameters
-
-      ! index structures -- can only be output at the model time step
-      case('indx' ); indx_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; indx_meta(vDex)%varDesire=.true.
-      if(iFreq/=iLookFREQ%timestep)then
-        message=trim(message)//'index variables can only be output at model timestep'&
-                            //' [evaluating variable "'//trim(varName)//'" for output frequency "'//trim(freqName)//'"]'
-        err=20; return
-      endif
+      case('bpar' ); bpar_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; bpar_meta(vDex)%varDesire=.true. ! basin parameters
+      case('attr' ); attr_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; attr_meta(vDex)%varDesire=.true. ! local attributes
+      case('type' ); type_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; type_meta(vDex)%varDesire=.true. ! local classification
+      case('mpar' ); mpar_meta(vDex)%statIndex(iLookFREQ%timestep) = iLookSTAT%inst; mpar_meta(vDex)%varDesire=.true. ! model parameters
 
       ! temporally varying structures
-      case('forc' ); call popStat(forc_meta(vDex) , iFreq, iStat, err, cmessage)    ! model forcing data
-      case('prog' ); call popStat(prog_meta(vDex) , iFreq, iStat, err, cmessage)    ! model prognostics
-      case('diag' ); call popStat(diag_meta(vDex) , iFreq, iStat, err, cmessage)    ! model diagnostics
-      case('flux' ); call popStat(flux_meta(vDex) , iFreq, iStat, err, cmessage)    ! model fluxes
-      case('bvar' ); call popStat(bvar_meta(vDex) , iFreq, iStat, err, cmessage)    ! basin variables
-      case('deriv'); call popStat(deriv_meta(vDex), iFreq, iStat, err, cmessage)    ! model derivs
-
-      ! error control
-      case default;  err=20;message=trim(message)//'unable to identify lookup structure';return
+      case('forc' ); call popStat(forc_meta(vDex), iFreq, iStat, err, cmessage); varType = forc_meta(vDex)%varType    ! model forcing data
+      case('prog' ); call popStat(prog_meta(vDex), iFreq, iStat, err, cmessage); varType = prog_meta(vDex)%varType    ! model prognostics
+      case('diag' ); call popStat(diag_meta(vDex), iFreq, iStat, err, cmessage); varType = diag_meta(vDex)%varType    ! model diagnostics
+      case('flux' ); call popStat(flux_meta(vDex), iFreq, iStat, err, cmessage); varType = flux_meta(vDex)%varType    ! model fluxes
+      case('bvar' ); call popStat(bvar_meta(vDex), iFreq, iStat, err, cmessage); varType = bvar_meta(vDex)%varType    ! basin variables
 
     end select  ! select data structure
+
+    ! warnings for variables that we cannot write
+    if(.not.allowRoutingOutput .and. varType==iLookVarType%routing)& 
+      write(*,*)'WARNING: cannot output routing histogram type data, skipping variable '//trim(varName)
+    if(varType==iLookVarType%unknown .or. varType==integerMissing)&
+      write(*,*)'WARNING: cannot output unknown or missing type data, skipping variable '//trim(varName)
 
     ! error control from popStat
     if (err/=0) then; message=trim(message)//trim(cmessage);return; end if
@@ -1120,7 +1120,9 @@ end subroutine read_output_file
 ! This routine is called by read_output_file
 ! ********************************************************************************************
 subroutine popStat(meta, iFreq, iStat, err, message)
-  USE data_types,only:var_info                  ! meta_data type declaration
+  USE var_lookup,only:iLookVarType              ! look up structure for variable typed
+  USE data_types,only:var_info                  ! derived type for metaData
+  USE var_lookup,only:iLookSTAT                 ! index into stats structure
   USE get_ixname_module,only:get_freqName       ! get name of frequency from frequency index (error control)
   implicit none
   ! dummy variables
@@ -1135,15 +1137,21 @@ subroutine popStat(meta, iFreq, iStat, err, message)
   ! check that the variable is not already defined for a given frequency
   if(meta%statIndex(iFreq)/=integerMissing)then
     message=trim(message)//'variable "'//trim(meta%varName)//'" is already defined '&
-                        //'for output frequency "'//trim(get_freqName(iFreq))//'"'
+                         //'for output frequency "'//trim(get_freqName(iFreq))//'"'
     err=20; return
   endif
 
-  ! identify desired variabe
+  ! identify desired variable
   meta%varDesire = .true.
 
   ! populate structure
   meta%statIndex(iFreq) = iStat
+
+  ! if variable is not scalar, can only be at instantaneous statistic
+  if(meta%varType/=iLookVarType%scalarv .and. iStat/=iLookSTAT%inst)then
+    meta%statIndex(iFreq) = iLookSTAT%inst
+    write(*,*)'WARNING: cannot compute statistics of non-scalar type data, outputting instantaneous variable '//trim(meta%varName)//' in '//trim(get_freqName(iFreq))//' output file'
+  endif
 
 end subroutine popStat
 

@@ -1,11 +1,11 @@
-module flxMapping_module
+module fluxMapping_module
 implicit none
 private
-public::flxMapping
+public::fluxMapping
 contains
 
- subroutine flxMapping(err,message)
- USE nrtype
+ subroutine fluxMapping(err,message)
+ USE nr_type
  ! data types
  USE data_types, only: var_info         ! data type for metadata structure
  USE data_types, only: flux2state       ! data type for extended metadata structure, for flux-to-state mapping
@@ -37,7 +37,7 @@ contains
  integer(i4b)                   :: nFlux               ! number of fluxes
  integer(i4b),parameter         :: integerUndefined=0  ! named variable to denote that the flux is undefined
  ! initialize error control
- err=0; message='flxMapping/'
+ err=0; message='fluxMapping/'
 
  ! get the number of fluxes
  nFlux = size(flux_meta)
@@ -131,7 +131,6 @@ contains
  flux2state_orig(iLookFLUX%scalarCanopySnowUnloading)       = flux2state(state1=integerMissing,  state2=integerMissing)
  flux2state_orig(iLookFLUX%scalarThroughfallRain)           = flux2state(state1=iname_watCanopy, state2=integerMissing)
  flux2state_orig(iLookFLUX%scalarCanopyLiqDrainage)         = flux2state(state1=iname_watCanopy, state2=integerMissing)
- flux2state_orig(iLookFLUX%scalarCanopyMeltFreeze)          = flux2state(state1=integerMissing,  state2=integerMissing)
 
  ! energy fluxes and for the snow and soil domains
  flux2state_orig(iLookFLUX%iLayerConductiveFlux)            = flux2state(state1=iname_nrgLayer,  state2=integerMissing)
@@ -181,7 +180,7 @@ contains
  ! ** check all variables are defined
  do iVar=1,nFlux
   if(flux2state_orig(iVar)%state1==integerUndefined .or. flux2state_orig(iVar)%state2==integerUndefined)then
-   message=trim(message)//'flux-to-state mapping is undefined for variable "'//trim(flux_meta(iVar)%varname)//'"'
+   message=trim(message)//'flux-to-state mapping is undefined for variable "'//trim(flux_meta(iVar)%varName)//'"'
    err=20; return
   endif
  end do
@@ -214,6 +213,6 @@ contains
   flux2state_liq(iVar)%var_info = flux_meta(iVar)
  end do
 
- end subroutine flxMapping
+ end subroutine fluxMapping
 
-end module flxMapping_module
+end module fluxMapping_module

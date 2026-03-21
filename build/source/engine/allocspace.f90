@@ -21,7 +21,7 @@
 module allocspace_module
 
 ! data types
-USE nrtype
+USE nr_type
 
 ! provide access to the derived types to define the data structures
 USE data_types,only:&
@@ -57,8 +57,8 @@ USE data_types,only:var_info               ! data type for metadata
 USE globalData,only:integerMissing         ! missing integer
 USE globalData,only:realMissing            ! missing real number
 
-USE globalData,only: nTimeDelay            ! number of timesteps in the time delay histogram
-USE globalData,only: nSpecBand             ! number of spectral bands
+USE globalData,only:nTimeDelay             ! number of timesteps in the time delay histogram
+USE globalData,only:nSpecBand              ! number of spectral bands
 
 ! access variable types
 USE var_lookup,only:iLookVarType           ! look up structure for variable typed
@@ -117,7 +117,7 @@ contains
   class is (gru_hru_intVec);    if(allocated(dataStruct%gru))then; check=.true.; else; allocate(dataStruct%gru(nGRU),stat=err); end if
   class is (gru_hru_double);    if(allocated(dataStruct%gru))then; check=.true.; else; allocate(dataStruct%gru(nGRU),stat=err); end if
   class is (gru_hru_doubleVec); if(allocated(dataStruct%gru))then; check=.true.; else; allocate(dataStruct%gru(nGRU),stat=err); end if
- ! gru+hru+z dimensions
+  ! gru+hru+z dimensions
   class is (gru_hru_z_vLookup); if(allocated(dataStruct%gru))then; check=.true.; else; allocate(dataStruct%gru(nGRU),stat=err); end if
  end select
 
@@ -134,7 +134,7 @@ contains
    class is (gru_hru_intVec);    if(allocated(dataStruct%gru(iGRU)%hru))then; check=.true.; else; allocate(dataStruct%gru(iGRU)%hru(gru_struc(iGRU)%hruCount),stat=err); end if
    class is (gru_hru_double);    if(allocated(dataStruct%gru(iGRU)%hru))then; check=.true.; else; allocate(dataStruct%gru(iGRU)%hru(gru_struc(iGRU)%hruCount),stat=err); end if
    class is (gru_hru_doubleVec); if(allocated(dataStruct%gru(iGRU)%hru))then; check=.true.; else; allocate(dataStruct%gru(iGRU)%hru(gru_struc(iGRU)%hruCount),stat=err); end if
- class is (gru_hru_z_vLookup); if(allocated(dataStruct%gru(iGRU)%hru))then; check=.true.; else; allocate(dataStruct%gru(iGRU)%hru(gru_struc(iGRU)%hruCount),stat=err); end if
+   class is (gru_hru_z_vLookup); if(allocated(dataStruct%gru(iGRU)%hru))then; check=.true.; else; allocate(dataStruct%gru(iGRU)%hru(gru_struc(iGRU)%hruCount),stat=err); end if
    class default  ! do nothing: It is acceptable to not be any of these specified cases
   end select
   ! check errors
@@ -335,20 +335,20 @@ contains
    class is (var_dlength)
     select type(dataStructNew)
      class is (var_dlength); call copyStruct_rkind( dataStructOrig%var(iVar),dataStructNew%var(iVar),isCopy,err,cmessage)
-     class default; err=20; message=trim(message)//'mismatch data structure for variable'//trim(metaStruct(iVar)%varname); return
+     class default; err=20; message=trim(message)//'mismatch data structure for variable'//trim(metaStruct(iVar)%varName); return
     end select
 
    ! integer
    class is (var_ilength)
     select type(dataStructNew)
      class is (var_ilength); call copyStruct_i4b(dataStructOrig%var(iVar),dataStructNew%var(iVar),isCopy,err,cmessage)
-     class default; err=20; message=trim(message)//'mismatch data structure for variable'//trim(metaStruct(iVar)%varname); return
+     class default; err=20; message=trim(message)//'mismatch data structure for variable'//trim(metaStruct(iVar)%varName); return
     end select
 
    ! check
    class default; err=20; message=trim(message)//'unable to identify type of data structure'; return
   end select
-  if(err/=0)then; message=trim(message)//trim(cmessage)//' ('//trim(metaStruct(iVar)%varname)//')'; return; end if
+  if(err/=0)then; message=trim(message)//trim(cmessage)//' ('//trim(metaStruct(iVar)%varName)//')'; return; end if
 
  end do  ! looping through variables in the data structure
 
@@ -533,7 +533,7 @@ contains
  ! private subroutine allocateDat_rkind: initialize data dimension of the data structures
  ! ************************************************************************************************
  subroutine allocateDat_rkind(metadata,nSnow,nSoil,nLayers, & ! input
-                           varData,err,message)            ! output
+                              varData,err,message)            ! output
  ! access subroutines
  USE get_ixName_module,only:get_varTypeName       ! to access type strings for error messages
 
@@ -562,7 +562,7 @@ contains
 
   ! check allocated
   if(allocated(varData%var(iVar)%dat))then
-   message=trim(message)//'variable '//trim(metadata(iVar)%varname)//' is unexpectedly allocated'
+   message=trim(message)//'variable '//trim(metadata(iVar)%varName)//' is unexpectedly allocated'
    err=20; return
 
   ! allocate structures
@@ -570,7 +570,7 @@ contains
   !        -- however, this vector must store two values for the variance calculation, thus the *2 in this allocate
   !            (need enough space in the event that variance is the desired statistic for all output frequencies)
   else
-   select case(metadata(iVar)%vartype)
+   select case(metadata(iVar)%varType)
     case(iLookVarType%scalarv); allocate(varData%var(iVar)%dat(1),stat=err)
     case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nSpecBand),stat=err)
     case(iLookVarType%midSnow); allocate(varData%var(iVar)%dat(nSnow),stat=err)
@@ -581,14 +581,14 @@ contains
     case(iLookVarType%ifcToto); allocate(varData%var(iVar)%dat(0:nLayers),stat=err)
     case(iLookVarType%parSoil); allocate(varData%var(iVar)%dat(nSoil),stat=err)
     case(iLookVarType%routing); allocate(varData%var(iVar)%dat(nTimeDelay),stat=err)
-    case(iLookVarType%outstat); allocate(varData%var(iVar)%dat(maxvarfreq*2),stat=err)
+    case(iLookVarType%outstat); allocate(varData%var(iVar)%dat(maxvarFreq*2),stat=err)
     case(iLookVarType%unknown); allocate(varData%var(iVar)%dat(0),stat=err)  ! unknown = special (and valid) case that is allocated later (initialize with zero-length vector)
     case default
-     err=40; message=trim(message)//"1. unknownVariableType[name='"//trim(metadata(iVar)%varname)//"'; type='"//trim(get_varTypeName(metadata(iVar)%vartype))//"']"
+     err=40; message=trim(message)//"1. unknownVariableType[name='"//trim(metadata(iVar)%varName)//"'; type='"//trim(get_varTypeName(metadata(iVar)%varType))//"']"
      return
    end select
    ! check error
-   if(err/=0)then; err=20; message=trim(message)//'problem allocating variable '//trim(metadata(iVar)%varname); return; end if
+   if(err/=0)then; err=20; message=trim(message)//'problem allocating variable '//trim(metadata(iVar)%varName); return; end if
    ! set to missing
    varData%var(iVar)%dat(:) = realMissing
   end if  ! if not allocated
@@ -628,7 +628,7 @@ contains
 
   ! check allocated
   if(allocated(varData%var(iVar)%dat))then
-   message=trim(message)//'variable '//trim(metadata(iVar)%varname)//' is unexpectedly allocated'
+   message=trim(message)//'variable '//trim(metadata(iVar)%varName)//' is unexpectedly allocated'
    err=20; return
 
   ! allocate structures
@@ -636,7 +636,7 @@ contains
   !        -- however, this vector must store two values for the variance calculation, thus the *2 in this allocate
   !            (need enough space in the event that variance is the desired statistic for all output frequencies)
   else
-   select case(metadata(iVar)%vartype)
+   select case(metadata(iVar)%varType)
     case(iLookVarType%scalarv); allocate(varData%var(iVar)%dat(1),stat=err)
     case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nSpecBand),stat=err)
     case(iLookVarType%midSnow); allocate(varData%var(iVar)%dat(nSnow),stat=err)
@@ -648,10 +648,10 @@ contains
     case(iLookVarType%routing); allocate(varData%var(iVar)%dat(nTimeDelay),stat=err)
     case(iLookVarType%outstat); allocate(varData%var(iVar)%dat(maxvarFreq*2),stat=err)
     case(iLookVarType%unknown); allocate(varData%var(iVar)%dat(0),stat=err)  ! unknown=special (and valid) case that is allocated later (initialize with zero-length vector)
-    case default; err=40; message=trim(message)//"unknownVariableType[name='"//trim(metadata(iVar)%varname)//"'; type='"//trim(get_varTypeName(metadata(iVar)%vartype))//"']"; return
+    case default; err=40; message=trim(message)//"unknownVariableType[name='"//trim(metadata(iVar)%varName)//"'; type='"//trim(get_varTypeName(metadata(iVar)%varType))//"']"; return
    end select
    ! check error
-   if(err/=0)then; err=20; message=trim(message)//'problem allocating variable '//trim(metadata(iVar)%varname); return; end if
+   if(err/=0)then; err=20; message=trim(message)//'problem allocating variable '//trim(metadata(iVar)%varName); return; end if
    ! set to missing
    varData%var(iVar)%dat(:) = integerMissing
   end if  ! if not allocated
@@ -691,7 +691,7 @@ contains
 
   ! check allocated
   if(allocated(varData%var(iVar)%dat))then
-   message=trim(message)//'variable '//trim(metadata(iVar)%varname)//' is unexpectedly allocated'
+   message=trim(message)//'variable '//trim(metadata(iVar)%varName)//' is unexpectedly allocated'
    err=20; return
 
   ! allocate structures
@@ -699,7 +699,7 @@ contains
   !        -- however, this vector must store two values for the variance calculation, thus the *2 in this allocate
   !            (need enough space in the event that variance is the desired statistic for all output frequencies)
   else
-   select case(metadata(iVar)%vartype)
+   select case(metadata(iVar)%varType)
     case(iLookVarType%scalarv); allocate(varData%var(iVar)%dat(1),stat=err)
     case(iLookVarType%wLength); allocate(varData%var(iVar)%dat(nSpecBand),stat=err)
     case(iLookVarType%midSnow); allocate(varData%var(iVar)%dat(nSnow),stat=err)
@@ -711,10 +711,10 @@ contains
     case(iLookVarType%routing); allocate(varData%var(iVar)%dat(nTimeDelay),stat=err)
     case(iLookVarType%outstat); allocate(varData%var(iVar)%dat(maxvarFreq*2),stat=err)
     case(iLookVarType%unknown); allocate(varData%var(iVar)%dat(0),stat=err)  ! unknown=special (and valid) case that is allocated later (initialize with zero-length vector)
-    case default; err=40; message=trim(message)//"unknownVariableType[name='"//trim(metadata(iVar)%varname)//"'; type='"//trim(get_varTypeName(metadata(iVar)%vartype))//"']"; return
+    case default; err=40; message=trim(message)//"unknownVariableType[name='"//trim(metadata(iVar)%varName)//"'; type='"//trim(get_varTypeName(metadata(iVar)%varType))//"']"; return
    end select
    ! check error
-   if(err/=0)then; err=20; message=trim(message)//'problem allocating variable '//trim(metadata(iVar)%varname); return; end if
+   if(err/=0)then; err=20; message=trim(message)//'problem allocating variable '//trim(metadata(iVar)%varName); return; end if
    ! set to false
    varData%var(iVar)%dat(:) = .false.
   end if  ! if not allocated

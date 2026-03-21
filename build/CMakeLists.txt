@@ -147,6 +147,7 @@ set(HOOKUP_DIR ${F_MASTER}/build/source/hookup)
 set(NETCDF_DIR ${F_MASTER}/build/source/netcdf)
 set(NNSOLV_DIR ${F_MASTER}/build/source/nested_Newton_library) #SJT: nested Newton library
 set(NOAHMP_DIR ${F_MASTER}/build/source/noah-mp)
+set(NUMREC_DIR ${F_MASTER}/build/source/numrec)
 
 #=========================================================================================
 # COMPILE PART 2: Assemble all of the SUMMA sub-routines

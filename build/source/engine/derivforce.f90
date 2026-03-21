@@ -21,7 +21,7 @@
 module derivforce_module
 
 ! data types
-USE nrtype
+USE nr_type
 USE data_types,only:var_dlength                             ! data structure: x%var(:)%dat (rkind)
 
 ! model constants
@@ -65,12 +65,12 @@ contains
  ! public subroutine derivforce: compute derived forcing data
  ! ************************************************************************************************
  subroutine derivforce(time_data,forc_data,attr_data,mpar_data,prog_data,diag_data,flux_data,tmZoneOffsetFracDay,err,message)
- USE sunGeomtry_module,only:clrsky_rad                         ! compute cosine of the solar zenith angle
- USE conv_funcs_module,only:vapPress                           ! compute vapor pressure of air (Pa)
- USE conv_funcs_module,only:SPHM2RELHM,RELHM2SPHM,WETBULBTMP   ! conversion functions
- USE snow_utils_module,only:fracliquid,templiquid              ! functions to compute temperature/liquid water
- USE time_utils_module,only:compcalday                         ! convert julian day to calendar date
- USE summaFileManager,only: NC_TIME_ZONE                       ! time zone option from control file
+ USE sunGeomtry_module,only:clrsky_rad                            ! compute cosine of the solar zenith angle
+ USE convert_funcs_module,only:vapPress                           ! compute vapor pressure of air (Pa)
+ USE convert_funcs_module,only:SPHM2RELHM,RELHM2SPHM,WETBULBTMP   ! conversion functions
+ USE snow_utils_module,only:fracliquid,templiquid                 ! functions to compute temperature/liquid water
+ USE time_utils_module,only:compcalday                            ! convert julian day to calendar date
+ USE summaFileManager,only: NC_TIME_ZONE                          ! time zone option from control file
  ! compute derived forcing data variables
  implicit none
  ! input variables

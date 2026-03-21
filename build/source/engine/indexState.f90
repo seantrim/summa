@@ -21,7 +21,7 @@
 module indexState_module
 
 ! data types
-USE nrtype
+USE nr_type
 
 ! derived types to define the data structures
 USE data_types,only:var_ilength                            ! data vector with variable length dimension (i4b)
@@ -73,7 +73,7 @@ contains
                        indx_data,               & ! intent(inout): indices defining model states and layers
                        err,message)               ! intent(out):   error control
  ! provide access to the numerical recipes utility modules
- USE nr_utility_module,only:arth                           ! creates a sequence of numbers (start, incr, n)
+ USE nr_utils_module,only:arth                           ! use to build vectors with regular increments
  implicit none
  ! --------------------------------------------------------------------------------------------------------------------------------
  ! --------------------------------------------------------------------------------------------------------------------------------
@@ -278,7 +278,7 @@ contains
                        out_indexSplit)                ! intent(out)   : error control
  ! external modules 
  USE f2008funcs_module,only:findIndex                 ! finds the index of the first value within a vector
- USE nr_utility_module,only:arth                      ! creates a sequence of numbers (start, incr, n)
+ USE nr_utils_module,only:arth                        ! use to build vectors with regular increments
  implicit none
  ! --------------------------------------------------------------------------------------------------------------------------------
  ! input
@@ -399,7 +399,7 @@ contains
    case(iLookINDEX%ixMatricHead);         call indxSubset(indx_data%var(iVar)%dat, ixSoilState,  matricHead_mask, err, cmessage)
    case default; cycle ! only need to process the above variables
   end select  ! iVar
-  if(err/=0)then; message=trim(message)//trim(cmessage)//'[varname='//trim(indx_meta(ivar)%varname)//']'; return; endif
+  if(err/=0)then; message=trim(message)//trim(cmessage)//'[varName='//trim(indx_meta(iVar)%varName)//']'; return; endif
 
  end do  ! looping through variables in the data structure
 
@@ -468,7 +468,7 @@ contains
   ! get the subset of indices
   ! NOTE: indxSubset(subset, fullVector, mask), provides subset of fullVector where mask==.true.
   call indxSubset(indx_data%var(iVar)%dat,ixSequence,stateTypeMask,err,cmessage)
-  if(err/=0)then; message=trim(message)//trim(cmessage)//'[varname='//trim(indx_meta(ivar)%varname)//']'; return; endif
+  if(err/=0)then; message=trim(message)//trim(cmessage)//'[varName='//trim(indx_meta(iVar)%varName)//']'; return; endif
 
  end do  ! looping through variables in the data structure
 
@@ -592,14 +592,14 @@ contains
   ! deallocate space
   deallocate(indx_data%var(iVar)%dat,stat=err)
   if(err/=0)then
-   message=trim(message)//'unable to deallocate space for variable '//trim(indx_meta(ivar)%varname)
+   message=trim(message)//'unable to deallocate space for variable '//trim(indx_meta(iVar)%varName)
    err=20; return
   endif
 
   ! allocate space
   allocate(indx_data%var(iVar)%dat(nVec),stat=err)
   if(err/=0)then
-   message=trim(message)//'unable to allocate space for variable '//trim(indx_meta(ivar)%varname)
+   message=trim(message)//'unable to allocate space for variable '//trim(indx_meta(iVar)%varName)
    err=20; return
   endif
 

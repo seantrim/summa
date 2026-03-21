@@ -21,7 +21,7 @@
 module layerDivide_module
 
 ! variable types
-USE nrtype
+USE nr_type
 
 ! physical constants
 USE multiconst,only:&
@@ -386,7 +386,7 @@ contains
  character(*),intent(out)        :: message           ! error message
  ! ---------------------------------------------------------------------------------------------
  ! local variables
- integer(i4b)                    :: ivar              ! index of model variable
+ integer(i4b)                    :: iVar              ! index of model variable
  integer(i4b)                    :: ix_lower          ! lower bound of the vector
  integer(i4b)                    :: ix_upper          ! upper bound of the vector
  logical(lgt)                    :: stateVariable     ! .true. if variable is a state variable
@@ -398,10 +398,10 @@ contains
  err=0; message='addModelLayer/'
 
  ! ***** add a layer to each model variable
- do ivar=1,size(metaStruct)
+ do iVar=1,size(metaStruct)
 
   ! define bounds
-  select case(metaStruct(ivar)%vartype)
+  select case(metaStruct(iVar)%varType)
    case(iLookVarType%midSnow); ix_lower=1; ix_upper=nSnow
    case(iLookVarType%midToto); ix_lower=1; ix_upper=nLayers
    case(iLookVarType%ifcSnow); ix_lower=0; ix_upper=nSnow
@@ -410,7 +410,7 @@ contains
   end select
 
   ! identify whether it is a state variable
-  select case(trim(metaStruct(ivar)%varname))
+  select case(trim(metaStruct(iVar)%varName))
    case('mLayerDepth','mLayerTemp','mLayerVolFracIce','mLayerVolFracLiq'); stateVariable=.true.
    case default; stateVariable=.false.
   end select
@@ -421,28 +421,28 @@ contains
    ! ** double precision
    type is (var_dlength)
     ! check allocated
-    if(.not.allocated(dataStruct%var(ivar)%dat))then; err=20; message='data vector is not allocated'; return; end if
+    if(.not.allocated(dataStruct%var(iVar)%dat))then; err=20; message='data vector is not allocated'; return; end if
     ! assign the data vector to the temporary vector
-    call cloneStruc(tempVec_rkind, ix_lower, source=dataStruct%var(ivar)%dat, err=err, message=cmessage)
+    call cloneStruc(tempVec_rkind, ix_lower, source=dataStruct%var(iVar)%dat, err=err, message=cmessage)
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if
     ! reallocate space for the new vector
-    deallocate(dataStruct%var(ivar)%dat,stat=err)
+    deallocate(dataStruct%var(iVar)%dat,stat=err)
     if(err/=0)then; err=20; message='problem in attempt to deallocate memory for data vector'; return; end if
-    allocate(dataStruct%var(ivar)%dat(ix_lower:ix_upper+1),stat=err)
+    allocate(dataStruct%var(iVar)%dat(ix_lower:ix_upper+1),stat=err)
     if(err/=0)then; err=20; message='problem in attempt to reallocate memory for data vector'; return; end if
     ! populate the state vector
     if(stateVariable)then
      if(ix_upper > 0)then  ! (only copy data if the vector exists -- can be a variable for snow, with no layers)
       if(ix_divide > 0)then
-       dataStruct%var(ivar)%dat(1:ix_divide) = tempVec_rkind(1:ix_divide)  ! copy data
-       dataStruct%var(ivar)%dat(ix_divide+1) = tempVec_rkind(ix_divide)    ! repeat data for the sub-divided layer
+       dataStruct%var(iVar)%dat(1:ix_divide) = tempVec_rkind(1:ix_divide)  ! copy data
+       dataStruct%var(iVar)%dat(ix_divide+1) = tempVec_rkind(ix_divide)    ! repeat data for the sub-divided layer
       end if
       if(ix_upper > ix_divide) &
-       dataStruct%var(ivar)%dat(ix_divide+2:ix_upper+1) = tempVec_rkind(ix_divide+1:ix_upper)  ! copy data
+       dataStruct%var(iVar)%dat(ix_divide+2:ix_upper+1) = tempVec_rkind(ix_divide+1:ix_upper)  ! copy data
      end if  ! if the vector exists
     ! not a state variable
     else
-     dataStruct%var(ivar)%dat(:) = realMissing
+     dataStruct%var(iVar)%dat(:) = realMissing
     end if
     ! deallocate the temporary vector: strictly not necessary, but include to be safe
     deallocate(tempVec_rkind,stat=err)
@@ -451,28 +451,28 @@ contains
    ! ** integer
    type is (var_ilength)
     ! check allocated
-    if(.not.allocated(dataStruct%var(ivar)%dat))then; err=20; message='data vector is not allocated'; return; end if
+    if(.not.allocated(dataStruct%var(iVar)%dat))then; err=20; message='data vector is not allocated'; return; end if
     ! assign the data vector to the temporary vector
-    call cloneStruc(tempVec_i4b, ix_lower, source=dataStruct%var(ivar)%dat, err=err, message=cmessage)
+    call cloneStruc(tempVec_i4b, ix_lower, source=dataStruct%var(iVar)%dat, err=err, message=cmessage)
     if(err/=0)then; message=trim(message)//trim(cmessage); return; end if
     ! reallocate space for the new vector
-    deallocate(dataStruct%var(ivar)%dat,stat=err)
+    deallocate(dataStruct%var(iVar)%dat,stat=err)
     if(err/=0)then; err=20; message='problem in attempt to deallocate memory for data vector'; return; end if
-    allocate(dataStruct%var(ivar)%dat(ix_lower:ix_upper+1),stat=err)
+    allocate(dataStruct%var(iVar)%dat(ix_lower:ix_upper+1),stat=err)
     if(err/=0)then; err=20; message='problem in attempt to reallocate memory for data vector'; return; end if
     ! populate the state vector
     if(stateVariable)then
      if(ix_upper > 0)then  ! (only copy data if the vector exists -- can be a variable for snow, with no layers)
       if(ix_divide > 0)then
-       dataStruct%var(ivar)%dat(1:ix_divide) = tempVec_i4b(1:ix_divide)  ! copy data
-       dataStruct%var(ivar)%dat(ix_divide+1) = tempVec_i4b(ix_divide)    ! repeat data for the sub-divided layer
+       dataStruct%var(iVar)%dat(1:ix_divide) = tempVec_i4b(1:ix_divide)  ! copy data
+       dataStruct%var(iVar)%dat(ix_divide+1) = tempVec_i4b(ix_divide)    ! repeat data for the sub-divided layer
       end if
       if(ix_upper > ix_divide) &
-       dataStruct%var(ivar)%dat(ix_divide+2:ix_upper+1) = tempVec_i4b(ix_divide+1:ix_upper)  ! copy data
+       dataStruct%var(iVar)%dat(ix_divide+2:ix_upper+1) = tempVec_i4b(ix_divide+1:ix_upper)  ! copy data
      end if  ! if the vector exists
     ! not a state variable
     else
-     dataStruct%var(ivar)%dat(:) = integerMissing
+     dataStruct%var(iVar)%dat(:) = integerMissing
     end if
     ! deallocate the temporary vector: strictly not necessary, but include to be safe
     deallocate(tempVec_i4b,stat=err)

@@ -3,14 +3,14 @@ module Newton_functions
  use kind_params,only: i4b,r8b ! kind parameters
  use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
- use nrtype,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
+ use nr_type,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
  use eval8summa_module, only: eval8summa,imposeConstraints           ! SUMMA's eval8summa and imposeConstraints routines
  use computJacob_module,only: computJacob                            ! SUMMA's computJacob routine 
- use summaSolve4homegrown_module,only: refine_Newton_step,checkConv ! SUMMA's refine_Newton_step and checkConv procedures
+ use summaSolv4homegrown_module,only: refine_Newton_step,checkConv ! SUMMA's refine_Newton_step and checkConv procedures
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
- use data_types,only: in_type_summaSolve4homegrown,&           ! objects for SUMMA's summaSolve4homegrown routine
-                     &io_type_summaSolve4homegrown,&
-                     &out_type_summaSolve4homegrown 
+ use data_types,only: in_type_summaSolv4homegrown,&           ! objects for SUMMA's summaSolv4homegrown routine
+                     &io_type_summaSolv4homegrown,&
+                     &out_type_summaSolv4homegrown 
  use data_types,only: model_options           ! type for SUMMA's model decision structure
  use data_types,only: var_ilength,var_dlength ! derived types for SUMMA data structures
  use data_types,only: var_i,var_d             ! derived types for SUMMA data vectors
@@ -106,14 +106,14 @@ module Newton_functions
 
    ! * summaSolve4homegrown (SS4HG) objects *
    ! classical and outer iterations
-   type(in_type_summaSolve4homegrown)  :: in_SS4HG   ! SS4HG input object: model control variables and previous function evaluation
-   type(io_type_summaSolve4homegrown)  :: io_SS4HG   ! SS4HG io object: model control variables and previous function evaluation
-   type(out_type_summaSolve4homegrown) :: out_SS4HG  ! SS4HG output object: model control variables and previous function evaluation
+   type(in_type_summaSolv4homegrown)  :: in_SS4HG   ! SS4HG input object: model control variables and previous function evaluation
+   type(io_type_summaSolv4homegrown)  :: io_SS4HG   ! SS4HG io object: model control variables and previous function evaluation
+   type(out_type_summaSolv4homegrown) :: out_SS4HG  ! SS4HG output object: model control variables and previous function evaluation
 
    ! inner iterations
-   type(in_type_summaSolve4homegrown)  :: in_SS4HG_inner  ! SS4HG input object: model control variables and previous function evaluation
-   type(io_type_summaSolve4homegrown)  :: io_SS4HG_inner  ! SS4HG io object: model control variables and previous function evaluation
-   type(out_type_summaSolve4homegrown) :: out_SS4HG_inner ! SS4HG output object: model control variables and previous function evaluation
+   type(in_type_summaSolv4homegrown)  :: in_SS4HG_inner  ! SS4HG input object: model control variables and previous function evaluation
+   type(io_type_summaSolv4homegrown)  :: io_SS4HG_inner  ! SS4HG io object: model control variables and previous function evaluation
+   type(out_type_summaSolv4homegrown) :: out_SS4HG_inner ! SS4HG output object: model control variables and previous function evaluation
 
    ! additional variables for eval8summa call
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
@@ -1214,7 +1214,7 @@ contains
 
  subroutine SUMMA_computeGradient(f_obj,aJacScaled,rVecScaled,gradScaled)
   ! ** compute product of scaled residual and scaled SUMMA Jacobian **
-  use matrixOper_module, only: computeGradient
+  use matrixOper_module, only: computGradient
   ! arguments
   type(f_obj_type),intent(in) :: f_obj ! nested Newton object
   real(rkind),intent(in) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
@@ -1226,7 +1226,7 @@ contains
   character(256) :: cmessage ! error message from SUMMA
 
   associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
-   call computeGradient(ixMatrix,nState,aJacScaled,rVecScaled,gradScaled,err,cmessage)
+   call computGradient(ixMatrix,nState,aJacScaled,rVecScaled,gradScaled,err,cmessage)
   end associate
   if (err/=0) then
    print *, "Error in SUMMA_computeGradient: "//trim(cmessage)
@@ -1804,353 +1804,353 @@ contains
  end subroutine f_state_SUMMA_vec_full
 
 
- subroutine f_mass_SUMMA_vec(f_obj,xvec)
-  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+! subroutine f_mass_SUMMA_vec(f_obj,xvec)
+!  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
+!  ! arguments
+!  class(f_obj_type),intent(inout) :: f_obj
+!  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+!
+!  ! local
+!  logical,parameter               :: mass_state_type = .true. ! perform transformations from energy split to mass split 
+!  real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
+!  integer(i4b)                    :: nBands          ! # of bands for SUMMA's Jacobian
+!
+!  ! initialize data structures (ensure that fully-coupled structures are not overwritten)
+!  f_obj % indx_data1  = f_obj % indx_data 
+!  f_obj % diag_data1  = f_obj % diag_data 
+!  f_obj % flux_data1  = f_obj % flux_data 
+!  f_obj % deriv_data1 = f_obj % deriv_data 
+!  f_obj % dBaseflow_dMatric1 = f_obj % dBaseflow_dMatric ! allocate
+!
+!  ! compute residual for split
+!  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
+!                        &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
+!                        &f_obj % nSubset1,f_obj % stateMask1,f_obj % dMat1,f_obj % dBaseflow_dMatric1,resVec_split)
+!
+!  ! remaining non-linear function values are zero
+!  f_obj % f1_vec(:) = 0._r8b
+!  f_obj % f1_vec(:) = unpack(resVec_split,f_obj % stateMask1,f_obj % f1_vec)
+!
+!  ! get leading dimension for Jacobians
+!  if (f_obj % banded) then
+!   nBands=f_obj % nrow_banded + f_obj% subdiag
+!   f_obj % nLeadDim1 = nBands  
+!  else
+!   f_obj % nLeadDim1 = f_obj % nSubset1 
+!  end if
+!
+!  !!!! SJT: start test block ---- take out ----
+!  !print *, "mass_state_type =",mass_state_type
+!  !print *, split_select % nState
+!  !print *, f_obj % nLeadDim1,f_obj % nSubset1,size(f_obj % dMat1)
+!  !print *, f_obj % stateMask1(:)
+!  !print *, resVec_split
+!  !print *, f_obj % f1_vec
+!  !print *, sum(resVec_split)
+!  !!!! SJT: end test block ---- take out ----
+! end subroutine f_mass_SUMMA_vec
 
-  ! local
-  logical,parameter               :: mass_state_type = .true. ! perform transformations from energy split to mass split 
-  real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
-  integer(i4b)                    :: nBands          ! # of bands for SUMMA's Jacobian
+! subroutine f_energy_SUMMA_vec(f_obj,xvec)
+!  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
+!  ! arguments
+!  class(f_obj_type),intent(inout) :: f_obj
+!  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+!
+!  ! local
+!  logical,parameter               :: mass_state_type = .false. ! perform transformations from energy split to mass split 
+!  real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
+!  integer(i4b)                    :: nBands          ! # of bands for SUMMA's Jacobian
+!
+!  ! initialize data structures (ensure that fully-coupled structures are not overwritten)
+!  f_obj % indx_data2  = f_obj % indx_data
+!  f_obj % diag_data2  = f_obj % diag_data 
+!  f_obj % flux_data2  = f_obj % flux_data 
+!  f_obj % deriv_data2 = f_obj % deriv_data 
+!  f_obj % dBaseflow_dMatric2 = f_obj % dBaseflow_dMatric ! allocate
+!
+!  ! compute residual for split
+!  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
+!                        &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
+!                        &f_obj % nSubset2,f_obj % stateMask2,f_obj % dMat2,f_obj % dBaseflow_dMatric2,resVec_split)
+!
+!  ! remaining non-linear function values are zero
+!  f_obj % f2_vec(:) = 0._r8b
+!  f_obj % f2_vec(:) = unpack(-resVec_split,f_obj % stateMask2,f_obj % f2_vec) ! note: sign change for f2 so that f=f1-f2
+!
+!  ! get leading dimension for Jacobians
+!  if (f_obj % banded) then
+!   nBands=f_obj % nrow_banded + f_obj% subdiag
+!   f_obj % nLeadDim2 = nBands  
+!  else
+!   f_obj % nLeadDim2 = f_obj % nSubset2 
+!  end if
+!
+!  !!!! SJT: start test block ---- take out ----
+!  !print *, "mass_state_type =",mass_state_type
+!  !print *, split_select % nState
+!  !print *, split_select % nSubset
+!  !print *, f_obj % stateMask2(:)
+!  !print *, resVec_split
+!  !print *, f_obj % f2_vec
+!  !print *, sum(resVec_split)
+!  !!!! SJT: end test block ---- take out ----
+! end subroutine f_energy_SUMMA_vec
 
-  ! initialize data structures (ensure that fully-coupled structures are not overwritten)
-  f_obj % indx_data1  = f_obj % indx_data 
-  f_obj % diag_data1  = f_obj % diag_data 
-  f_obj % flux_data1  = f_obj % flux_data 
-  f_obj % deriv_data1 = f_obj % deriv_data 
-  f_obj % dBaseflow_dMatric1 = f_obj % dBaseflow_dMatric ! allocate
-
-  ! compute residual for split
-  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
-                        &f_obj % indx_data1,f_obj % diag_data1,f_obj % flux_data1,f_obj % deriv_data1,&
-                        &f_obj % nSubset1,f_obj % stateMask1,f_obj % dMat1,f_obj % dBaseflow_dMatric1,resVec_split)
-
-  ! remaining non-linear function values are zero
-  f_obj % f1_vec(:) = 0._r8b
-  f_obj % f1_vec(:) = unpack(resVec_split,f_obj % stateMask1,f_obj % f1_vec)
-
-  ! get leading dimension for Jacobians
-  if (f_obj % banded) then
-   nBands=f_obj % nrow_banded + f_obj% subdiag
-   f_obj % nLeadDim1 = nBands  
-  else
-   f_obj % nLeadDim1 = f_obj % nSubset1 
-  end if
-
-  !!!! SJT: start test block ---- take out ----
-  !print *, "mass_state_type =",mass_state_type
-  !print *, split_select % nState
-  !print *, f_obj % nLeadDim1,f_obj % nSubset1,size(f_obj % dMat1)
-  !print *, f_obj % stateMask1(:)
-  !print *, resVec_split
-  !print *, f_obj % f1_vec
-  !print *, sum(resVec_split)
-  !!!! SJT: end test block ---- take out ----
- end subroutine f_mass_SUMMA_vec
-
- subroutine f_energy_SUMMA_vec(f_obj,xvec)
-  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-
-  ! local
-  logical,parameter               :: mass_state_type = .false. ! perform transformations from energy split to mass split 
-  real(rkind),allocatable         :: resVec_split(:) ! residual vector for split
-  integer(i4b)                    :: nBands          ! # of bands for SUMMA's Jacobian
-
-  ! initialize data structures (ensure that fully-coupled structures are not overwritten)
-  f_obj % indx_data2  = f_obj % indx_data
-  f_obj % diag_data2  = f_obj % diag_data 
-  f_obj % flux_data2  = f_obj % flux_data 
-  f_obj % deriv_data2 = f_obj % deriv_data 
-  f_obj % dBaseflow_dMatric2 = f_obj % dBaseflow_dMatric ! allocate
-
-  ! compute residual for split
-  call f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
-                        &f_obj % indx_data2,f_obj % diag_data2,f_obj % flux_data2,f_obj % deriv_data2,&
-                        &f_obj % nSubset2,f_obj % stateMask2,f_obj % dMat2,f_obj % dBaseflow_dMatric2,resVec_split)
-
-  ! remaining non-linear function values are zero
-  f_obj % f2_vec(:) = 0._r8b
-  f_obj % f2_vec(:) = unpack(-resVec_split,f_obj % stateMask2,f_obj % f2_vec) ! note: sign change for f2 so that f=f1-f2
-
-  ! get leading dimension for Jacobians
-  if (f_obj % banded) then
-   nBands=f_obj % nrow_banded + f_obj% subdiag
-   f_obj % nLeadDim2 = nBands  
-  else
-   f_obj % nLeadDim2 = f_obj % nSubset2 
-  end if
-
-  !!!! SJT: start test block ---- take out ----
-  !print *, "mass_state_type =",mass_state_type
-  !print *, split_select % nState
-  !print *, split_select % nSubset
-  !print *, f_obj % stateMask2(:)
-  !print *, resVec_split
-  !print *, f_obj % f2_vec
-  !print *, sum(resVec_split)
-  !!!! SJT: end test block ---- take out ----
- end subroutine f_energy_SUMMA_vec
-
- subroutine f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
-                             &indx_data,diag_data,flux_data,deriv_data,&
-                             &nSubset,stateMask,dMat_split,dBaseflow_dMatric,resVec_split)
-  ! *** Compute SUMMA's vector non-linear function for mass or energy state variables ***
-  ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
-  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
-  use stateFilter_module,only: fullyCoupled,stateTypeSplit
-  use stateFilter_module,only: massSplit,nrgSplit
-  use stateFilter_module,only: fullDomain,subDomain
-  use stateFilter_module,only: vector,scalar
-  use indexState_module ,only: indexSplit                             ! get state indices from stateMask
-  use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
-  use getVectorz_module ,only: popStateVec                            ! populate the state vector
-  use getVectorz_module ,only: getScaling                             ! scale factors for residual and solution vectors
-  use updateVars_module ,only: updateProg                             ! update prognostic (state) variable data structure
-  use mDecisions_module ,only: closedForm                             ! use temperature with closed form heat capacity
-  use mDecisions_module ,only: enthalpyFormLU                         ! use look up tables for soil enthalpy
-  use mDecisions_module ,only: ida                                    ! use IDA solver
-
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b)        ,intent(in)    :: xvec(1:f_obj % n)    ! current guess
-  logical          ,intent(in)    :: mass_state_type      ! perform transformations from energy split to mass split 
-  type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
-  type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
-  type(var_dlength),intent(inout) :: flux_data            ! flux data
-  type(var_dlength),intent(inout) :: deriv_data           ! derivative data
-  integer(i4b)            ,intent(out) :: nSubset           ! # of state variables in split
-  logical(lgt),allocatable,intent(out) :: stateMask(:)           ! logical mask array for split
-  real(rkind),allocatable ,intent(out) :: dMat_split(:)          ! diagonal matrix (no flux derivatives) for split
-  real(rkind)             ,intent(out) :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
-  real(rkind),allocatable ,intent(out) :: resVec_split(:)        ! residual vector for split
-
-  ! local variables
-  type(split_select_type)         :: split_select      ! split select object
-  type(in_type_indexSplit)        :: in_indexSplit     ! indexSplit arguments
-  type(out_type_indexSplit)       :: out_indexSplit
-  real(rkind)                     :: stateVecPrime(1:f_obj % n) ! trial state vector for full solution (prime variables -- not used here)
-  real(rkind)                     :: untappedMelt(1:f_obj % n)  ! untapped melt energy
-  real(rkind),allocatable         :: stateVecTrial(:)  ! trial state vector for split
-  real(rkind),allocatable         :: fScale_split(:)   ! residual vector scale factors for split
-  real(rkind),allocatable         :: xScale_split(:)   ! solution vector scale factors for split
-  real(qp)   ,allocatable         :: sMul_split(:)     ! state vector multipliers for split
-  real(rkind),allocatable         :: fluxVec0_split(:) ! flux vector for split
-  real(rkind),allocatable         :: fRHS_split(:)     ! RHS function for ARKODE for split
-  real(rkind),allocatable         :: rAdd_split(:)     ! additional (sink) terms on the RHS of the state equation for split
-  logical(lgt)                    :: enthalpyStateVec  ! flag to use enthalpy as a state variable (ida)
-  logical(lgt)                    :: computeEnthTemp   ! flag to use enthalpy temperature
-  logical(lgt)                    :: use_lookup        ! flag to use enthalpy lookup tables
-  logical(lgt)                    :: waterBalanceError,nrgFluxModified ! output flags for updateProg
-  real(rkind)                     :: balance(1:f_obj % n) ! balance error from updateProg
-  character(LEN=256)              :: message           ! total error message
-  character(LEN=256)              :: cmessage          ! error message of downwind routine
-  integer(i4b)                    :: err               ! error code of downwind routine
-  logical(lgt)                    :: return_flag
-
-  logical(lgt) :: firstFluxCall
-
-  ! * updateProg *
-  ! put xvec state variable values into prog_temp object
- 
-  f_obj % prog_temp = f_obj % prog_data ! initialize
-  untappedMelt  = 0._rkind  ! set untapped melt energy to zero (matches systemSolv)
-  stateVecPrime = 0._rkind  ! state vector (primed variables -- not used)
-  associate(&
-   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
-   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
-   nLayers        => f_obj % in_SS4HG % nLayers        ,& ! intent(in): total number of layers
-   ixNumericalMethod => f_obj % model_decisions(iLookDECISIONS%num_method)%iDecision,& ! intent(in): [i4b] choice of numerical solver
-   ixNrgConserv      => f_obj % model_decisions(iLookDECISIONS%nrgConserv)%iDecision,& ! intent(in): [i4b] choice of variable in either energy backward Euler residual or IDA state variable
-   doAdjustTemp      => mass_state_type, & ! flag to adjust temperature (same behaviour as homegrown mass split from opSplittin assumed) 
-   computeVegFlux    => f_obj % in_SS4HG % computeVegFlux,  & ! intent(in): flag to indicate if computing fluxes over vegetation
-   computMassBalance => .false., &
-   computNrgBalance  => .false.  &
-  &)
-
-   ! compute flags based on solver choices (following usage in varSubstep)
-   enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
-   computeEnthTemp = ((ixNrgConserv .ne. closedForm .or. computNrgBalance) .and. ixNumericalMethod .ne. ida) ! use enthTemp to conserve energy or compute energy balance
-   use_lookup = (ixNrgConserv==enthalpyFormLU) ! use lookup tables for soil enthalpy instead of analytical solution
-
-   call updateProg(f_obj % in_SS4HG % dt_cur,nSnow,nSoil,nLayers,untappedMelt,xVec,stateVecPrime,& ! input: states
-                  &doAdjustTemp,computeVegFlux,computMassBalance,computNrgBalance,computeEnthTemp,enthalpyStateVec,use_lookup,& ! input: model control
-                  &f_obj % model_decisions,f_obj % lookup_data,&
-                  &f_obj % mpar_data,indx_data,flux_data,f_obj % prog_temp,diag_data,deriv_data,    & ! input-output: data structures
-                  &f_obj % fluxVec0,f_obj % resVec,balance,waterBalanceError,nrgFluxModified,err,message) ! input-output: balances, flags, and error control
-  end associate
-
-  ! * initialize operations for split_select object *
-
-  associate(nstate => f_obj % in_SS4HG % nState)
-   ! initialize total # of state variables
-   split_select % nState = nState 
-
-   ! allocate data components
-   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
-  end associate
-
-  ! use split_select_type object to specify the desired split
-  ! NOTE: we are computing the energy state mask and negating to find the mass state mask (to include pressure head state variables)
-  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
-  split_select % ixCoupling = stateTypeSplit    ! splitting is used
-  split_select % iStateTypeSplit = nrgSplit     ! state variable type
-  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
-  !split_select % iDomainSplit =                ! only used for sub-domain splitting
-  split_select % ixSolution = vector            ! vector split (not scalar)
-  !split_select % iStateSplit =                 ! only used for scalar splits
-
-  ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
-  ! note: from update_stateMask in opSplittin
-
-  ! compute stateMask and nSubset (in split_select object) for the selected split
-  call split_select % get_stateMask(indx_data,err,cmessage,message,return_flag)
-  if (return_flag) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: stateFilter message="//trim(cmessage); stop
-    end if
-  end if
-
-  ! transform variables for energy split into mass split
-  if (mass_state_type) then
-   stateMask = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask --- allocate on assignment
-   split_select % stateMask(:) = stateMask(:)           ! update split_select object in case of future use
-   split_select % nSubset = split_select % nState - split_select % nSubset ! count for new stateMask
-  else
-   stateMask = split_select % stateMask ! no transformation --- allocate on assignment
-  end if
-  nSubset = split_select % nSubset ! for argument list
-
-  ! * indexSplit *
-  associate(&
-   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
-   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
-   nLayers        => f_obj % in_SS4HG % nLayers         & ! intent(in): total number of layers
-  &)   
-   call in_indexSplit % initialize(nSnow,nSoil,nLayers,split_select % nSubset)
-  end associate
-  call indexSplit(in_indexSplit,stateMask,indx_data,out_indexSplit) ! update indx_data based on stateMask
-  call out_indexSplit % finalize(err,cmessage)
-  if (err/=0_i4b) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: indexSplit message="//trim(cmessage); stop
-    end if
-  end if
-
-
-  ! call eval8summa to get non-linear function values for mass state type
-  ! update
-  associate(&
-   nState            => split_select % nSubset                                      ,& ! # of state variables in split
-   ixNumericalMethod => f_obj % model_decisions(iLookDECISIONS%num_method)%iDecision,& ! intent(in): [i4b] choice of numerical solver
-   ixNrgConserv      => f_obj % model_decisions(iLookDECISIONS%nrgConserv)%iDecision & ! intent(in): [i4b] choice of variable in either energy backward Euler residual or IDA state variable
-  &)
-
-   ! allocate arrays for split
-   allocate(stateVecTrial(1:nState))  ! state vector
-   allocate(fScale_split(1:nState) )  ! residual scale factors
-   allocate(xScale_split(1:nState) )  ! solution scale factors
-   allocate(dMat_split(1:nState)   )  ! diagonal matrix (no flux derivatives)
-   allocate(sMul_split(1:nState)   )  ! state vector multipliers
- 
-   allocate(fluxVec0_split(1:nState)) ! flux vector
-   allocate(fRHS_split(1:nState)    ) ! RHS function for ARKODE
-   allocate(rAdd_split(1:nState)    ) ! additional (sink) terms on the RHS of the state equation
-   allocate(resVec_split(1:nState)  ) ! residual vector
-
-   enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
-
-   ! initialize state vectors
-   call popStateVec(&
-                   ! input
-                   nState,             & ! intent(in):  number of desired state variables
-                   enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
-                   f_obj % prog_temp,  & ! intent(in):  model prognostic variables for a local HRU
-                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
-                   indx_data,          & ! intent(in):  indices defining model states and layers
-                   ! output
-                   stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
-                   err,cmessage)         ! intent(out): error control
-   if (err/=0_i4b) then
-     if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
-     end if
-   end if
-
-!   !!!! SJT: testing -- take dependency on xvec input argument into account
-!   stateVecTrial = pack(xvec,stateMask)
-!   !!!! SJT: end testing
-
-   ! compute scale factors
-   call getScaling(diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
-   if (err/=0_i4b) then
-     if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: getScaling message="//trim(cmessage); stop
-     end if
-   end if
-
-   ! evaluate residual vector for mass split
-   firstFluxCall = .true. ! may not be needed
-   call eval8summa(&
-                    ! input: model control
-                    f_obj % in_SS4HG % dt_cur,         & ! intent(in):    current stepsize
-                    f_obj % in_SS4HG % dt,             & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
-                    f_obj % in_SS4HG % nSnow,          & ! intent(in):    number of snow layers
-                    f_obj % in_SS4HG % nSoil,          & ! intent(in):    number of soil layers
-                    f_obj % in_SS4HG % nLayers,        & ! intent(in):    number of layers
-                    nState,                            & ! intent(in):    number of state variables in the current subset
-                    .false.,                           & ! intent(in):    not inside Sundials solver
-                    f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
-                    firstFluxCall,&!f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
-                    .true.,&!.false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
-                    f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
-                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
-                    ! input: state vectors
-                    stateVecTrial,                   & ! intent(in):    model state vector
-                    fScale_split,                    & ! intent(in):    characteristic scale of the function evaluations
-                    sMul_split,                      & ! intent(inout): state vector multiplier (used in the residual calculations)
-                    ! input: data structures
-                    f_obj % model_decisions,         & ! intent(in):    model decisions
-                    f_obj % lookup_data,             & ! intent(in):    lookup tables
-                    f_obj % type_data,               & ! intent(in):    type of vegetation and soil
-                    f_obj % attr_data,               & ! intent(in):    spatial attributes
-                    f_obj % mpar_data,               & ! intent(in):    model parameters
-                    f_obj % forc_data,               & ! intent(in):    model forcing data
-                    f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
-                    f_obj % prog_temp,               & ! intent(in):    model prognostic variables for a local HRU
-                    ! input-output: data structures
-                    indx_data,                       & ! intent(inout): index data
-                    diag_data,                       & ! intent(inout): model diagnostic variables for a local HRU
-                    flux_data,                       & ! intent(inout): model fluxes for a local HRU (initial flux structure)
-                    deriv_data,                      & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
-                    ! input-output: baseflow
-                    f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                    dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
-                    ! output
-                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
-                    fluxVec0_split,                  & ! intent(out):   flux vector
-                    fRHS_split,                      & ! intent(out):   RHS function for ARKODE
-                    rAdd_split,                      & ! intent(out):   additional (sink) terms on the RHS of the state equation
-                    resVec_split,                    & ! intent(out):   residual vector
-                    f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
-                    f_obj % out_SS4HG % err,         & ! intent(out): error code
-                    f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
-  end associate
-
-  ! finalize
-  associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
-   if (err /= 0) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error f_state_SUMMA_vec: eval8summa message="//trim(message); stop
-    end if
-   end if
-  end associate
-
- end subroutine f_state_SUMMA_vec
+! subroutine f_state_SUMMA_vec(f_obj,xvec,mass_state_type,&
+!                             &indx_data,diag_data,flux_data,deriv_data,&
+!                             &nSubset,stateMask,dMat_split,dBaseflow_dMatric,resVec_split)
+!  ! *** Compute SUMMA's vector non-linear function for mass or energy state variables ***
+!  ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
+!  ! SJT: -------- incomplete and may not include contributions due to entire input state vector --------
+!  use stateFilter_module,only: fullyCoupled,stateTypeSplit
+!  use stateFilter_module,only: massSplit,nrgSplit
+!  use stateFilter_module,only: fullDomain,subDomain
+!  use stateFilter_module,only: vector,scalar
+!  use indexState_module ,only: indexSplit                             ! get state indices from stateMask
+!  use data_types        ,only: in_type_indexSplit,out_type_indexSplit ! argument objects for indexSplit
+!  use getVectorz_module ,only: popStateVec                            ! populate the state vector
+!  use getVectorz_module ,only: getScaling                             ! scale factors for residual and solution vectors
+!  use updateVars_module ,only: updateProg                             ! update prognostic (state) variable data structure
+!  use mDecisions_module ,only: closedForm                             ! use temperature with closed form heat capacity
+!  use mDecisions_module ,only: enthalpyFormLU                         ! use look up tables for soil enthalpy
+!  use mDecisions_module ,only: ida                                    ! use IDA solver
+!
+!  ! arguments
+!  class(f_obj_type),intent(inout) :: f_obj
+!  real(r8b)        ,intent(in)    :: xvec(1:f_obj % n)    ! current guess
+!  logical          ,intent(in)    :: mass_state_type      ! perform transformations from energy split to mass split 
+!  type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
+!  type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
+!  type(var_dlength),intent(inout) :: flux_data            ! flux data
+!  type(var_dlength),intent(inout) :: deriv_data           ! derivative data
+!  integer(i4b)            ,intent(out) :: nSubset           ! # of state variables in split
+!  logical(lgt),allocatable,intent(out) :: stateMask(:)           ! logical mask array for split
+!  real(rkind),allocatable ,intent(out) :: dMat_split(:)          ! diagonal matrix (no flux derivatives) for split
+!  real(rkind)             ,intent(out) :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+!  real(rkind),allocatable ,intent(out) :: resVec_split(:)        ! residual vector for split
+!
+!  ! local variables
+!  type(split_select_type)         :: split_select      ! split select object
+!  type(in_type_indexSplit)        :: in_indexSplit     ! indexSplit arguments
+!  type(out_type_indexSplit)       :: out_indexSplit
+!  real(rkind)                     :: stateVecPrime(1:f_obj % n) ! trial state vector for full solution (prime variables -- not used here)
+!  real(rkind)                     :: untappedMelt(1:f_obj % n)  ! untapped melt energy
+!  real(rkind),allocatable         :: stateVecTrial(:)  ! trial state vector for split
+!  real(rkind),allocatable         :: fScale_split(:)   ! residual vector scale factors for split
+!  real(rkind),allocatable         :: xScale_split(:)   ! solution vector scale factors for split
+!  real(qp)   ,allocatable         :: sMul_split(:)     ! state vector multipliers for split
+!  real(rkind),allocatable         :: fluxVec0_split(:) ! flux vector for split
+!  real(rkind),allocatable         :: fRHS_split(:)     ! RHS function for ARKODE for split
+!  real(rkind),allocatable         :: rAdd_split(:)     ! additional (sink) terms on the RHS of the state equation for split
+!  logical(lgt)                    :: enthalpyStateVec  ! flag to use enthalpy as a state variable (ida)
+!  logical(lgt)                    :: computeEnthTemp   ! flag to use enthalpy temperature
+!  logical(lgt)                    :: use_lookup        ! flag to use enthalpy lookup tables
+!  logical(lgt)                    :: waterBalanceError,nrgFluxModified ! output flags for updateProg
+!  real(rkind)                     :: balance(1:f_obj % n) ! balance error from updateProg
+!  character(LEN=256)              :: message           ! total error message
+!  character(LEN=256)              :: cmessage          ! error message of downwind routine
+!  integer(i4b)                    :: err               ! error code of downwind routine
+!  logical(lgt)                    :: return_flag
+!
+!  logical(lgt) :: firstFluxCall
+!
+!  ! * updateProg *
+!  ! put xvec state variable values into prog_temp object
+! 
+!  f_obj % prog_temp = f_obj % prog_data ! initialize
+!  untappedMelt  = 0._rkind  ! set untapped melt energy to zero (matches systemSolv)
+!  stateVecPrime = 0._rkind  ! state vector (primed variables -- not used)
+!  associate(&
+!   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+!   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+!   nLayers        => f_obj % in_SS4HG % nLayers        ,& ! intent(in): total number of layers
+!   ixNumericalMethod => f_obj % model_decisions(iLookDECISIONS%num_method)%iDecision,& ! intent(in): [i4b] choice of numerical solver
+!   ixNrgConserv      => f_obj % model_decisions(iLookDECISIONS%nrgConserv)%iDecision,& ! intent(in): [i4b] choice of variable in either energy backward Euler residual or IDA state variable
+!   doAdjustTemp      => mass_state_type, & ! flag to adjust temperature (same behaviour as homegrown mass split from opSplittin assumed) 
+!   computeVegFlux    => f_obj % in_SS4HG % computeVegFlux,  & ! intent(in): flag to indicate if computing fluxes over vegetation
+!   computMassBalance => .false., &
+!   computNrgBalance  => .false.  &
+!  &)
+!
+!   ! compute flags based on solver choices (following usage in varSubstep)
+!   enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
+!   computeEnthTemp = ((ixNrgConserv .ne. closedForm .or. computNrgBalance) .and. ixNumericalMethod .ne. ida) ! use enthTemp to conserve energy or compute energy balance
+!   use_lookup = (ixNrgConserv==enthalpyFormLU) ! use lookup tables for soil enthalpy instead of analytical solution
+!
+!   call updateProg(f_obj % in_SS4HG % dt_cur,nSnow,nSoil,nLayers,untappedMelt,xVec,stateVecPrime,& ! input: states
+!                  &doAdjustTemp,computeVegFlux,computMassBalance,computNrgBalance,computeEnthTemp,enthalpyStateVec,use_lookup,& ! input: model control
+!                  &f_obj % model_decisions,f_obj % lookup_data,&
+!                  &f_obj % mpar_data,indx_data,flux_data,f_obj % prog_temp,diag_data,deriv_data,    & ! input-output: data structures
+!                  &f_obj % fluxVec0,f_obj % resVec,balance,waterBalanceError,nrgFluxModified,err,message) ! input-output: balances, flags, and error control
+!  end associate
+!
+!  ! * initialize operations for split_select object *
+!
+!  associate(nstate => f_obj % in_SS4HG % nState)
+!   ! initialize total # of state variables
+!   split_select % nState = nState 
+!
+!   ! allocate data components
+!   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
+!  end associate
+!
+!  ! use split_select_type object to specify the desired split
+!  ! NOTE: we are computing the energy state mask and negating to find the mass state mask (to include pressure head state variables)
+!  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
+!  split_select % ixCoupling = stateTypeSplit    ! splitting is used
+!  split_select % iStateTypeSplit = nrgSplit     ! state variable type
+!  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
+!  !split_select % iDomainSplit =                ! only used for sub-domain splitting
+!  split_select % ixSolution = vector            ! vector split (not scalar)
+!  !split_select % iStateSplit =                 ! only used for scalar splits
+!
+!  ! apply steps similar to initialize_split from opSplitting to generate logical masks (probably skip save/restore operations)
+!  ! note: from update_stateMask in opSplittin
+!
+!  ! compute stateMask and nSubset (in split_select object) for the selected split
+!  call split_select % get_stateMask(indx_data,err,cmessage,message,return_flag)
+!  if (return_flag) then
+!    if (f_obj % out_error) then
+!     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+!    end if
+!  end if
+!
+!  ! transform variables for energy split into mass split
+!  if (mass_state_type) then
+!   stateMask = .not.(split_select % stateMask(:))       ! negate energy mask to find mass mask --- allocate on assignment
+!   split_select % stateMask(:) = stateMask(:)           ! update split_select object in case of future use
+!   split_select % nSubset = split_select % nState - split_select % nSubset ! count for new stateMask
+!  else
+!   stateMask = split_select % stateMask ! no transformation --- allocate on assignment
+!  end if
+!  nSubset = split_select % nSubset ! for argument list
+!
+!  ! * indexSplit *
+!  associate(&
+!   nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
+!   nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
+!   nLayers        => f_obj % in_SS4HG % nLayers         & ! intent(in): total number of layers
+!  &)   
+!   call in_indexSplit % initialize(nSnow,nSoil,nLayers,split_select % nSubset)
+!  end associate
+!  call indexSplit(in_indexSplit,stateMask,indx_data,out_indexSplit) ! update indx_data based on stateMask
+!  call out_indexSplit % finalize(err,cmessage)
+!  if (err/=0_i4b) then
+!    if (f_obj % out_error) then
+!     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: indexSplit message="//trim(cmessage); stop
+!    end if
+!  end if
+!
+!
+!  ! call eval8summa to get non-linear function values for mass state type
+!  ! update
+!  associate(&
+!   nState            => split_select % nSubset                                      ,& ! # of state variables in split
+!   ixNumericalMethod => f_obj % model_decisions(iLookDECISIONS%num_method)%iDecision,& ! intent(in): [i4b] choice of numerical solver
+!   ixNrgConserv      => f_obj % model_decisions(iLookDECISIONS%nrgConserv)%iDecision & ! intent(in): [i4b] choice of variable in either energy backward Euler residual or IDA state variable
+!  &)
+!
+!   ! allocate arrays for split
+!   allocate(stateVecTrial(1:nState))  ! state vector
+!   allocate(fScale_split(1:nState) )  ! residual scale factors
+!   allocate(xScale_split(1:nState) )  ! solution scale factors
+!   allocate(dMat_split(1:nState)   )  ! diagonal matrix (no flux derivatives)
+!   allocate(sMul_split(1:nState)   )  ! state vector multipliers
+! 
+!   allocate(fluxVec0_split(1:nState)) ! flux vector
+!   allocate(fRHS_split(1:nState)    ) ! RHS function for ARKODE
+!   allocate(rAdd_split(1:nState)    ) ! additional (sink) terms on the RHS of the state equation
+!   allocate(resVec_split(1:nState)  ) ! residual vector
+!
+!   enthalpyStateVec = (ixNrgConserv .ne. closedForm .and. ixNumericalMethod==ida) ! enthalpy as state variable (ida -- matches usage in varSubstep)
+!
+!   ! initialize state vectors
+!   call popStateVec(&
+!                   ! input
+!                   nState,             & ! intent(in):  number of desired state variables
+!                   enthalpyStateVec,   & ! intent(in):  flag to use enthalpy as a state variable
+!                   f_obj % prog_temp,  & ! intent(in):  model prognostic variables for a local HRU
+!                   diag_data,          & ! intent(in):  model diagnostic variables for a local HRU
+!                   indx_data,          & ! intent(in):  indices defining model states and layers
+!                   ! output
+!                   stateVecTrial,      & ! intent(out): initial model state vector (mixed units)
+!                   err,cmessage)         ! intent(out): error control
+!   if (err/=0_i4b) then
+!     if (f_obj % out_error) then
+!      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: popStateVec message="//trim(cmessage); stop
+!     end if
+!   end if
+!
+!!   !!!! SJT: testing -- take dependency on xvec input argument into account
+!!   stateVecTrial = pack(xvec,stateMask)
+!!   !!!! SJT: end testing
+!
+!   ! compute scale factors
+!   call getScaling(diag_data,indx_data,fScale_split,xScale_split,sMul_split,dMat_split,err,cmessage)     
+!   if (err/=0_i4b) then
+!     if (f_obj % out_error) then
+!      write(f_obj % unit,*) "Error in f_state_SUMMA_vec: getScaling message="//trim(cmessage); stop
+!     end if
+!   end if
+!
+!   ! evaluate residual vector for mass split
+!   firstFluxCall = .true. ! may not be needed
+!   call eval8summa(&
+!                    ! input: model control
+!                    f_obj % in_SS4HG % dt_cur,         & ! intent(in):    current stepsize
+!                    f_obj % in_SS4HG % dt,             & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
+!                    f_obj % in_SS4HG % nSnow,          & ! intent(in):    number of snow layers
+!                    f_obj % in_SS4HG % nSoil,          & ! intent(in):    number of soil layers
+!                    f_obj % in_SS4HG % nLayers,        & ! intent(in):    number of layers
+!                    nState,                            & ! intent(in):    number of state variables in the current subset
+!                    .false.,                           & ! intent(in):    not inside Sundials solver
+!                    f_obj % in_SS4HG % firstSubStep,   & ! intent(in):    flag to indicate if we are processing the first sub-step
+!                    firstFluxCall,&!f_obj % io_SS4HG % firstFluxCall,  & ! intent(inout): flag to indicate if we are processing the first flux call
+!                    .true.,&!.false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
+!                    f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+!                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
+!                    ! input: state vectors
+!                    stateVecTrial,                   & ! intent(in):    model state vector
+!                    fScale_split,                    & ! intent(in):    characteristic scale of the function evaluations
+!                    sMul_split,                      & ! intent(inout): state vector multiplier (used in the residual calculations)
+!                    ! input: data structures
+!                    f_obj % model_decisions,         & ! intent(in):    model decisions
+!                    f_obj % lookup_data,             & ! intent(in):    lookup tables
+!                    f_obj % type_data,               & ! intent(in):    type of vegetation and soil
+!                    f_obj % attr_data,               & ! intent(in):    spatial attributes
+!                    f_obj % mpar_data,               & ! intent(in):    model parameters
+!                    f_obj % forc_data,               & ! intent(in):    model forcing data
+!                    f_obj % bvar_data,               & ! intent(in):    average model variables for the entire basin
+!                    f_obj % prog_temp,               & ! intent(in):    model prognostic variables for a local HRU
+!                    ! input-output: data structures
+!                    indx_data,                       & ! intent(inout): index data
+!                    diag_data,                       & ! intent(inout): model diagnostic variables for a local HRU
+!                    flux_data,                       & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+!                    deriv_data,                      & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+!                    ! input-output: baseflow
+!                    f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+!                    dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+!                    ! output
+!                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+!                    fluxVec0_split,                  & ! intent(out):   flux vector
+!                    fRHS_split,                      & ! intent(out):   RHS function for ARKODE
+!                    rAdd_split,                      & ! intent(out):   additional (sink) terms on the RHS of the state equation
+!                    resVec_split,                    & ! intent(out):   residual vector
+!                    f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
+!                    f_obj % out_SS4HG % err,         & ! intent(out): error code
+!                    f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
+!  end associate
+!
+!  ! finalize
+!  associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
+!   if (err /= 0) then
+!    if (f_obj % out_error) then
+!     write(f_obj % unit,*) "Error f_state_SUMMA_vec: eval8summa message="//trim(message); stop
+!    end if
+!   end if
+!  end associate
+!
+! end subroutine f_state_SUMMA_vec
 
  subroutine f_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function ***

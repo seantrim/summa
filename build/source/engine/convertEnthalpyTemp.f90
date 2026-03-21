@@ -18,20 +18,21 @@
 ! You should have received a copy of the GNU General Public License
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-module enthalpyTemp_module
-
-! constants
-USE multiconst, only: gravity, &                          ! gravitational acceleration (m s-1)
-                      Tfreeze, &                          ! freezing point of water (K)
-                      Cp_soil,Cp_water,Cp_ice,Cp_air,&    ! specific heat of soil, water and ice (J kg-1 K-1)
-                      iden_water,iden_ice,iden_air,&      ! intrinsic density of water and ice (kg m-3)
-                      LH_fus                              ! latent heat of fusion (J kg-1)
+module convertEnthalpyTemp_module
 
 ! data types
-USE nrtype
+USE nr_type
 USE data_types,only:var_iLength                    ! var(:)%dat(:)
 USE data_types,only:var_dLength                    ! var(:)%dat(:)
 USE data_types,only:zLookup                        ! z(:)%var(:)%lookup(:)
+
+! constants
+USE multiconst,only:gravity, &                          ! gravitational acceleration (m s-1)
+                    Tfreeze, &                          ! freezing point of water (K)
+                    Cp_soil,Cp_water,Cp_ice,Cp_air,&    ! specific heat of soil, water and ice (J kg-1 K-1)
+                    iden_water,iden_ice,iden_air,&      ! intrinsic density of water and ice (kg m-3)
+                    LH_fus                              ! latent heat of fusion (J kg-1)
+USE globalData,only:verySmall                           ! a small number
 
 ! indices within parameter structure
 USE var_lookup,only:iLookPARAM                     ! named variables to define structure element
@@ -90,7 +91,7 @@ subroutine T2H_lookup_snWat(mpar_data,                     &  ! intent(in):    p
                            err,message)
   ! -------------------------------------------------------------------------------------------------------------------------
   ! downwind routines 
-  USE nr_utility_module,only:arth                       ! use to build vectors with regular increments
+  USE nr_utils_module,only:arth                         ! use to build vectors with regular increments
   USE spline_int_module,only:spline,splint              ! use for cubic spline interpolation
   implicit none
   ! -------------------------------------------------------------------------------------------------------------------------
@@ -151,7 +152,7 @@ subroutine T2L_lookup_soil(nSoil,                         &  ! intent(in):    nu
                            err,message)
   ! -------------------------------------------------------------------------------------------------------------------------
   ! downwind routines                    
-  USE nr_utility_module,only:arth                       ! use to build vectors with regular increments
+  USE nr_utils_module,only:arth                         ! use to build vectors with regular increments
   USE spline_int_module,only:spline,splint              ! use for cubic spline interpolation
   USE soil_utils_module,only:volFracLiq                 ! use to compute the volumetric fraction of liquid water
   implicit none
@@ -725,7 +726,6 @@ subroutine enthTemp_or_enthalpy(&
     ! number of model layers, and layer type
     nSnow                   => indx_data%var(iLookINDEX%nSnow)%dat(1)            ,& ! intent(in): [i4b]    total number of snow layers
     ! mapping between the full state vector and the state subset
-    ixMapFull2Subset        => indx_data%var(iLookINDEX%ixMapFull2Subset)%dat    ,& ! intent(in): [i4b(:)] list of indices in the state subset for each state in the full state vector
     ixMapSubset2Full        => indx_data%var(iLookINDEX%ixMapSubset2Full)%dat    ,& ! intent(in): [i4b(:)] [state subset] list of indices of the full state vector in the state subset
     ! type of domain, type of state variable, and index of control volume within domain
     ixDomainType_subset     => indx_data%var(iLookINDEX%ixDomainType_subset)%dat ,& ! intent(in): [i4b(:)] [state subset] id of domain for desired model state variables
@@ -1017,7 +1017,7 @@ subroutine enthalpy2T_snow(&
     vec = 0._rkind
     vec(1:3) = (/mLayerEnthalpy, snowfrz_scale, mLayerVolFracWat/)
     if(mLayerEnthalpy>0._rkind)then
-      T = Tfreeze - 1.e-6_rkind ! need to merge layers, don't iterate to find the temperature
+      T = Tfreeze - verySmall ! need to merge layers, don't iterate to find the temperature
     else
       call brent(diff_H_snow, T, T_out, 0._rkind, Tfreeze, vec, err, cmessage)
       if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
@@ -1711,4 +1711,4 @@ function brent0 (fun, x1, x2, fx1, fx2, tol_x, tol_f, detail, vec, err, message,
   end function diff_H_soil
 
 
-end module enthalpyTemp_module
+end module convertEnthalpyTemp_module

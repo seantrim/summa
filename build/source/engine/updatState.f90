@@ -19,7 +19,7 @@
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module updatState_module
-USE nrtype
+USE nr_type
 ! physical constants
 USE multiconst,only:&
                     Tfreeze,     & ! freezing point of pure water  (K)
@@ -29,15 +29,15 @@ USE multiconst,only:&
                     LH_fus         ! latent heat of fusion         (J kg-1)
 implicit none
 private
-public::updateSnow
-public::updateSoil
+public::updatSnow
+public::updatSoil
 contains
 
 
 ! *************************************************************************************************************
-! public subroutine updateSnow: compute phase change impacts on volumetric liquid water and ice (veg or soil)
+! public subroutine updatSnow: compute phase change impacts on volumetric liquid water and ice (veg or soil)
 ! *************************************************************************************************************
-subroutine updateSnow(&
+subroutine updatSnow(&
                   ! input
                   mLayerTemp       ,& ! intent(in): temperature (K)
                   mLayerTheta      ,& ! intent(in): volume fraction of total water (-)
@@ -62,18 +62,18 @@ subroutine updateSnow(&
   integer(i4b),intent(out)      :: err                     ! error code
   character(*),intent(out)      :: message                 ! error message
   ! initialize error control
-  err=0; message="updateSnow/"
+  err=0; message="updatSnow/"
 
   ! compute the volumetric fraction of liquid water and ice (-)
   fLiq = fracliquid(mLayerTemp,snowfrz_scale)
   mLayerVolFracLiq = fLiq*mLayerTheta
   mLayerVolFracIce = (1._rkind - fLiq)*mLayerTheta*(iden_water/iden_ice)
-end subroutine updateSnow
+end subroutine updatSnow
 
 ! *************************************************************************************************************
-! public subroutine updateSoil: compute phase change impacts on matric head and volumetric liquid water and ice
+! public subroutine updatSoil: compute phase change impacts on matric head and volumetric liquid water and ice
 ! *************************************************************************************************************
-subroutine updateSoil(&
+subroutine updatSoil(&
                       ! input
                       mLayerTemp       ,& ! intent(in): temperature vector (K)
                       mLayerMatricHead ,& ! intent(in): matric head (m)
@@ -110,7 +110,7 @@ subroutine updateSoil(&
   real(rkind)                   :: xConst                    ! constant in the freezing curve function (m K-1)
   real(rkind)                   :: mLayerPsiLiq              ! liquid water matric potential (m)
   ! initialize error control
-  err=0; message="updateSoil/"
+  err=0; message="updatSoil/"
 
   ! compute fractional **volume** of total water (liquid plus ice)
   mLayerVolFracWat = volFracLiq(mLayerMatricHead,vGn_alpha,theta_res,theta_sat,vGn_n,vGn_m)
@@ -137,6 +137,6 @@ subroutine updateSoil(&
   ! - volumetric ice content (-)
   mLayerVolFracIce = mLayerVolFracWat - mLayerVolFracLiq
 
-end subroutine updateSoil
+end subroutine updatSoil
 
 end module updatState_module

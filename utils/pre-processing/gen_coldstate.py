@@ -29,13 +29,13 @@ import netCDF4 as nc4
 #                                Subroutines                           #
 ########################################################################
 
-def getNetCDFData(fn, varname):
-    """Read <varname> variables available to be mapped from NetCDF <fn> """
+def getNetCDFData(fn, varName):
+    """Read <varName> variables available to be mapped from NetCDF <fn> """
     f = nc4.Dataset(fn,'r')
-    data = f.variables[varname][:]
+    data = f.variables[varName][:]
     f.close()
 #    ds = xr.open_dataset(fn)
-#    data = ds[varname]
+#    data = ds[varName]
     return data
 
 def getOutputPolyIDs(nc_file):
@@ -48,7 +48,7 @@ def getOutputPolyIDs(nc_file):
 def writeNC_state_vars(nc_out, newVarName, newVarDim, newVarType, newVarVals):
 
     """ Write <vars>[hru] array in netCDF4 file,<fn> and variable of
-        <varname> """
+        <varName> """
 
     print("adding data")
     ncvar = nc_out.createVariable(newVarName, newVarType, (newVarDim, 'hru',),fill_value='-999.0')    
@@ -58,7 +58,7 @@ def writeNC_state_vars(nc_out, newVarName, newVarDim, newVarType, newVarVals):
 # write dimensions and dimension variables to netcdf output file
 def writeNC_dims(fn,  scalarv, midSoil, midToto, ifcToto, hrus, hru_type):    
     """ Write <vars>[hru] array in netCDF4 file,<fn> and variable of
-        <varname> """
+        <varName> """
 
     print("writing output file")
     nc_out = nc4.Dataset(fn, 'w', format='NETCDF4')
@@ -228,7 +228,7 @@ if __name__ == '__main__':
         # code for reading input data variable & attributes
         # to pass to processing and write routines (instead of hardwired calls above
 #        f = nc4.Dataset(nc_infl, 'r')
-#        var_in = f.variables[varname]
+#        var_in = f.variables[varName]
 #        attNames = []
 #        attContents = []
 #        attr = var_in.ncattrs()  # get attributes

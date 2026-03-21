@@ -23,7 +23,7 @@ MODULE summa_type
 ! *****************************************************************************
 ! * higher-level derived data types
 ! *****************************************************************************
-USE nrtype          ! variable types, etc.
+USE nr_type         ! variable types, etc.
 USE data_types,only:&
                     ! no spatial dimension
                     var_i,               & ! x%var(:)            (i4b)
@@ -71,7 +71,7 @@ type, public :: summa1_type_dec
     type(gru_hru_double)             :: forcStruct                 ! x%gru(:)%hru(:)%var(:)     -- model forcing data
     type(gru_hru_double)             :: attrStruct                 ! x%gru(:)%hru(:)%var(:)     -- local attributes for each HRU
     type(gru_hru_int)                :: typeStruct                 ! x%gru(:)%hru(:)%var(:)     -- local classification of soil veg etc. for each HRU
-    type(gru_hru_int8)               :: idStruct                   ! x%gru(:)%hru(:)%var(:)     --
+    type(gru_hru_int8)               :: idStruct                   ! x%gru(:)%hru(:)%var(:)     -- local values of hru and gru IDs
 
     ! define the primary data structures (variable length vectors)
     type(gru_hru_intVec)             :: indxStruct                 ! x%gru(:)%hru(:)%var(:)%dat -- model indices

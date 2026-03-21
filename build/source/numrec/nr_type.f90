@@ -1,4 +1,4 @@
-MODULE nrtype
+MODULE nr_type
  IMPLICIT NONE
  SAVE
  ! data types
@@ -27,4 +27,4 @@ MODULE nrtype
  real(rkind),     parameter :: nr_quadMissing=-9999._qp   ! missing quadruple precision number
  real(rkind),     parameter :: nr_realMissing=-9999._rkind   ! missing real number
  integer(i4b), parameter :: nr_integerMissing=-9999    ! missing integer
-END MODULE nrtype
+END MODULE nr_type

@@ -20,7 +20,7 @@
 
 module paramCheck_module
 ! define numerical recipes data type
-USE nrtype
+USE nr_type
 ! define look-up values for the choice of method to combine and sub-divide snow layers
 USE mDecisions_module,only:&
  sameRulesAllLayers, & ! SNTHERM option: same combination/sub-dividion rules applied to all layers
@@ -163,15 +163,21 @@ contains
 
  ! check transpiration
  if( critSoilTranspire < critSoilWilting )then
-  write(message,'(a,i0,a)') trim(message)//'critical point for transpiration is less than the wilting point'
+  print*, 'critSoilTranspire = ', critSoilTranspire
+  print*, 'critSoilWilting   = ', critSoilWilting
+  message=trim(message)//'critical point for transpiration is less than the wilting point' // &
+                         '[NOTE: if overwriting Noah-MP soil table values in paramTrial or calibrating, must overwrite all soil parameters]'
+ 
   err=20; return
  endif
 
  ! check porosity
  if( any(theta_sat < theta_res) )then
-  print*, 'theta_res     = ', theta_res
-  print*, 'theta_sat     = ', theta_sat
-  write(message,'(a,i0,a)') trim(message)//'porosity is less than the residual liquid water content'
+  print*, 'theta_res = ', theta_res
+  print*, 'theta_sat = ', theta_sat
+  message=trim(message)//'porosity is less than the residual liquid water content '// &
+                         '[NOTE: if overwriting Noah-MP soil table values in paramTrial or calibrating, must overwrite all soil parameters]'
+ 
   err=20; return
  endif
 

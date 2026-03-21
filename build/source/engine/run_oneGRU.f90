@@ -21,7 +21,7 @@
 module run_oneGRU_module
 
 ! numerical recipes data types
-USE nrtype
+USE nr_type
 
 ! access integers to define "yes" and "no"
 USE globalData,only:yes,no             ! .true. and .false.
@@ -108,7 +108,7 @@ contains
  ! data structures (input)
  integer(i4b)        , intent(in)    :: timeVec(:)           ! integer vector      -- model time data
  type(hru_int)       , intent(in)    :: typeHRU              ! x%hru(:)%var(:)     -- local classification of soil veg etc. for each HRU
- type(hru_int8)      , intent(in)    :: idHRU                ! x%hru(:)%var(:)     -- local classification of hru and gru IDs
+ type(hru_int8)      , intent(in)    :: idHRU                ! x%hru(:)%var(:)     -- local values of hru and gru IDs
  type(hru_double)    , intent(in)    :: attrHRU              ! x%hru(:)%var(:)     -- local attributes for each HRU
  type(hru_z_vLookup) , intent(in)    :: lookupHRU            ! x%hru(:)%z(:)%var(:)%lookup(:) -- lookup values for each HRU
  ! data structures (input-output)

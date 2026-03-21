@@ -19,7 +19,7 @@
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module checkStruc_module
-USE nrtype
+USE nr_type
 USE globalData,only:integerMissing
 implicit none
 private
@@ -36,17 +36,13 @@ contains
  ! summary of data structures
  USE globalData,only:structInfo
  ! metadata structures
- USE globalData,only:time_meta,forc_meta,attr_meta,type_meta,id_meta  ! metadata structures
- USE globalData,only:prog_meta,diag_meta,flux_meta,deriv_meta         ! metadata structures
- USE globalData,only:mpar_meta,indx_meta                              ! metadata structures
- USE globalData,only:bpar_meta,bvar_meta                              ! metadata structures
- USE globalData,only:lookup_meta                                      ! metadata structures
+ USE globalData,only:time_meta,forc_meta,attr_meta,type_meta,id_meta     ! metadata structures
+ USE globalData,only:prog_meta,diag_meta,flux_meta,mpar_meta,indx_meta   ! metadata structures
+ USE globalData,only:bpar_meta,bvar_meta,deriv_meta,lookup_meta          ! metadata structures
   ! named variables defining strructure elements
- USE var_lookup,only:iLookTIME,iLookFORCE,iLookATTR,iLookTYPE,iLookID ! named variables showing the elements of each data structure
- USE var_lookup,only:iLookPROG,iLookDIAG,iLookFLUX,iLookDERIV         ! named variables showing the elements of each data structure
- USE var_lookup,only:iLookPARAM,iLookINDEX                            ! named variables showing the elements of each data structure
- USE var_lookup,only:iLookBPAR,iLookBVAR                              ! named variables showing the elements of each data structure
- USE var_lookup,only:iLookLOOKUP                                      ! named variables showing the elements of each data structure
+ USE var_lookup,only:iLookTIME,iLookFORCE,iLookATTR,iLookTYPE,iLookID    ! named variables showing the elements of each data structure
+ USE var_lookup,only:iLookPROG,iLookDIAG,iLookFLUX,iLookPARAM,iLookINDEX ! named variables showing the elements of each data structure
+ USE var_lookup,only:iLookBPAR,iLookBVAR,iLookDERIV,iLookLOOKUP          ! named variables showing the elements of each data structure
  implicit none
  ! dummy variables
  integer(i4b),intent(out)             :: err         ! error code
@@ -158,32 +154,32 @@ contains
   do iVar=1,size(metadata)
 
    ! check that this variable is populated
-   if (trim(metadata(iVar)%varname)=='empty') then
+   if (trim(metadata(iVar)%varName)=='empty') then
     write(message,'(a,i0,a)') trim(message)//trim(structInfo(iStruct)%structName)//'_meta structure is not populated for named variable # ',iVar,' in structure iLook'//trim(structInfo(iStruct)%lookName)
     err=20; return
    end if
 
    ! look for the populated variable
-   call get_ixUnknown(trim(metadata(iVar)%varname),typeName,jVar,err,cmessage)
+   call get_ixUnknown(trim(metadata(iVar)%varName),typeName,jVar,err,cmessage)
    if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
 
    ! check that the variable was found at all
    if (jVar==integerMissing) then
-    message = trim(message)//'cannot find variable '//trim(metadata(iVar)%varname)//' in structure '//trim(structInfo(iStruct)%structName)//'_meta; '// &
+    message = trim(message)//'cannot find variable '//trim(metadata(iVar)%varName)//' in structure '//trim(structInfo(iStruct)%structName)//'_meta; '// &
     'you need to add variable to get_ix'//trim(structInfo(iStruct)%structName)
     err=20; return
    end if
 
    ! check that the variable was found in the correct structure
    if (trim(structInfo(iStruct)%structName)/=typeName) then
-    message=trim(message)//'variable '//trim(metadata(iVar)%varname)//' from structure '//trim(structInfo(iStruct)%structName)//'_meta is in structure '//trim(typeName)//'_meta'
+    message=trim(message)//'variable '//trim(metadata(iVar)%varName)//' from structure '//trim(structInfo(iStruct)%structName)//'_meta is in structure '//trim(typeName)//'_meta'
     err=20; return
    end if
 
    ! check that the variable index is correct
    ! This can occur because (1) the code in popMetadat is corrupt (e.g., mis-match in look-up variable); or (2) var_lookup is corrupt.
    if (jVar/=iVar) then
-    write(message,'(a,i0,a,i0,a)') trim(message)//'variable '//trim(metadata(iVar)%varname)//' has index ', iVar, &
+    write(message,'(a,i0,a,i0,a)') trim(message)//'variable '//trim(metadata(iVar)%varName)//' has index ', iVar, &
      ' (expect index ', jVar, '); problem possible in popMetadat, get_ix'//trim(structInfo(iStruct)%structName)//', or var_lookup'
     err=20; return
    end if

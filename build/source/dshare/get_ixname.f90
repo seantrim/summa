@@ -20,7 +20,7 @@
 
 module get_ixname_module
 ! used to get the index of a named variable
-USE nrtype, integerMissing=>nr_integerMissing
+USE nr_type, integerMissing=>nr_integerMissing
 implicit none
 private
 public::get_ixdecisions
@@ -99,6 +99,8 @@ contains
   case('aquiferIni'      ); get_ixdecisions=iLookDECISIONS%aquiferIni  ! choice of full or empty aquifer at start
   case('infRateMax'      ); get_ixdecisions=iLookDECISIONS%infRateMax  ! choice of maximum infiltration rate method
   case('surfRun_SE'      ); get_ixdecisions=iLookDECISIONS%surfRun_SE  ! choice of parameterization for saturation excess surface runoff
+  case('read_force'      ); get_ixdecisions=iLookDECISIONS%read_force  ! method used to read forcing data (per step or full read)
+  case('write_buff'      ); get_ixdecisions=iLookDECISIONS%write_buff  ! method used to buffer writing of model output (none, full)
   ! get to here if cannot find the variable
   case default
    get_ixdecisions = integerMissing
@@ -521,14 +523,8 @@ contains
   case('scalarCanopyIceMax'             ); get_ixDiag = iLookDIAG%scalarCanopyIceMax               ! maximum interception storage capacity for ice (kg m-2)
   case('scalarCanopyLiqMax'             ); get_ixDiag = iLookDIAG%scalarCanopyLiqMax               ! maximum interception storage capacity for liquid water (kg m-2)
   case('scalarGrowingSeasonIndex'       ); get_ixDiag = iLookDIAG%scalarGrowingSeasonIndex         ! growing season index (0=off, 1=on)
-  case('scalarVolHtCap_air'             ); get_ixDiag = iLookDIAG%scalarVolHtCap_air               ! volumetric heat capacity air (J m-3 K-1)
-  case('scalarVolHtCap_ice'             ); get_ixDiag = iLookDIAG%scalarVolHtCap_ice               ! volumetric heat capacity ice (J m-3 K-1)
-  case('scalarVolHtCap_soil'            ); get_ixDiag = iLookDIAG%scalarVolHtCap_soil              ! volumetric heat capacity dry soil (J m-3 K-1)
-  case('scalarVolHtCap_water'           ); get_ixDiag = iLookDIAG%scalarVolHtCap_water             ! volumetric heat capacity liquid wat (J m-3 K-1)
   case('mLayerVolHtCapBulk'             ); get_ixDiag = iLookDIAG%mLayerVolHtCapBulk               ! volumetric heat capacity in each layer (J m-3 K-1)
   case('mLayerCm'                       ); get_ixDiag = iLookDIAG%mLayerCm                         ! Cm for each layer (J m-3)
-  case('scalarLambda_drysoil'           ); get_ixDiag = iLookDIAG%scalarLambda_drysoil             ! thermal conductivity of dry soil     (W m-1)
-  case('scalarLambda_wetsoil'           ); get_ixDiag = iLookDIAG%scalarLambda_wetsoil             ! thermal conductivity of wet soil     (W m-1)
   case('mLayerThermalC'                 ); get_ixDiag = iLookDIAG%mLayerThermalC                   ! thermal conductivity at the mid-point of each layer (W m-1 K-1)
   case('iLayerThermalC'                 ); get_ixDiag = iLookDIAG%iLayerThermalC                   ! thermal conductivity at the interface of each layer (W m-1 K-1)
   ! enthalpy
@@ -604,8 +600,6 @@ contains
   case('scalarTotalSoilWat'             ); get_ixDiag = iLookDIAG%scalarTotalSoilWat               ! total mass of water in the soil (kg m-2)
   ! variable shortcuts
   case('scalarVGn_m'                    ); get_ixDiag = iLookDIAG%scalarVGn_m                      ! van Genuchten "m" parameter (-)
-  case('scalarKappa'                    ); get_ixDiag = iLookDIAG%scalarKappa                      ! constant in the freezing curve function (m K-1)
-  case('scalarVolLatHt_fus'             ); get_ixDiag = iLookDIAG%scalarVolLatHt_fus               ! volumetric latent heat of fusion     (J m-3)
   ! timing information
   case('numFluxCalls'                   ); get_ixDiag = iLookDIAG%numFluxCalls                     ! number of flux calls (-)
   case('wallClockTime'                  ); get_ixDiag = iLookDIAG%wallClockTime                    ! wall clock time for physics routines (s)
@@ -716,7 +710,6 @@ contains
   case('scalarThroughfallRain'          ); get_ixFlux = iLookFLUX%scalarThroughfallRain            ! rain that reaches the ground without ever touching the canopy (kg m-2 s-1)
   case('scalarCanopySnowUnloading'      ); get_ixFlux = iLookFLUX%scalarCanopySnowUnloading        ! unloading of snow from the vegetion canopy (kg m-2 s-1)
   case('scalarCanopyLiqDrainage'        ); get_ixFlux = iLookFLUX%scalarCanopyLiqDrainage          ! drainage of liquid water from the vegetation canopy (kg m-2 s-1)
-  case('scalarCanopyMeltFreeze'         ); get_ixFlux = iLookFLUX%scalarCanopyMeltFreeze           ! melt/freeze of water stored in the canopy (kg m-2 s-1)
   ! energy fluxes and for the snow and soil domains
   case('iLayerConductiveFlux'           ); get_ixFlux = iLookFLUX%iLayerConductiveFlux             ! conductive energy flux at layer interfaces at end of time step (W m-2)
   case('iLayerAdvectiveFlux'            ); get_ixFlux = iLookFLUX%iLayerAdvectiveFlux              ! advective energy flux at layer interfaces at end of time step (W m-2)
@@ -1077,16 +1070,16 @@ contains
   case(iLookVarType%unknown);get_varTypeName='unknown'
   ! get to here if cannot find the variable
   case default
-   get_VarTypeName = 'missing'
+   get_varTypeName = 'missing'
  end select
- end function get_VarTypeName
+ end function get_varTypeName
 
  ! *******************************************************************************************************************
  ! public subroutine get_ixUnknown: get the index of the named variable type from ANY structure, as well as the
  ! structure that it was found in
  ! *******************************************************************************************************************
  subroutine get_ixUnknown(varName,typeName,vDex,err,message)
- USE nrtype
+ USE nr_type
  USE globalData,only:structInfo        ! information on the data structures
  implicit none
 
@@ -1132,7 +1125,7 @@ contains
  end subroutine get_ixUnknown
 
  ! *******************************************************************************************************************
- ! public function get_ixFreq: get the index of the named variables for the output frequencies
+ ! public function get_ixLookup: get the index of the named variables for lookup
  ! *******************************************************************************************************************
  function get_ixLookup(varName)
  USE var_lookup,only:iLookLOOKUP                     ! indices of the named variables
@@ -1189,7 +1182,6 @@ contains
   case('variance'); get_ixStat = iLookSTAT%vari
   case('minimum' ); get_ixStat = iLookSTAT%mini
   case('maximum' ); get_ixStat = iLookSTAT%maxi
-  case('mode'    ); get_ixStat = iLookSTAT%mode
   ! get to here if cannot find the variable
   case default
    get_ixStat = integerMissing
@@ -1234,7 +1226,6 @@ contains
   case(iLookSTAT%vari);get_statName='variance'
   case(iLookSTAT%mini);get_statName='minimum'
   case(iLookSTAT%maxi);get_statName='maximum'
-  case(iLookSTAT%mode);get_statName='mode'
   ! get to here if cannot find the variable
   case default
    get_statName = 'unknown'

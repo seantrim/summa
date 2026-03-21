@@ -1,44 +1,142 @@
-! SUMMA - Structure for Unifying Multiple Modeling Alternatives
-! Copyright (C) 2014-2020 NCAR/RAL; University of Saskatchewan; University of Washington
-!
-! This file is part of SUMMA
-!
-! For more information see: http://www.ral.ucar.edu/projects/summa
-!
-! This program is free software: you can redistribute it and/or modify
-! it under the terms of the GNU General Public License as published by
-! the Free Software Foundation, either version 3 of the License, or
-! (at your option) any later version.
-!
-! This program is distributed in the hope that it will be useful,
-! but WITHOUT ANY WARRANTY; without even the implied warranty of
-! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-! GNU General Public License for more details.
-!
-! You should have received a copy of the GNU General Public License
-! along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-module snwDensify_module
+module snowDepth_module
 
 ! data types
-USE nrtype
+USE nr_type
+USE data_types,only:&
+                    var_ilength,   & ! x%var(:)%dat            (i4b)
+                    var_dlength,   & ! x%var(:)%dat            (rkind)
+                    zLookup          ! x%z(:)%var(:)%lookup(:) (rkind)
 
-! model constants
+! constants
 USE multiconst,only:&
-                    Tfreeze,    &     ! freezing point of pure water (K)
-                    iden_ice,   &     ! intrinsic density of ice (kg m-3)
-                    iden_air,   &     ! intrinsic density of air (kg m-3)
-                    iden_water        ! intrinsic density of liquid water (kg m-3)
+                    Tfreeze,      & ! freezing temperature (K)
+                    iden_ice,     & ! intrinsic density of ice             (kg m-3)
+                    iden_air,     & ! intrinsic density of air (kg m-3)
+                    iden_water      ! intrinsic density of liquid water    (kg m-3)
+USE globalData,only:verySmall       ! a small number
+
+! named variables for parent structures
+USE var_lookup,only:iLookDECISIONS   ! named variables for elements of the decision structure
+USE var_lookup,only:iLookPROG        ! named variables for structure elements
+USE var_lookup,only:iLookDIAG        ! named variables for structure elements
+USE var_lookup,only:iLookFLUX        ! named variables for structure elements
+USE var_lookup,only:iLookPARAM       ! named variables for structure elements
+USE var_lookup,only:iLookINDEX       ! named variables for structure elements
+
 ! privacy
 implicit none
 private
-public::snwDensify
+public::snowDepth
+
 contains
 
+! ************************************************************************************************
+! public subroutine snowDepth: compute snow depth for one sub timestep
+! ************************************************************************************************
+subroutine snowDepth(&
+                        dt_sub,                 & ! intent(in):    time step (s)
+                        nSnow,                  & ! intent(in):    number of snow layers
+                        scalarSnowSublimation,  & ! intent(in):    scalar sublimation of snow (kg m-2)
+                        mLayerVolFracLiq,       & ! intent(inout): volumetric fraction of liquid water in each layer (-)
+                        mLayerVolFracIce,       & ! intent(inout): volumetric fraction of ice in each layer (-)
+                        mLayerTemp,             & ! intent(in):    temperature of each layer (K)
+                        mLayerMeltFreeze,       & ! intent(in):    volumetric melt in each layer (kg m-3)
+                        mpar_data,              & ! intent(in):    model parameters
+                        ! output
+                        tooMuchSublim,          & ! intent(out):   flag to denote that there was too much sublimation in a given time step
+                        mLayerDepth,            & ! intent(inout): depth of each layer (m)
+                        ! error control
+                        err,message)              ! intent(out):   error control
+
+  ! -----------------------------------------------------------------------------------------------------------------------------------------
+  implicit none
+  real(qp),intent(in)                  :: dt_sub                 ! time step (s)
+  integer(i4b),intent(in)              :: nSnow                  ! number of snow layers
+  real(rkind),intent(in)               :: scalarSnowSublimation  ! scalar sublimation of snow (kg m-2)
+  real(rkind),intent(inout)            :: mLayerVolFracLiq(:)    ! volumetric fraction of liquid water in each layer (-)
+  real(rkind),intent(inout)            :: mLayerVolFracIce(:)    ! volumetric fraction of ice in each layer (-)
+  real(rkind),intent(in)               :: mLayerTemp(:)          ! temperature of each layer (K)
+  real(rkind),intent(in)               :: mLayerMeltFreeze(:)    ! volumetric melt in each layer (kg m-3)
+  type(var_dlength),intent(in)         :: mpar_data              ! model parameters
+  logical(lgt)                         :: tooMuchSublim          ! flag to denote that there was too much sublimation in a given time step
+  real(rkind),intent(inout)            :: mLayerDepth(:)         ! depth of each layer (m)
+  integer(i4b),intent(out)             :: err                    ! error code
+  character(*),intent(out)             :: message                ! error message
+  ! local variables
+  character(len=256)                   :: cmessage               ! error message
+  integer(i4b)                         :: iSnow                  ! index of snow layers
+  real(rkind)                          :: massLiquid             ! mass liquid water (kg m-2)
+
+  ! * compute change in ice content of the top snow layer due to sublimation...
+  ! ---------------------------------------------------------------------------
+  ! initialize the flags
+  tooMuchSublim=.false.  ! too much sublimation (merge snow layers)
+  ! NOTE: this is done BEFORE densification
+  if(nSnow > 0)then ! snow layers exist
+
+    ! try to remove ice from the top layer
+    iSnow=1
+
+    ! save the mass of liquid water (kg m-2)
+    massLiquid = mLayerDepth(iSnow)*mLayerVolFracLiq(iSnow)*iden_water
+
+    ! add/remove the depth of snow gained/lost by frost/sublimation (m)
+    ! NOTE: assume constant density
+    mLayerDepth(iSnow) = mLayerDepth(iSnow) + dt_sub*scalarSnowSublimation/(mLayerVolFracIce(iSnow)*iden_ice)
+
+    ! check that we did not remove the entire layer
+    if(mLayerDepth(iSnow) < verySmall)then
+      tooMuchSublim=.true.
+      return
+    endif
+
+    ! update the volumetric fraction of liquid water
+    mLayerVolFracLiq(iSnow) = massLiquid / (mLayerDepth(iSnow)*iden_water)
+
+  ! no snow
+  else
+
+    ! no snow: check that sublimation is zero
+    if(abs(scalarSnowSublimation) > verySmall)then
+      message=trim(message)//'sublimation of snow has been computed when no snow exists'
+      err=20; return
+    end if
+
+  end if  ! (if snow layers exist)
+
+
+  ! *** account for compaction and cavitation in the snowpack...
+  ! ------------------------------------------------------------
+  if(nSnow>0)then
+    call snowDensify(&
+                    ! intent(in): variables
+                    dt_sub,                                            & ! intent(in): time step (s)
+                    nSnow,                                             & ! intent(in): number of snow layers
+                    mLayerTemp(1:nSnow),                               & ! intent(in): temperature of each layer (K)
+                    mLayerMeltFreeze(1:nSnow),                         & ! intent(in): volumetric melt in each layer (kg m-3)
+                    ! intent(in): parameters
+                    mpar_data%var(iLookPARAM%densScalGrowth)%dat(1),   & ! intent(in): density scaling factor for grain growth (kg-1 m3)
+                    mpar_data%var(iLookPARAM%tempScalGrowth)%dat(1),   & ! intent(in): temperature scaling factor for grain growth (K-1)
+                    mpar_data%var(iLookPARAM%grainGrowthRate)%dat(1),  & ! intent(in): rate of grain growth (s-1)
+                    mpar_data%var(iLookPARAM%densScalOvrbdn)%dat(1),   & ! intent(in): density scaling factor for overburden pressure (kg-1 m3)
+                    mpar_data%var(iLookPARAM%tempScalOvrbdn)%dat(1),   & ! intent(in): temperature scaling factor for overburden pressure (K-1)
+                    mpar_data%var(iLookPARAM%baseViscosity)%dat(1),    & ! intent(in): viscosity coefficient at T=T_frz and snow density=0 (kg m-2 s)
+                    ! intent(inout): state variables
+                    mLayerDepth(1:nSnow),                              & ! intent(inout): depth of each layer (m)
+                    mLayerVolFracLiq(1:nSnow),                         & ! intent(inout):  volumetric fraction of liquid water after itertations (-)
+                    mLayerVolFracIce(1:nSnow),                         & ! intent(inout):  volumetric fraction of ice after itertations (-)
+                    ! output: error control
+                    err,cmessage)                     ! intent(out): error control
+    if(err/=0)then; err=55; message=trim(message)//trim(cmessage); return; end if
+  end if  ! if snow layers exist
+
+end subroutine snowDepth
+
+
+! ************************************************************************************************
+ ! public subroutine snowDensify: compute change in snow density over the time step
  ! ************************************************************************************************
- ! public subroutine snwDensify: compute change in snow density over the time step
- ! ************************************************************************************************
- subroutine snwDensify(&
+ subroutine snowDensify(&
                        ! intent(in): variables
                        dt,                             & ! intent(in): time step (s)
                        nSnow,                          & ! intent(in): number of snow layers
@@ -100,7 +198,7 @@ contains
  real(rkind),parameter               :: minLayerDensity=40._rkind   ! minimum snow density allowed for any layer (kg m-3)
  ! -----------------------------------------------------------------------------------------------------------------------------------------
  ! initialize error control
- err=0; message="snwDensify/"
+ err=0; message="snowDensify/"
 
  ! NOTE: still need to process the case of "snow without a layer"
  if(nSnow==0)return
@@ -159,13 +257,6 @@ contains
   scalarDepthMin = (massIceOld / iden_ice) + (massLiqOld / iden_water)
   mLayerDepth(iSnow) = max(scalarDepthMin, scalarDepthNew)
 
-  ! check that depth is reasonable
-  if(mLayerDepth(iSnow) < 0._rkind)then
-   write(*,'(a,1x,i4,1x,10(f12.5,1x))') 'iSnow, dt, density,massIceOld, massLiqOld = ', iSnow, dt, mLayerVolFracIceNew(iSnow)*iden_ice, massIceOld, massLiqOld
-   write(*,'(a,1x,i4,1x,10(f12.5,1x))') 'iSnow, mLayerDepth(iSnow), scalarDepthNew, mLayerVolFracIceNew(iSnow), mLayerMeltFreeze(iSnow), CR_grainGrowth*dt, CR_ovrvdnPress*dt = ', &
-                                         iSnow, mLayerDepth(iSnow), scalarDepthNew, mLayerVolFracIceNew(iSnow), mLayerMeltFreeze(iSnow), CR_grainGrowth*dt, CR_ovrvdnPress*dt
-  endif
-
   ! update volumetric ice and liquid water content
   mLayerVolFracIceNew(iSnow) = massIceOld/(mLayerDepth(iSnow)*iden_ice)
   mLayerVolFracLiqNew(iSnow) = massLiqOld/(mLayerDepth(iSnow)*iden_water)
@@ -192,7 +283,7 @@ contains
   err=20; return
  end if
 
- end subroutine snwDensify
+ end subroutine snowDensify
 
+end module snowDepth_module
 
-end module snwDensify_module

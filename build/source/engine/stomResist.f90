@@ -21,20 +21,19 @@
 module stomResist_module
 
 ! data types
-USE nrtype
-USE globalData,only:realMissing     ! missing real number
-
-! physical constants
-USE multiconst, only: Rgas     ! universal gas constant (J mol-1 K-1)
-USE multiconst, only: Tfreeze  ! freezing point of pure water (K)
-USE multiconst, only: ave_slp  ! standard pressure (Pa)
-
-! derived types to define the data structures
+USE nr_type
 USE data_types,only:&
                     var_i,            & ! data vector (i4b)
                     var_d,            & ! data vector (rkind)
                     var_dlength,      & ! data vector with variable length dimension (rkind)
                     model_options       ! defines the model decisions
+
+! constants
+USE multiconst,only:&
+                    Rgas,     & ! universal gas constant (J mol-1 K-1)
+                    Tfreeze,  & ! freezing point of pure water (K)
+                    ave_slp     ! standard pressure (Pa)
+USE globalData,only:realMissing     ! missing real number
 
 ! indices that define elements of the data structures
 USE var_lookup,only:iLookTYPE           ! named variables for structure elements
@@ -95,7 +94,6 @@ public::stomResist
 real(rkind),parameter     :: joule2umolConv=4.6_rkind   ! conversion factor from joules to umol photons (umol J-1)
 ! algorithmic parameters
 real(rkind),parameter     :: mpe=1.e-6_rkind            ! prevents overflow error if division by zero, from NOAH mpe value
-real(rkind),parameter     :: dx=1.e-6_rkind             ! finite difference increment
 
 contains
 
@@ -121,29 +119,29 @@ contains
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
  ! conversion functions
- USE conv_funcs_module,only:satVapPress   ! function to compute the saturated vapor pressure (Pa)
+ USE convert_funcs_module,only:satVapPress   ! function to compute the saturated vapor pressure (Pa)
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
  ! input: state and diagnostic variables
  real(rkind),intent(in)             :: scalarVegetationTemp      ! vegetation temperature (K)
  real(rkind),intent(in)             :: scalarSatVP_VegTemp       ! saturation vapor pressure at vegetation temperature (Pa)
  real(rkind),intent(in)             :: scalarVP_CanopyAir        ! canopy air vapor pressure (Pa)
  ! input: data structures
- type(var_i),intent(in)          :: type_data                    ! type of vegetation and soil
- type(var_d),intent(in)          :: forc_data                    ! model forcing data
- type(var_dlength),intent(in)    :: mpar_data                    ! model parameters
- type(model_options),intent(in)  :: model_decisions(:)           ! model decisions
- ! input-output: data structures
- type(var_dlength),intent(inout) :: diag_data                    ! diagnostic variables for a local HRU
- type(var_dlength),intent(inout) :: flux_data                    ! model fluxes for a local HRU
+ type(var_i),intent(in)             :: type_data                 ! type of vegetation and soil
+ type(var_d),intent(in)             :: forc_data                 ! model forcing data
+ type(var_dlength),intent(in)       :: mpar_data                 ! model parameters
+ type(model_options),intent(in)     :: model_decisions(:)        ! model decisions
+ ! input-output: data structures    
+ type(var_dlength),intent(inout)    :: diag_data                 ! diagnostic variables for a local HRU
+ type(var_dlength),intent(inout)    :: flux_data                 ! model fluxes for a local HRU
  ! output: error control
- integer(i4b),intent(out)        :: err                          ! error code
- character(*),intent(out)        :: message                      ! error message
+ integer(i4b),intent(out)           :: err                       ! error code
+ character(*),intent(out)           :: message                   ! error message
  ! -----------------------------------------------------------------------------------------------------------------------------------------------------
  ! local variables
- character(LEN=256)              :: cmessage                     ! error message of downwind routine
- integer(i4b),parameter          :: ixSunlit=1                   ! named variable for sunlit leaves
- integer(i4b),parameter          :: ixShaded=2                   ! named variable for shaded leaves
- integer(i4b)                    :: iSunShade                    ! index defining sunlit or shaded leaves
+ character(LEN=256)                 :: cmessage                  ! error message of downwind routine
+ integer(i4b),parameter             :: ixSunlit=1                ! named variable for sunlit leaves
+ integer(i4b),parameter             :: ixShaded=2                ! named variable for shaded leaves
+ integer(i4b)                       :: iSunShade                 ! index defining sunlit or shaded leaves
  real(rkind)                        :: absorbedPAR               ! absorbed PAR (W m-2)
  real(rkind)                        :: scalarStomResist          ! stomatal resistance (s m-1)
  real(rkind)                        :: scalarPhotosynthesis      ! photosynthesis (umol CO2 m-2 s-1)
@@ -361,7 +359,6 @@ contains
  character(*),intent(out)           :: message                       ! error message
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
  ! general local variables
- logical(lgt),parameter             :: testDerivs=.false.            ! flag to test the derivatives
  real(rkind)                        :: unitConv                      ! unit conversion factor (mol m-3, convert m s-1 --> mol H20 m-2 s-1)
  real(rkind)                        :: rlb                           ! leaf boundary layer rersistance (umol-1 m2 s)
  real(rkind)                        :: x0,x1,x2                      ! temporary variables
@@ -413,7 +410,6 @@ contains
  real(rkind)                        :: dci_dc                        ! final derivative (-)
  ! ------------------------------------------------------------------------------------------------------------------------------------------------------
  ! iterative solution
- real(rkind)                        :: func1,func2                   ! functions for numerical derivative calculation
  real(rkind)                        :: cMin,cMax                     ! solution brackets
  real(rkind)                        :: xInc                          ! iteration increment (Pa)
  integer(i4b)                       :: iter                          ! iteration index
@@ -652,14 +648,6 @@ contains
    dci_dc = 0._rkind
   end if
 
-  ! test derivatives
-  if(testDerivs)then
-   func1 = testFunc(ci_old,    cond2photo_slope, airpres, scalarCO2air, ix_bbHumdFunc, ix_bbCO2point, ix_bbAssimFnc)
-   func2 = testFunc(ci_old+dx, cond2photo_slope, airpres, scalarCO2air, ix_bbHumdFunc, ix_bbCO2point, ix_bbAssimFnc)
-   write(*,'(a,1x,20(e20.10,1x))') '(func2 - func1)/dx, dci_dc = ', &
-                                    (func2 - func1)/dx, dci_dc
-  end if  ! if testing the derivatives
-
   ! *****
   ! * iterative solution...
   ! ***********************
@@ -705,43 +693,6 @@ contains
  scalarPhotosynthesis = psn
 
  end associate
-
- contains
-
-  ! ******************************************************
-  ! internal function used to test derivatives
-  function testFunc(ci, cond2photo_slope, airpres, scalarCO2air, ix_bbHumdFunc, ix_bbCO2point, ix_bbAssimFnc)
-  real(rkind),intent(in)     :: ci, cond2photo_slope, airpres, scalarCO2air
-  integer(i4b),intent(in) :: ix_bbHumdFunc, ix_bbCO2point, ix_bbAssimFnc
-  real(rkind)                :: testFunc
-  real(rkind),parameter      :: unUsedInput=0._rkind
-  real(rkind)                :: unUsedOutput
-
-  ! compute gross photosynthesis [follow Farquar (Planta, 1980), as implemented in CLM4 and Noah-MP]
-  call photosynthesis(.false., ix_bbAssimFnc, ci, co2compPt, awb, cp2, vcmax, Js, psn, unUsedOutput)
-
-  ! compute co2 concentration at leaf surface (Pa)
-  x1 = h2o_co2__leafbl * airpres * rlb  ! Pa / (umol co2 m-2 s-1)
-  cs = max(scalarCO2air - (x1 * psn), mpe)   ! Pa (avoid divide by zero)
-
-  ! compute control of the compensation point on stomatal conductance
-  if(ix_bbCO2point == origBWB)then
-   csx = cs
-  else
-   csx = cs - co2compPt
-  end if
-
-  ! compute conductance in the absence of humidity
-  g0 = cond2photo_slope*airpres*psn/csx
-
-  ! use quadratic function to compute stomatal resistance
-  call quadResist(.false.,ix_bbHumdFunc,rlb,fHum,gMin,g0,unUsedInput,rs,unUsedOutput)
-
-  ! compute intercellular co2 partial pressues (Pa)
-  x2 = h2o_co2__stomPores * airpres  ! Pa
-  testFunc = max(cs - x2*psn*rs, 0._rkind)    ! Pa
-
-  end function testFunc
 
  end subroutine stomResist_flex
 
@@ -1149,38 +1100,38 @@ contains
 
    ! Ball-Berry
    case(BallBerry)
-   call stomata(&
-                ! input
-                vegTypeIndex,                       & ! intent(in): vegetation type index
-                mpe,                                & ! intent(in): prevents overflow error if division by zero
-                PAR,                                & ! intent(in): average absorbed par (w m-2)
-                scalarFoliageNitrogenFactor,        & ! intent(in): foliage nitrogen concentration (1=saturated)
-                scalarVegetationTemp,               & ! intent(in): vegetation temperature (K)
-                scalarSatVP_VegTemp,                & ! intent(in): saturation vapor pressure at vegetation temperature (Pa)
-                scalarVP_CanopyAir,                 & ! intent(in): canopy air vapor pressure (Pa)
-                airtemp,                            & ! intent(in): air temperature at some height above the surface (K)
-                airpres,                            & ! intent(in): air pressure at some height above the surface (Pa)
-                scalarO2air,                        & ! intent(in): atmospheric o2 concentration (Pa)
-                scalarCO2air,                       & ! intent(in): atmospheric co2 concentration (Pa)
-                scalarGrowingSeasonIndex,           & ! intent(in): growing season index (0=off, 1=on)
-                scalarTranspireLim,                 & ! intent(in): weighted average of the soil moiture factor controlling stomatal resistance (-)
-                scalarLeafResistance,               & ! intent(in): leaf boundary layer resistance (s m-1)
-                ! output
-                scalarStomResist,                   & ! intent(out): stomatal resistance (s m-1)
-                scalarPhotosynthesis                ) ! intent(out): photosynthesis (umolco2 m-2 s-1)
+    call stomata(&
+                 ! input
+                 vegTypeIndex,                       & ! intent(in): vegetation type index
+                 mpe,                                & ! intent(in): prevents overflow error if division by zero
+                 PAR,                                & ! intent(in): average absorbed par (w m-2)
+                 scalarFoliageNitrogenFactor,        & ! intent(in): foliage nitrogen concentration (1=saturated)
+                 scalarVegetationTemp,               & ! intent(in): vegetation temperature (K)
+                 scalarSatVP_VegTemp,                & ! intent(in): saturation vapor pressure at vegetation temperature (Pa)
+                 scalarVP_CanopyAir,                 & ! intent(in): canopy air vapor pressure (Pa)
+                 airtemp,                            & ! intent(in): air temperature at some height above the surface (K)
+                 airpres,                            & ! intent(in): air pressure at some height above the surface (Pa)
+                 scalarO2air,                        & ! intent(in): atmospheric o2 concentration (Pa)
+                 scalarCO2air,                       & ! intent(in): atmospheric co2 concentration (Pa)
+                 scalarGrowingSeasonIndex,           & ! intent(in): growing season index (0=off, 1=on)
+                 scalarTranspireLim,                 & ! intent(in): weighted average of the soil moiture factor controlling stomatal resistance (-)
+                 scalarLeafResistance,               & ! intent(in): leaf boundary layer resistance (s m-1)
+                 ! output
+                 scalarStomResist,                   & ! intent(out): stomatal resistance (s m-1)
+                 scalarPhotosynthesis                ) ! intent(out): photosynthesis (umolco2 m-2 s-1)
 
    ! Jarvis
    case(Jarvis)
-   call canres(&
-                ! input
-                PAR,                                & ! intent(in): average absorbed par (w m-2)
-                scalarVegetationTemp,               & ! intent(in): vegetation temperature (K)
-                scalarTranspireLim,                 & ! intent(in): weighted average of the soil moiture factor controlling stomatal resistance (-)
-                scalarVP_CanopyAir,                 & ! intent(in): canopy air vapor pressure (Pa)
-                airpres,                            & ! intent(in): air pressure at some height above the surface (Pa)
-                ! output
-                scalarStomResist,                   & ! intent(out): stomatal resistance (s m-1)
-                scalarPhotosynthesis                ) ! intent(out): photosynthesis (umolco2 m-2 s-1)
+    call canres(&
+                 ! input
+                 PAR,                                & ! intent(in): average absorbed par (w m-2)
+                 scalarVegetationTemp,               & ! intent(in): vegetation temperature (K)
+                 scalarTranspireLim,                 & ! intent(in): weighted average of the soil moiture factor controlling stomatal resistance (-)
+                 scalarVP_CanopyAir,                 & ! intent(in): canopy air vapor pressure (Pa)
+                 airpres,                            & ! intent(in): air pressure at some height above the surface (Pa)
+                 ! output
+                 scalarStomResist,                   & ! intent(out): stomatal resistance (s m-1)
+                 scalarPhotosynthesis                ) ! intent(out): photosynthesis (umolco2 m-2 s-1)
 
    ! check identified an option
    case default; err=20; message=trim(message)//'unable to identify case for stomatal resistance'; return

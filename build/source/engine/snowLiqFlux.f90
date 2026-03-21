@@ -18,10 +18,10 @@
 ! You should have received a copy of the GNU General Public License
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-module snowLiqFlx_module
+module snowLiqFlux_module
 
 ! access modules
-USE nrtype                                 ! numerical recipes data types
+USE nr_type                                ! numerical recipes data types
 USE multiconst,only:iden_ice,iden_water    ! intrinsic density of ice and water (kg m-3)
 
 ! access missing values
@@ -39,42 +39,42 @@ USE var_lookup,only:iLookDIAG              ! named variables for structure eleme
 USE data_types,only:var_d                  ! x%var(:)     [rkind]
 USE data_types,only:var_dlength            ! x%var(:)%dat [rkind]
 USE data_types,only:var_ilength            ! x%var(:)%dat [i4b]
-USE data_types,only:in_type_snowLiqFlx     ! data type for intent(in) arguments
-USE data_types,only:io_type_snowLiqFlx     ! data type for intent(inout) arguments
-USE data_types,only:out_type_snowLiqFlx    ! data type for intent(out) arguments
+USE data_types,only:in_type_snowLiqFlux     ! data type for intent(in) arguments
+USE data_types,only:io_type_snowLiqFlux     ! data type for intent(inout) arguments
+USE data_types,only:out_type_snowLiqFlux    ! data type for intent(out) arguments
 
 ! privacy
 implicit none
 private
-public :: snowLiqFlx
+public :: snowLiqFlux
 contains
 ! ************************************************************************************************
-! public subroutine snowLiqFlx: compute liquid water flux through the snowpack
+! public subroutine snowLiqFlux: compute liquid water flux through the snowpack
 ! ************************************************************************************************
-subroutine snowLiqFlx(&
+subroutine snowLiqFlux(&
                       ! input: model control, forcing, and model state vector
-                      in_snowLiqFlx,           & ! intent(in):    model control, forcing, and model state vector
+                      in_snowLiqFlux,           & ! intent(in):    model control, forcing, and model state vector
                       ! input-output: data structures
                       indx_data,               & ! intent(in):    model indices
                       mpar_data,               & ! intent(in):    model parameters
                       prog_data,               & ! intent(in):    model prognostic variables for a local HRU
                       diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
                       ! input-output: fluxes and derivatives
-                      io_snowLiqFlx,           & ! intent(inout): fluxes and derivatives
+                      io_snowLiqFlux,           & ! intent(inout): fluxes and derivatives
                       ! output: error control
-                      out_snowLiqFlx)            ! intent(out):   error control
+                      out_snowLiqFlux)            ! intent(out):   error control
   implicit none
   ! input: model control, forcing, and model state vector
-  type(in_type_snowLiqFlx)          :: in_snowLiqFlx              ! model control, forcing, and model state vector
+  type(in_type_snowLiqFlux)          :: in_snowLiqFlux              ! model control, forcing, and model state vector
   ! input-output: data structures
   type(var_ilength),intent(in)      :: indx_data                  ! model indices
   type(var_dlength),intent(in)      :: mpar_data                  ! model parameters
   type(var_dlength),intent(in)      :: prog_data                  ! prognostic variables for a local HRU
   type(var_dlength),intent(inout)   :: diag_data                  ! diagnostic variables for a local HRU
   ! input-output: fluxes and derivatives
-  type(io_type_snowLiqFlx)          :: io_snowLiqFlx              ! fluxes and derivatives
+  type(io_type_snowLiqFlux)          :: io_snowLiqFlux              ! fluxes and derivatives
   ! output: error control
-  type(out_type_snowLiqFlx)         :: out_snowLiqFlx             ! error control
+  type(out_type_snowLiqFlux)         :: out_snowLiqFlux             ! error control
   ! ------------------------------  ------------------------------------------------------------------------------------------------------------
   ! local variables
   integer(i4b)                      :: nSnow                      ! number of snow layers
@@ -89,16 +89,16 @@ subroutine snowLiqFlx(&
   real(rkind)                       :: relSaturn                  ! relative saturation [0,1] (-)
   ! ------------------------------------------------------------------------------------------------------------------------------------------
   ! make association of local variables with information in the data structures
-  nSnow=in_snowLiqFlx % nSnow ! get number of snow layers
+  nSnow=in_snowLiqFlux % nSnow ! get number of snow layers
   associate(&
     ! input: model control
-    firstFluxCall           => in_snowLiqFlx % firstFluxCall,           & ! intent(in): the first flux call
-    scalarSolution          => in_snowLiqFlx % scalarSolution,          & ! intent(in): flag to denote if implementing the scalar solution
+    firstFluxCall           => in_snowLiqFlux % firstFluxCall,           & ! intent(in): the first flux call
+    scalarSolution          => in_snowLiqFlux % scalarSolution,          & ! intent(in): flag to denote if implementing the scalar solution
     ! input: forcing for the snow domain
-    scalarThroughfallRain   => in_snowLiqFlx % scalarThroughfallRain,   & ! intent(in): computed throughfall rate (kg m-2 s-1)
-    scalarCanopyLiqDrainage => in_snowLiqFlx % scalarCanopyLiqDrainage, & ! intent(in): computed drainage of liquid water (kg m-2 s-1)
+    scalarThroughfallRain   => in_snowLiqFlux % scalarThroughfallRain,   & ! intent(in): computed throughfall rate (kg m-2 s-1)
+    scalarCanopyLiqDrainage => in_snowLiqFlux % scalarCanopyLiqDrainage, & ! intent(in): computed drainage of liquid water (kg m-2 s-1)
     ! input: model state vector
-    mLayerVolFracLiqTrial   => in_snowLiqFlx % mLayerVolFracLiqTrial,   & ! intent(in): trial value of volumetric fraction of liquid water at the current iteration (-)
+    mLayerVolFracLiqTrial   => in_snowLiqFlux % mLayerVolFracLiqTrial,   & ! intent(in): trial value of volumetric fraction of liquid water at the current iteration (-)
     ! input: layer indices
     ixLayerState     => indx_data%var(iLookINDEX%ixLayerState)%dat,             & ! intent(in):    list of indices for all model layers
     ixSnowOnlyHyd    => indx_data%var(iLookINDEX%ixSnowOnlyHyd)%dat,            & ! intent(in):    index in the state subset for hydrology state variables in the snow domain
@@ -111,15 +111,15 @@ subroutine snowLiqFlx(&
     mLayerPoreSpace  => diag_data%var(iLookDIAG%mLayerPoreSpace)%dat,           & ! intent(inout): pore space in each snow layer (-)
     mLayerThetaResid => diag_data%var(iLookDIAG%mLayerThetaResid)%dat,          & ! intent(inout): esidual volumetric liquid water content in each snow layer (-)
     ! input-output: fluxes and derivatives
-    iLayerLiqFluxSnow      => io_snowLiqFlx % iLayerLiqFluxSnow,                & ! intent(inout): vertical liquid water flux at layer interfaces (m s-1)
-    iLayerLiqFluxSnowDeriv => io_snowLiqFlx % iLayerLiqFluxSnowDeriv,           & ! intent(inout): derivative in vertical liquid water flux at layer interfaces (m s-1)
+    iLayerLiqFluxSnow      => io_snowLiqFlux % iLayerLiqFluxSnow,                & ! intent(inout): vertical liquid water flux at layer interfaces (m s-1)
+    iLayerLiqFluxSnowDeriv => io_snowLiqFlux % iLayerLiqFluxSnowDeriv,           & ! intent(inout): derivative in vertical liquid water flux at layer interfaces (m s-1)
     ! output: error control
-    err                    => out_snowLiqFlx % err,                             & ! intent(out):   error code
-    message                => out_snowLiqFlx % cmessage                         & ! intent(out):   error message
+    err                    => out_snowLiqFlux % err,                             & ! intent(out):   error code
+    message                => out_snowLiqFlux % cmessage                         & ! intent(out):   error message
     ) ! end association of local variables with information in the data structures
     ! ------------------------------------------------------------------------------------------------------------------------------------------
     ! initialize error control
-    err=0; message='snowLiqFlx/'
+    err=0; message='snowLiqFlux/'
 
     ! check that the input vectors match nSnow
     if (size(mLayerVolFracLiqTrial)/=nSnow .or. size(mLayerVolFracIce)/=nSnow .or. &
@@ -182,6 +182,6 @@ subroutine snowLiqFlx(&
 
   end associate ! end association of local variables with information in the data structures
 
-end subroutine snowLiqFlx
+end subroutine snowLiqFlux
 
-end module snowLiqFlx_module
+end module snowLiqFlux_module

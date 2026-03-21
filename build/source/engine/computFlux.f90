@@ -21,7 +21,7 @@
 module computFlux_module
 
 ! data types
-USE nrtype
+USE nr_type
 
 ! provide access to the derived types and classes used to define data structures and class objects
 USE data_types,only:&
@@ -31,10 +31,10 @@ USE data_types,only:&
                     var_dlength,        & ! data vector with variable length dimension (rkind)
                     model_options,      & ! defines the model decisions
                     in_type_vegNrgFlux,out_type_vegNrgFlux,                   & ! classes for vegNrgFlux call
-                    in_type_ssdNrgFlux,io_type_ssdNrgFlux,out_type_ssdNrgFlux,& ! classes for ssdNrgFlux call
+                    in_type_snowSoilNrgFlux,io_type_snowSoilNrgFlux,out_type_snowSoilNrgFlux,& ! classes for snowSoilNrgFlux call
                     in_type_vegLiqFlux,out_type_vegLiqFlux,                   & ! classes for vegLiqFlux call
-                    in_type_snowLiqFlx,io_type_snowLiqFlx,out_type_snowLiqFlx,& ! classes for snowLiqFlx call                
-                    in_type_soilLiqFlx,io_type_soilLiqFlx,out_type_soilLiqFlx,& ! classes for soilLiqFlx call
+                    in_type_snowLiqFlux,io_type_snowLiqFlux,out_type_snowLiqFlux,& ! classes for snowLiqFlux call                
+                    in_type_soilLiqFlux,io_type_soilLiqFlux,out_type_soilLiqFlux,& ! classes for soilLiqFlux call
                     in_type_groundwatr,io_type_groundwatr,out_type_groundwatr,& ! classes for groundwatr call
                     in_type_bigAquifer,io_type_bigAquifer,out_type_bigAquifer   ! classes for bigAquifer call
 
@@ -138,10 +138,10 @@ subroutine computFlux(&
                       err,message)                ! intent(out):   error code and error message
   ! provide access to flux subroutines
   USE vegNrgFlux_module,only:vegNrgFlux           ! compute energy fluxes over vegetation
-  USE ssdNrgFlux_module,only:ssdNrgFlux           ! compute energy fluxes throughout the snow and soil subdomains
+  USE snowSoilNrgFlux_module,only:snowSoilNrgFlux ! compute energy fluxes throughout the snow and soil subdomains
   USE vegLiqFlux_module,only:vegLiqFlux           ! compute liquid water fluxes through vegetation
-  USE snowLiqFlx_module,only:snowLiqflx           ! compute liquid water fluxes through snow
-  USE soilLiqFlx_module,only:soilLiqflx           ! compute liquid water fluxes through soil
+  USE snowLiqFlux_module,only:snowLiqFlux         ! compute liquid water fluxes through snow
+  USE soilLiqFlux_module,only:soilLiqFlux         ! compute liquid water fluxes through soil
   USE groundwatr_module,only:groundwatr           ! compute the baseflow flux
   USE bigAquifer_module,only:bigAquifer           ! compute fluxes for the big aquifer
   implicit none
@@ -202,10 +202,10 @@ subroutine computFlux(&
   ! ---------------------- classes for flux subroutine arguments (classes defined in data_types module) ----------------------
   !      ** intent(in) arguments **       ||       ** intent(inout) arguments **        ||      ** intent(out) arguments **
   type(in_type_vegNrgFlux) :: in_vegNrgFlux;                                            type(out_type_vegNrgFlux) :: out_vegNrgFlux ! vegNrgFlux arguments
-  type(in_type_ssdNrgFlux) :: in_ssdNrgFlux; type(io_type_ssdNrgFlux) :: io_ssdNrgFlux; type(out_type_ssdNrgFlux) :: out_ssdNrgFlux ! ssdNrgFlux arguments
+  type(in_type_snowSoilNrgFlux) :: in_snowSoilNrgFlux; type(io_type_snowSoilNrgFlux) :: io_snowSoilNrgFlux; type(out_type_snowSoilNrgFlux) :: out_snowSoilNrgFlux ! snowSoilNrgFlux arguments
   type(in_type_vegLiqFlux) :: in_vegLiqFlux;                                            type(out_type_vegLiqFlux) :: out_vegLiqFlux ! vegLiqFlux arguments
-  type(in_type_snowLiqFlx) :: in_snowLiqFlx; type(io_type_snowLiqFlx) :: io_snowLiqFlx; type(out_type_snowLiqFlx) :: out_snowLiqFlx ! snowLiqFlx arguments
-  type(in_type_soilLiqFlx) :: in_soilLiqFlx; type(io_type_soilLiqFlx) :: io_soilLiqFlx; type(out_type_soilLiqFlx) :: out_soilLiqFlx ! soilLiqFlx arguments
+  type(in_type_snowLiqFlux) :: in_snowLiqFlux; type(io_type_snowLiqFlux) :: io_snowLiqFlux; type(out_type_snowLiqFlux) :: out_snowLiqFlux ! snowLiqFlux arguments
+  type(in_type_soilLiqFlux) :: in_soilLiqFlux; type(io_type_soilLiqFlux) :: io_soilLiqFlux; type(out_type_soilLiqFlux) :: out_soilLiqFlux ! soilLiqFlux arguments
   type(in_type_groundwatr) :: in_groundwatr; type(io_type_groundwatr) :: io_groundwatr; type(out_type_groundwatr) :: out_groundwatr ! groundwatr arguments
   type(in_type_bigAquifer) :: in_bigAquifer; type(io_type_bigAquifer) :: io_bigAquifer; type(out_type_bigAquifer) :: out_bigAquifer ! bigAquifer arguments
   ! -------------------------------------------------------------------------------------------------------------------------
@@ -231,9 +231,9 @@ subroutine computFlux(&
   ! *** CALCULATE ENERGY FLUXES THROUGH THE SNOW-SOIL DOMAIN ***
   associate(nSnowSoilNrg => indx_data%var(iLookINDEX%nSnowSoilNrg)%dat(1)) ! intent(in): [i4b] number of energy state variables in the snow+soil domain
     if (nSnowSoilNrg>0) then ! if necessary, calculate energy fluxes at layer interfaces through the snow and soil domain
-      call initialize_ssdNrgFlux
-      call ssdNrgFlux(in_ssdNrgFlux,mpar_data,indx_data,prog_data,diag_data,flux_data,io_ssdNrgFlux,out_ssdNrgFlux)
-      call finalize_ssdNrgFlux; if(err/=0)then; return; endif
+      call initialize_snowSoilNrgFlux
+      call snowSoilNrgFlux(in_snowSoilNrgFlux,mpar_data,indx_data,prog_data,diag_data,flux_data,io_snowSoilNrgFlux,out_snowSoilNrgFlux)
+      call finalize_snowSoilNrgFlux; if(err/=0)then; return; endif
     end if
   end associate
 
@@ -249,9 +249,9 @@ subroutine computFlux(&
   ! *** CALCULATE THE LIQUID FLUX THROUGH SNOW ***
   associate(nSnowOnlyHyd => indx_data%var(iLookINDEX%nSnowOnlyHyd)%dat(1)) ! intent(in): [i4b] number of hydrology variables in the snow domain
     if (nSnowOnlyHyd>0) then ! if necessary, compute liquid fluxes through snow
-      call initialize_snowLiqFlx
-      call snowLiqFlx(in_snowLiqFlx,indx_data,mpar_data,prog_data,diag_data,io_snowLiqFlx,out_snowLiqFlx)
-      call finalize_snowLiqFlx; if(err/=0)then; return; endif
+      call initialize_snowLiqFlux
+      call snowLiqFlux(in_snowLiqFlux,indx_data,mpar_data,prog_data,diag_data,io_snowLiqFlux,out_snowLiqFlux)
+      call finalize_snowLiqFlux; if(err/=0)then; return; endif
     else
       call soilForcingNoSnow ! define forcing for the soil domain for the case of no snow layers
     end if
@@ -260,9 +260,9 @@ subroutine computFlux(&
   ! *** CALCULATE THE LIQUID FLUX THROUGH SOIL ***
   associate(nSoilOnlyHyd => indx_data%var(iLookINDEX%nSoilOnlyHyd)%dat(1)) ! intent(in): [i4b] number of hydrology variables in the soil domain
     if (nSoilOnlyHyd>0) then ! if necessary, calculate the liquid flux through soil
-      call initialize_soilLiqFlx
-      call soilLiqFlx(in_soilLiqFlx,mpar_data,indx_data,prog_data,diag_data,flux_data,io_soilLiqFlx,out_soilLiqFlx)
-      call finalize_soilLiqFlx; if(err/=0)then; return; endif
+      call initialize_soilLiqFlux
+      call soilLiqFlux(in_soilLiqFlux,mpar_data,indx_data,prog_data,diag_data,flux_data,io_soilLiqFlux,out_soilLiqFlux)
+      call finalize_soilLiqFlux; if(err/=0)then; return; endif
     end if 
   end associate
 
@@ -276,7 +276,7 @@ subroutine computFlux(&
         call groundwatr(in_groundwatr,attr_data,mpar_data,prog_data,flux_data,io_groundwatr,out_groundwatr)
         call finalize_groundwatr;   if(err/=0)then; return; endif
       end if
-      call computeBaseflowRunoff ! compute total baseflow from soil and runoff
+      call computBaseflowRunoff ! compute total baseflow from soil and runoff
     end if
   end associate
 
@@ -326,7 +326,7 @@ contains
   end associate
  end subroutine zeroBaseflowFluxes
 
- subroutine computeBaseflowRunoff
+ subroutine computBaseflowRunoff
   ! compute total baseflow from the soil zone (needed for mass balance checks) and total runoff
   ! (Note: scalarSoilBaseflow is zero if topmodel is not used)
   ! (Note: scalarSoilBaseflow may need to re-envisioned in topmodel formulation if parts of it flow into neighboring soil rather than exfiltrate)
@@ -339,7 +339,7 @@ contains
    scalarSoilBaseflow = sum(mLayerBaseflow)                                               ! baseflow from the soil zone 
    scalarTotalRunoff  = scalarSurfaceRunoff + scalarSoilDrainage + scalarSoilBaseflow     ! total runoff
   end associate
- end subroutine computeBaseflowRunoff  
+ end subroutine computBaseflowRunoff  
 
  subroutine zeroAquiferFluxes
   ! set aquifer fluxes to zero (if no aquifer exists)
@@ -460,15 +460,15 @@ contains
  end subroutine finalize_vegNrgFlux
  ! **** end vegNrgFlux ****
 
- ! **** ssdNrgFlux ****
- subroutine initialize_ssdNrgFlux
-  call in_ssdNrgFlux%initialize(scalarSolution,firstFluxCall,mLayerTempTrial,flux_data,deriv_data)
-  call io_ssdNrgFlux%initialize(deriv_data)
- end subroutine initialize_ssdNrgFlux
+ ! **** snowSoilNrgFlux ****
+ subroutine initialize_snowSoilNrgFlux
+  call in_snowSoilNrgFlux%initialize(scalarSolution,firstFluxCall,mLayerTempTrial,flux_data,deriv_data)
+  call io_snowSoilNrgFlux%initialize(deriv_data)
+ end subroutine initialize_snowSoilNrgFlux
 
- subroutine finalize_ssdNrgFlux
-  call io_ssdNrgFlux%finalize(deriv_data)
-  call out_ssdNrgFlux%finalize(flux_data,deriv_data,err,cmessage)
+ subroutine finalize_snowSoilNrgFlux
+  call io_snowSoilNrgFlux%finalize(deriv_data)
+  call out_snowSoilNrgFlux%finalize(flux_data,deriv_data,err,cmessage)
   associate(&
    mLayerNrgFlux                => flux_data%var(iLookFLUX%mLayerNrgFlux)%dat, & ! intent(out): [dp] net energy flux for each layer within the snow+soil domain (J m-3 s-1)
    iLayerNrgFlux                => flux_data%var(iLookFLUX%iLayerNrgFlux)%dat, & ! intent(out): [dp(0:)] vertical energy flux at the interface of snow and soil layers
@@ -480,8 +480,8 @@ contains
      mLayerNrgFlux(iLayer) = -(iLayerNrgFlux(iLayer) - iLayerNrgFlux(iLayer-1))/mLayerDepth(iLayer)
    end do
   end associate
- end subroutine finalize_ssdNrgFlux
- ! **** end ssdNrgFlux ****
+ end subroutine finalize_snowSoilNrgFlux
+ ! **** end snowSoilNrgFlux ****
 
  ! **** vegLiqFlux ****
  subroutine initialize_vegLiqFlux
@@ -509,15 +509,15 @@ contains
  end subroutine finalize_vegLiqFlux
  ! **** end vegLiqFlux ****
 
- ! **** snowLiqFlx ****
- subroutine initialize_snowLiqFlx
-  call in_snowLiqFlx%initialize(nSnow,firstFluxCall,scalarSolution,mLayerVolFracLiqTrial,flux_data)
-  call io_snowLiqFlx%initialize(flux_data,deriv_data)
- end subroutine initialize_snowLiqFlx
+ ! **** snowLiqFlux ****
+ subroutine initialize_snowLiqFlux
+  call in_snowLiqFlux%initialize(nSnow,firstFluxCall,scalarSolution,mLayerVolFracLiqTrial,flux_data)
+  call io_snowLiqFlux%initialize(flux_data,deriv_data)
+ end subroutine initialize_snowLiqFlux
 
- subroutine finalize_snowLiqFlx
-  call io_snowLiqFlx%finalize(flux_data,deriv_data)
-  call out_snowLiqFlx%finalize(err,cmessage) 
+ subroutine finalize_snowLiqFlux
+  call io_snowLiqFlux%finalize(flux_data,deriv_data)
+  call out_snowLiqFlux%finalize(err,cmessage) 
   ! error control
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   associate(&
@@ -535,20 +535,20 @@ contains
    ! compute drainage from the soil zone (needed for mass balance checks)
    scalarSnowDrainage = iLayerLiqFluxSnow(nSnow)
   end associate
- end subroutine finalize_snowLiqFlx
- ! **** end snowLiqFlx ****
+ end subroutine finalize_snowLiqFlux
+ ! **** end snowLiqFlux ****
 
- ! **** soilLiqFlx ****
- subroutine initialize_soilLiqFlx
-  call in_soilLiqFlx%initialize(nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
+ ! **** soilLiqFlux ****
+ subroutine initialize_soilLiqFlux
+  call in_soilLiqFlux%initialize(nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
                                 mLayerTempTrial,mLayerMatricHeadTrial,mLayerMatricHeadLiqTrial,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,&
                                 flux_data,deriv_data)
-  call io_soilLiqFlx%initialize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
- end subroutine initialize_soilLiqFlx
+  call io_soilLiqFlux%initialize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
+ end subroutine initialize_soilLiqFlux
 
- subroutine finalize_soilLiqFlx
-  call io_soilLiqFlx%finalize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
-  call out_soilLiqFlx%finalize(err,cmessage)
+ subroutine finalize_soilLiqFlux
+  call io_soilLiqFlux%finalize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
+  call out_soilLiqFlux%finalize(err,cmessage)
   ! error control
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
   associate(&
@@ -575,8 +575,8 @@ contains
    dq_dHydStateBelow(0:nSoil-1) = dq_dHydStateBelow(0:nSoil-1)*dPsiLiq_dPsi0(1:nSoil)
    if(all(dq_dHydStateLayerSurfVec/=realMissing)) dq_dHydStateLayerSurfVec(1:nSoil) = dq_dHydStateLayerSurfVec(1:nSoil)*dPsiLiq_dPsi0(1:nSoil)
   end associate
- end subroutine finalize_soilLiqFlx
- ! **** end soilLiqFlx ****
+ end subroutine finalize_soilLiqFlux
+ ! **** end soilLiqFlux ****
 
  ! **** groundwatr ****
  subroutine initialize_groundwatr
@@ -628,7 +628,7 @@ subroutine soilCmpres(&
                       ! input:
                       dt,                                 & ! intent(in):  length of the time step (seconds)
                       ixRichards,                         & ! intent(in):  choice of option for Richards' equation
-                      ixBeg,ixEnd,                        & ! intent(in):  start and end indices defining desired layers
+                      ixTop,ixBot,                        & ! intent(in):  top and bottom defining desired layers
                       mLayerMatricHead,                   & ! intent(in):  matric head at the start of the time step (m)
                       mLayerMatricHeadTrial,              & ! intent(in):  trial value of matric head (m)
                       mLayerVolFracLiqTrial,              & ! intent(in):  trial value for the volumetric liquid water content in each soil layer (-)
@@ -641,9 +641,9 @@ subroutine soilCmpres(&
                       err,message)                          ! intent(out): error code and error message
   implicit none
   ! input:
-  real(rkind),intent(in)         :: dt                        !  length of the time step (seconds)
+  real(rkind),intent(in)         :: dt                        ! length of the time step (seconds)
   integer(i4b),intent(in)        :: ixRichards                ! choice of option for Richards' equation
-  integer(i4b),intent(in)        :: ixBeg,ixEnd               ! start and end indices defining desired layers
+  integer(i4b),intent(in)        :: ixTop,ixBot               ! top and bottom defining desired layers
   real(rkind),intent(in)         :: mLayerMatricHead(:)       ! matric head at the start of the time step (m)
   real(rkind),intent(in)         :: mLayerMatricHeadTrial(:)  ! trial value for matric head (m)
   real(rkind),intent(in)         :: mLayerVolFracLiqTrial(:)  ! trial value for volumetric fraction of liquid water (-)
@@ -663,11 +663,11 @@ subroutine soilCmpres(&
   ! (only compute for the mixed form of Richards' equation)
   if (ixRichards==mixdform) then
     do iLayer=1,size(mLayerMatricHead)
-      if (iLayer>=ixBeg .and. iLayer<=ixEnd) then
-      ! compute the derivative for the compressibility term (m-1), no volume expansion for total water
-      dCompress_dPsi(iLayer) = specificStorage*(mLayerVolFracLiqTrial(iLayer) + mLayerVolFracIceTrial(iLayer))/theta_sat(iLayer)
-      ! compute the compressibility term (-) per second
-      compress(iLayer) = (mLayerMatricHeadTrial(iLayer) - mLayerMatricHead(iLayer))*dCompress_dPsi(iLayer)/dt
+      if (iLayer>=ixTop .and. iLayer<=ixBot) then
+        ! compute the derivative for the compressibility term (m-1), no volume expansion for total water
+        dCompress_dPsi(iLayer) = specificStorage*(mLayerVolFracLiqTrial(iLayer) + mLayerVolFracIceTrial(iLayer))/theta_sat(iLayer)
+        ! compute the compressibility term (-) per second
+        compress(iLayer) = (mLayerMatricHeadTrial(iLayer) - mLayerMatricHead(iLayer))*dCompress_dPsi(iLayer)/dt
       end if
     end do
   else
@@ -682,7 +682,7 @@ end subroutine soilCmpres
 subroutine soilCmpresPrime(&
                           ! input:
                           ixRichards,                         & ! intent(in):  choice of option for Richards' equation
-                          ixBeg,ixEnd,                        & ! intent(in):  start and end indices defining desired layers
+                          ixTop,ixBot,                        & ! intent(in):  top and bottom defining desired layers
                           mLayerMatricHeadPrime,              & ! intent(in):  matric head at the start of the time step (m)
                           mLayerVolFracLiqTrial,              & ! intent(in):  trial value for the volumetric liquid water content in each soil layer (-)
                           mLayerVolFracIceTrial,              & ! intent(in):  trial value for the volumetric ice content in each soil layer (-)
@@ -695,7 +695,7 @@ subroutine soilCmpresPrime(&
   implicit none
   ! input:
   integer(i4b),intent(in)           :: ixRichards               ! choice of option for Richards' equation
-  integer(i4b),intent(in)           :: ixBeg,ixEnd              ! start and end indices defining desired layers
+  integer(i4b),intent(in)           :: ixTop,ixBot              ! top and bottom defining desired layers
   real(rkind),intent(in)            :: mLayerMatricHeadPrime(:) ! matric head at the start of the time step (m)
   real(rkind),intent(in)            :: mLayerVolFracLiqTrial(:) ! trial value for volumetric fraction of liquid water (-)
   real(rkind),intent(in)            :: mLayerVolFracIceTrial(:) ! trial value for volumetric fraction of ice (-)
@@ -714,11 +714,11 @@ subroutine soilCmpresPrime(&
   ! (only compute for the mixed form of Richards' equation)
   if (ixRichards==mixdform) then
     do iLayer=1,size(mLayerMatricHeadPrime)
-      if (iLayer>=ixBeg .and. iLayer<=ixEnd) then
-          ! compute the derivative for the compressibility term (m-1), no volume expansion for total water
-          dCompress_dPsi(iLayer) = specificStorage*(mLayerVolFracLiqTrial(iLayer) + mLayerVolFracIceTrial(iLayer))/theta_sat(iLayer)
-          ! compute the compressibility term (-) instantaneously
-          compress(iLayer) = mLayerMatricHeadPrime(iLayer) * dCompress_dPsi(iLayer)
+      if (iLayer>=ixTop .and. iLayer<=ixBot) then
+        ! compute the derivative for the compressibility term (m-1), no volume expansion for total water
+        dCompress_dPsi(iLayer) = specificStorage*(mLayerVolFracLiqTrial(iLayer) + mLayerVolFracIceTrial(iLayer))/theta_sat(iLayer)
+        ! compute the compressibility term (-) instantaneously
+        compress(iLayer) = mLayerMatricHeadPrime(iLayer) * dCompress_dPsi(iLayer)
       end if
     end do
   else

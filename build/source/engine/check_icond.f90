@@ -19,7 +19,10 @@
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module check_icond_module
-USE nrtype
+USE nr_type
+
+! constants
+USE globalData,only:verySmall        ! a small number
 
 ! access missing values
 USE globalData,only:integerMissing   ! missing integer
@@ -45,7 +48,7 @@ contains
                         err,message)                     ! intent(out):   error control
  ! --------------------------------------------------------------------------------------------------------
  ! modules
- USE nrtype
+ USE nr_type
  USE var_lookup,only:iLookPARAM                          ! variable lookup structure
  USE var_lookup,only:iLookPROG                           ! variable lookup structure
  USE var_lookup,only:iLookDIAG                           ! variable lookup structure
@@ -62,12 +65,12 @@ contains
                        gravity,   &                      ! gravitational acceleration           (m s-2)
                        Tfreeze                           ! freezing point of pure water         (K)
  USE snow_utils_module,only:fracliquid                   ! compute volumetric fraction of liquid water in snow based on temperature
- USE updatState_module,only:updateSnow                   ! update snow states
- USE updatState_module,only:updateSoil                   ! update soil states
- USE enthalpyTemp_module,only:T2enthTemp_cas             ! convert temperature to enthalpy for canopy air space
- USE enthalpyTemp_module,only:T2enthTemp_veg             ! convert temperature to enthalpy for vegetation
- USE enthalpyTemp_module,only:T2enthTemp_snow            ! convert temperature to enthalpy for snow
- USE enthalpyTemp_module,only:T2enthTemp_soil            ! convert temperature to enthalpy for soil
+ USE updatState_module,only:updatSnow                    ! update snow states
+ USE updatState_module,only:updatSoil                    ! update soil states
+ USE convertEnthalpyTemp_module,only:T2enthTemp_cas      ! convert temperature to enthalpy for canopy air space
+ USE convertEnthalpyTemp_module,only:T2enthTemp_veg      ! convert temperature to enthalpy for vegetation
+ USE convertEnthalpyTemp_module,only:T2enthTemp_snow     ! convert temperature to enthalpy for snow
+ USE convertEnthalpyTemp_module,only:T2enthTemp_soil     ! convert temperature to enthalpy for soil
  
  implicit none
 
@@ -264,7 +267,7 @@ contains
       end if
 
       ! ensure consistency among state variables
-      call updateSnow(&
+      call updatSnow(&
                       mLayerTemp(iLayer),             & ! intent(in): temperature (K)
                       scalarTheta,                    & ! intent(in): volumetric fraction of total water (-)
                       snowfrz_scale,                  & ! intent(in): scaling parameter for the snow freezing curve (K-1)
@@ -291,7 +294,7 @@ contains
      case(iname_soil)
 
       ! ensure consistency among state variables
-      call updateSoil(&
+      call updatSoil(&
                       mLayerTemp(iLayer),              & ! intent(in): layer temperature (K)
                       mLayerMatricHead(iLayer-nSnow),  & ! intent(in): matric head (m)
                       vGn_alpha(iSoil),vGn_n(iSoil),theta_sat(iSoil),theta_res(iSoil),vGn_m, & ! intent(in): van Genutchen soil parameters
@@ -340,7 +343,7 @@ contains
    do iLayer=1,nLayers
     h1 = sum(progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerDepth)%dat(1:iLayer)) ! sum of the depths up to the current layer
     h2 = progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%iLayerHeight)%dat(iLayer) - progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%iLayerHeight)%dat(0)  ! difference between snow-atm interface and bottom of layer
-    if(abs(h1 - h2) > 1.e-6_rkind)then
+    if(abs(h1 - h2) > verySmall)then
      write(message,'(a,1x,i0,a,f5.3,a,f5.3)') trim(message)//'mis-match between layer depth and layer height; layer = ', iLayer, '; sum depths = ',h1,'; height = ',h2
      err=20; return
     end if
