@@ -235,7 +235,7 @@ contains
   ! check both are present
   if(.not.present(nSoil))then; err=20; message=trim(message)//'expect nSoil to be present when nSnow is present'; return; end if
   if(.not.present(nSnow))then; err=20; message=trim(message)//'expect nSnow to be present when nSoil is present'; return; end if
-  nLayers = nSnow+nSoil
+  nLayers = nSnow + nSoil
 
  ! It is possible that nSnow and nSoil are actually needed here, so we return an error if the optional arguments are missing when needed
  else

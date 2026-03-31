@@ -530,8 +530,8 @@ contains
   ! enthalpy
   case('scalarCanopyEnthTemp'           ); get_ixDiag = iLookDIAG%scalarCanopyEnthTemp             ! temperature component of enthalpy of the vegetation canopy (J m-3)
   case('mLayerEnthTemp'                 ); get_ixDiag = iLookDIAG%mLayerEnthTemp                   ! temperature component of enthalpy of the snow+soil layers (J m-3)
-  case('scalarTotalSoilEnthalpy'        ); get_ixDiag = iLookDIAG%scalarTotalSoilEnthalpy          ! total enthalpy of the soil column (J m-3)
   case('scalarTotalSnowEnthalpy'        ); get_ixDiag = iLookDIAG%scalarTotalSnowEnthalpy          ! total enthalpy of the snow column (J m-3)   
+  case('scalarTotalSoilEnthalpy'        ); get_ixDiag = iLookDIAG%scalarTotalSoilEnthalpy          ! total enthalpy of the soil column (J m-3)
   ! forcing
   case('scalarVPair'                    ); get_ixDiag = iLookDIAG%scalarVPair                      ! vapor pressure of the air above the vegetation canopy (Pa)
   case('scalarVP_CanopyAir'             ); get_ixDiag = iLookDIAG%scalarVP_CanopyAir               ! vapor pressure of the canopy air space (Pa)
@@ -584,7 +584,9 @@ contains
   case('mLayerThetaResid'               ); get_ixDiag = iLookDIAG%mLayerThetaResid                 ! residual volumetric water content in each snow layer (-)
   case('mLayerPoreSpace'                ); get_ixDiag = iLookDIAG%mLayerPoreSpace                  ! total pore space in each snow layer (-)
   case('mLayerMeltFreeze'               ); get_ixDiag = iLookDIAG%mLayerMeltFreeze                 ! ice content change from melt/freeze in each layer (kg m-3)
-  ! soil hydrology
+  ! total mass changes    
+  case('scalarTotalMassChange'          ); get_ixDiag = iLookDIAG%scalarTotalMassChange            ! mass change of all system together (kg m-2 s-1)
+    ! soil hydrology
   case('scalarInfilArea'                ); get_ixDiag = iLookDIAG%scalarInfilArea                  ! fraction of area where water can infiltrate, may be frozen (-)
   case('scalarSaturatedArea'            ); get_ixDiag = iLookDIAG%scalarSaturatedArea              ! fraction of area that is considered saturated (-)
   case('scalarFrozenArea'               ); get_ixDiag = iLookDIAG%scalarFrozenArea                 ! fraction of area that is considered impermeable due to soil ice (-)
@@ -1007,6 +1009,7 @@ contains
   case('basin__AquiferTranspire'       ); get_ixBvar = iLookBVAR%basin__AquiferTranspire         ! transpiration from the aquifer (m s-1)
   case('basin__TotalRunoff'            ); get_ixBvar = iLookBVAR%basin__TotalRunoff              ! total runoff to channel from all active components (m s-1)
   case('basin__SoilDrainage'           ); get_ixBvar = iLookBVAR%basin__SoilDrainage             ! soil drainage (m s-1)
+  case('basin__StorageChange'          ); get_ixBvar = iLookBVAR%basin__StorageChange            ! change in total basin storage (kg m-2 s-1)
   ! variables to compute runoff
   case('routingRunoffFuture'           ); get_ixBvar = iLookBVAR%routingRunoffFuture             ! runoff in future time steps (m s-1)
   case('routingFractionFuture'         ); get_ixBvar = iLookBVAR%routingFractionFuture           ! fraction of runoff in future time steps (-)

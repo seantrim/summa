@@ -213,8 +213,8 @@ contains
  ixStateType(ixNrgLayer) = iname_nrgLayer
 
  ! define the state type for the snow+soil domain (hydrology)
- if(nSnow>0) ixStateType( ixHydLayer(      1:nSnow)   ) = iname_watLayer
-             ixStateType( ixHydLayer(nSnow+1:nLayers) ) = iname_matLayer ! refine later to be either iname_watLayer or iname_matLayer
+ ixStateType( ixHydLayer(1:nLayers)) = iname_watLayer
+ if(nSoil>0) ixStateType( ixHydLayer(nSnow+1:nLayers) ) = iname_matLayer ! refine later to be either iname_watLayer or iname_matLayer
 
  ! define the state type for the aquifer
  if(includeAquifer) ixStateType( ixWatAquifer(1) ) = iname_watAquifer
@@ -228,13 +228,15 @@ contains
 
  ! define the domain type for snow
  if(nSnow>0)then
-  ixDomainType( ixNrgLayer(1:nSnow) ) = iname_snow
-  ixDomainType( ixHydLayer(1:nSnow) ) = iname_snow
+   ixDomainType( ixNrgLayer(1:nSnow) ) = iname_snow
+   ixDomainType( ixHydLayer(1:nSnow) ) = iname_snow
  endif
 
  ! define the domain type for soil
- ixDomainType( ixNrgLayer(nSnow+1:nLayers) ) = iname_soil
- ixDomainType( ixHydLayer(nSnow+1:nLayers) ) = iname_soil
+ if(nSoil>0)then
+   ixDomainType( ixNrgLayer(nSnow+1:nLayers) ) = iname_soil
+   ixDomainType( ixHydLayer(nSnow+1:nLayers) ) = iname_soil
+ endif
 
  ! define the domain type for the aquifer
  if(includeAquifer) ixDomainType( ixWatAquifer(1) ) = iname_aquifer
@@ -253,8 +255,10 @@ contains
  endif
 
  ! define the index of the each control volume in the soil domain
- ixControlVolume( ixNrgLayer(nSnow+1:nLayers) ) = ixSoilState(1:nSoil)
- ixControlVolume( ixHydLayer(nSnow+1:nLayers) ) = ixSoilState(1:nSoil)
+ if(nSoil>0)then
+   ixControlVolume( ixNrgLayer(nSnow+1:nLayers) ) = ixSoilState(1:nSoil)
+   ixControlVolume( ixHydLayer(nSnow+1:nLayers) ) = ixSoilState(1:nSoil)
+ endif
 
  ! define the index for the control volumes in the aquifer
  if(includeAquifer) ixControlVolume( ixWatAquifer(1) ) = 1

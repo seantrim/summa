@@ -255,6 +255,7 @@ subroutine coupled_em(&
   logical(lgt)                         :: bal_soil               ! flag to denote if computed a soil balance
   logical(lgt)                         :: bal_aq                 ! flag to denote if computed an aquifer balance
   integer(i4b)                         :: iVar                   ! loop through model variables
+  real(rkind)                          :: delCanWat              ! change in canopy water (kg m-2)
   real(rkind)                          :: balanceSoilCompress    ! total soil compression (kg m-2)
   real(rkind)                          :: scalarCanopyWatBalError! water balance error for the vegetation canopy (kg m-2)
   real(rkind)                          :: scalarSoilWatBalError  ! water balance error (kg m-2)
@@ -274,7 +275,7 @@ subroutine coupled_em(&
   real(rkind),allocatable              :: innerBalanceLayerNrg(:)  ! inner step balances for domain with multiple layers
   ! test balance checks
   logical(lgt),parameter               :: printBalance=.false.   ! flag to print the balance checks
-  real(rkind),allocatable              :: liqSnowInit(:)         ! volumetric liquid water conetnt of snow at the start of the time step
+  real(rkind),allocatable              :: liqSnowInit(:)         ! volumetric liquid water content of snow at the start of the time step
   real(rkind),allocatable              :: liqSoilInit(:)         ! soil moisture at the start of the time step
   ! timing information
   integer(kind=8)                      :: count_rate 
@@ -405,8 +406,13 @@ subroutine coupled_em(&
       scalarInitCanopyIce = scalarCanopyIce    ! initial ice          on the vegetation canopy (kg m-2)
 
       ! compute total soil moisture and ice at the *START* of the step (kg m-2)
-      scalarTotalSoilLiq = sum(iden_water*mLayerVolFracLiq(1:nSoil)*mLayerDepth(1:nSoil))
-      scalarTotalSoilIce = sum(iden_water*mLayerVolFracIce(1:nSoil)*mLayerDepth(1:nSoil))  ! NOTE: no expansion and hence use iden_water
+      if(nSoil>0)then
+        scalarTotalSoilLiq = sum(iden_water*mLayerVolFracLiq(1:nSoil)*mLayerDepth(1:nSoil))
+        scalarTotalSoilIce = sum(iden_water*mLayerVolFracIce(1:nSoil)*mLayerDepth(1:nSoil))  ! NOTE: no expansion and hence use iden_water
+      else
+        scalarTotalSoilLiq = 0._rkind
+        scalarTotalSoilIce = 0._rkind
+      endif
 
       ! compute storage of water in the canopy and the soil
       balanceCanopyWater0 = scalarCanopyLiq + scalarCanopyIce
@@ -423,7 +429,7 @@ subroutine coupled_em(&
           err=20; return
         endif
         if(nSnow>0) liqSnowInit = prog_data%var(iLookPROG%mLayerVolFracLiq)%dat(1:nSnow)
-                    liqSoilInit =                         mLayerVolFracLiq
+        if(nSoil>0) liqSoilInit = mLayerVolFracLiq
       endif
 
     ! end association of local variables with information in the data structures
@@ -437,12 +443,14 @@ subroutine coupled_em(&
     maxstep = mpar_data%var(iLookPARAM%maxstep)%dat(1)  ! maximum time step (s)
     maxstep_op = mpar_data%var(iLookPARAM%maxstep)%dat(1)/be_steps  ! maximum time step (s) to run opSplittin over
 
-    ! compute the number of layers with roots
-    nLayersRoots = count(prog_data%var(iLookPROG%iLayerHeight)%dat(nSnow:nLayers-1) < mpar_data%var(iLookPARAM%rootingDepth)%dat(1)-verySmall)
-    if(nLayersRoots == 0)then
-      message=trim(message)//'no roots within the soil profile'
-      err=20; return
-    end if
+    ! compute the number of layers with roots or layers that take infiltration
+    if(nSoil>0)then
+      nLayersRoots = count(prog_data%var(iLookPROG%iLayerHeight)%dat(nSnow:nLayers-1) < mpar_data%var(iLookPARAM%rootingDepth)%dat(1)-verySmall)
+      if(nLayersRoots==0)then
+        message=trim(message)//'no roots within the soil profile'
+        err=20; return
+      end if
+    endif
 
     ! define the foliage nitrogen factor
     diag_data%var(iLookDIAG%scalarFoliageNitrogenFactor)%dat(1) = 1._rkind  ! foliage nitrogen concentration (1.0 = saturated)
@@ -454,7 +462,11 @@ subroutine coupled_em(&
     ! ------------------------
 
     ! compute the temperature of the root zone: used in vegetation phenology
-    diag_data%var(iLookDIAG%scalarRootZoneTemp)%dat(1) = sum(prog_data%var(iLookPROG%mLayerTemp)%dat(nSnow+1:nSnow+nLayersRoots)) / real(nLayersRoots, kind(rkind))
+    if(nSoil>0)then
+      diag_data%var(iLookDIAG%scalarRootZoneTemp)%dat(1) = sum(prog_data%var(iLookPROG%mLayerTemp)%dat(nSnow+1:nSnow+nLayersRoots)) / real(nLayersRoots, kind(rkind))
+    else
+      diag_data%var(iLookDIAG%scalarRootZoneTemp)%dat(1) = realMissing
+    endif
 
     ! remember if we compute the vegetation flux on the previous sub-step
     computeVegFluxOld = computeVegFlux
@@ -544,7 +556,7 @@ subroutine coupled_em(&
     call snowAlbedo(&
                     ! input: model control
                     data_step,                   & ! intent(in): model time step (s)
-                    (nSnow > 0),                 & ! intent(in): logical flag to denote if snow is present
+                    (nSnow>0),                   & ! intent(in): logical flag to denote if snow is present
                     ! input/output: data structures
                     model_decisions,             & ! intent(in):    model decisions
                     mpar_data,                   & ! intent(in):    model parameters
@@ -726,11 +738,6 @@ subroutine coupled_em(&
           end select
         end do  ! looping through variables
 
-        ! re-assign dimension lengths
-        nSnow   = count(indx_data%var(iLookINDEX%layerType)%dat==iname_snow)
-        nSoil   = count(indx_data%var(iLookINDEX%layerType)%dat==iname_soil)
-        nLayers = nSnow+nSoil
-
         ! *** merge/sub-divide snow layers...
         ! -----------------------------------
         call volicePack(&
@@ -783,18 +790,16 @@ subroutine coupled_em(&
             theta_res            => mpar_data%var(iLookPARAM%theta_res)%dat               & ! soil residual volumetric water content (-)
             )  ! (associate local variables with model parameters)    
             
-            if(nSnow>0)then 
-              do iLayer=1,nSnow
-                mLayerVolFracWat(iLayer) = mLayerVolFracLiq(iLayer) + mLayerVolFracIce(iLayer)*(iden_ice/iden_water)
-                ! compute enthalpy for snow layers
-                call T2enthTemp_snow(&
-                             snowfrz_scale,             & ! intent(in):  scaling parameter for the snow freezing curve  (K-1)
-                             mLayerTemp(iLayer),        & ! intent(in):  layer temperature (K)
-                             mLayerVolFracWat(iLayer),  & ! intent(in):  volumetric total water content (-)
-                             mLayerEnthTemp(iLayer))      ! intent(out): temperature component of enthalpy of each snow layer (J m-3)
-                mLayerEnthalpy(iLayer) = mLayerEnthTemp(iLayer) - iden_ice * LH_fus * mLayerVolFracIce(iLayer)
-              end do  ! looping through snow layers
-            endif
+            do iLayer=1,nSnow
+              mLayerVolFracWat(iLayer) = mLayerVolFracLiq(iLayer) + mLayerVolFracIce(iLayer)*(iden_ice/iden_water)
+              ! compute enthalpy for snow layers
+              call T2enthTemp_snow(&
+                           snowfrz_scale,             & ! intent(in):  scaling parameter for the snow freezing curve  (K-1)
+                           mLayerTemp(iLayer),        & ! intent(in):  layer temperature (K)
+                           mLayerVolFracWat(iLayer),  & ! intent(in):  volumetric total water content (-)
+                           mLayerEnthTemp(iLayer))      ! intent(out): temperature component of enthalpy of each snow layer (J m-3)
+              mLayerEnthalpy(iLayer) = mLayerEnthTemp(iLayer) - iden_ice * LH_fus * mLayerVolFracIce(iLayer)
+            end do  ! looping through snow layers
             do iLayer=nSnow+1,nLayers
               mLayerVolFracWat(iLayer) = mLayerVolFracLiq(iLayer) + mLayerVolFracIce(iLayer)
               ! compute enthalpy for soil layers
@@ -920,12 +925,11 @@ subroutine coupled_em(&
           scalarCanopyWat = scalarCanopyLiq + scalarCanopyIce  ! kg m-2
 
           ! compute the total water content in snow and soil, no ice expansion allowed for soil
-          if(nSnow>0)&
-            mLayerVolFracWat(      1:nSnow  ) = mLayerVolFracLiq(      1:nSnow  ) + mLayerVolFracIce(      1:nSnow  )*(iden_ice/iden_water)
-          mLayerVolFracWat(nSnow+1:nLayers)   = mLayerVolFracLiq(nSnow+1:nLayers) + mLayerVolFracIce(nSnow+1:nLayers)
+          mLayerVolFracWat(      1:nSnow  ) = mLayerVolFracLiq(      1:nSnow  ) + mLayerVolFracIce(      1:nSnow  )*(iden_ice/iden_water)
+          mLayerVolFracWat(nSnow+1:nLayers) = mLayerVolFracLiq(nSnow+1:nLayers) + mLayerVolFracIce(nSnow+1:nLayers)
 
           ! compute enthalpy of the top soil layer if changed with surface melt pond
-          if( (enthalpyStateVec .or. computeEnthalpy) .and. nSnow==0 .and. prog_data%var(iLookPROG%scalarSWE)%dat(1)>0._rkind )then
+          if( (enthalpyStateVec .or. computeEnthalpy) .and. nSnow==0 .and. prog_data%var(iLookPROG%scalarSWE)%dat(1)>0._rkind .and. nSoil>0)then
             call T2enthTemp_soil(&
                       use_lookup,                                               & ! intent(in):  flag to use the lookup table for soil enthalpy
                       soil_dens_intr,                                           & ! intent(in):  intrinsic soil density (kg m-3)
@@ -1194,7 +1198,7 @@ subroutine coupled_em(&
           if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; end if
 
           ! recompute snow depth, SWE, and layer water
-          if(nSnow > 0)then
+          if(nSnow>0)then
             prog_data%var(iLookPROG%scalarSnowDepth)%dat(1) = sum( mLayerDepth(1:nSnow) )
             prog_data%var(iLookPROG%scalarSWE)%dat(1)       = sum( (mLayerVolFracLiq(1:nSnow)*iden_water &
                                                               + mLayerVolFracIce(1:nSnow)*iden_ice) * mLayerDepth(1:nSnow) )
@@ -1333,7 +1337,7 @@ subroutine coupled_em(&
     call newsnwfall(&
                   ! input: model control
                   data_step,                                                 & ! time step (seconds)
-                  (nSnow > 0),                                               & ! logical flag if snow layers exist
+                  (nSnow>0),                                                 & ! logical flag if snow layers exist
                   snowfrz_scale,                                             & ! freeezing curve parameter for snow (K-1)
                   ! input: diagnostic scalar variables
                   diag_data%var(iLookDIAG%scalarSnowfallTemp)%dat(1),        & ! computed temperature of fresh snow (K)
@@ -1352,7 +1356,7 @@ subroutine coupled_em(&
     if(err/=0)then; err=30; message=trim(message)//trim(cmessage); return; end if
 
     ! recompute snow depth, SWE, and top layer water
-    if(nSnow > 0)then
+    if(nSnow>0)then
       prog_data%var(iLookPROG%scalarSnowDepth)%dat(1) = sum(  prog_data%var(iLookPROG%mLayerDepth)%dat(1:nSnow))
       prog_data%var(iLookPROG%scalarSWE)%dat(1)       = sum( (prog_data%var(iLookPROG%mLayerVolFracLiq)%dat(1:nSnow)*iden_water + &
                                                               prog_data%var(iLookPROG%mLayerVolFracIce)%dat(1:nSnow)*iden_ice) &
@@ -1372,7 +1376,7 @@ subroutine coupled_em(&
     ! re-assign dimension lengths
     nSnow   = count(indx_data%var(iLookINDEX%layerType)%dat==iname_snow)
     nSoil   = count(indx_data%var(iLookINDEX%layerType)%dat==iname_soil)
-    nLayers = nSnow+nSoil
+    nLayers = nSnow + nSoil
 
     ! update coordinate variables
     call calcHeight(&
@@ -1443,6 +1447,8 @@ subroutine coupled_em(&
       scalarTotalSnowEnthalpy    => diag_data%var(iLookDIAG%scalarTotalSnowEnthalpy)%dat(1)                       ,& ! total enthalpy of the snow column (J m-3)
       ! state variables in the aquifer
       scalarAquiferStorage       => prog_data%var(iLookPROG%scalarAquiferStorage)%dat(1)                          ,&  ! aquifer storage (m)
+      ! mass change of the system
+      scalarTotalMassChange      => diag_data%var(iLookDIAG%scalarTotalMassChange)%dat(1)                         ,& ! mass change of system  (kg m-2 s-1)
       ! error tolerance
       absConvTol_liquid          => mpar_data%var(iLookPARAM%absConvTol_liquid)%dat(1)                             &  ! absolute convergence tolerance for vol frac liq water (-)
       ) ! (association of local variables with information in the data structures
@@ -1476,12 +1482,10 @@ subroutine coupled_em(&
       ! -----
       ! * balance checks for the canopy...
       ! ----------------------------------
-
-      ! if computing the vegetation flux
       if(computeVegFlux)then
-        ! balance checks for the canopy
         ! NOTE: need to put the balance checks in the sub-step loop so that we can recompute if necessary
-        scalarCanopyWatBalError = scalarCanopyWat - (balanceCanopyWater0 + (scalarSnowfall - averageThroughfallSnow)*data_step + (scalarRainfall - averageThroughfallRain)*data_step &
+        delCanWat = scalarCanopyWat - balanceCanopyWater0 
+        scalarCanopyWatBalError = delCanWat - ( (scalarSnowfall - averageThroughfallSnow)*data_step + (scalarRainfall - averageThroughfallRain)*data_step &
                                   - averageCanopySnowUnloading*data_step - averageCanopyLiqDrainage*data_step + averageCanopySublimation*data_step + averageCanopyEvaporation*data_step)
         if(abs(scalarCanopyWatBalError) > absConvTol_liquid*iden_water*10._rkind .and. checkMassBalance_ds)then
           write(*,'(a,1x,f20.10)') 'data_step                    = ', data_step
@@ -1499,19 +1503,23 @@ subroutine coupled_em(&
           message=trim(message)//'canopy hydrology does not balance'
           err=20; return
         end if
+      else
+        delCanWat = 0._rkind
+        scalarCanopyWatBalError = 0._rkind
       endif  ! if computing the vegetation flux
 
       ! -----
       ! * balance checks for SWE...
       ! ---------------------------
-
       ! check the individual layers
-      if(printBalance .and. nSnow>0)then
-        write(*,'(a,1x,10(f12.8,1x))') 'liqSnowInit       = ', liqSnowInit
-        write(*,'(a,1x,10(f12.8,1x))') 'volFracLiq        = ', mLayerVolFracLiq(1:nSnow)
-        write(*,'(a,1x,10(f12.8,1x))') 'iLayerLiqFluxSnow = ', flux_data%var(iLookFLUX%iLayerLiqFluxSnow)%dat*iden_water*data_step
-        write(*,'(a,1x,10(f12.8,1x))') 'mLayerLiqFluxSnow = ', flux_data%var(iLookFLUX%mLayerLiqFluxSnow)%dat*data_step
-        write(*,'(a,1x,10(f12.8,1x))') 'change volFracLiq = ', mLayerVolFracLiq(1:nSnow) - liqSnowInit
+      if(printBalance)then
+        if(nSnow>0)then
+          write(*,'(a,1x,10(f12.8,1x))') 'liqSnowInit       = ', liqSnowInit
+          write(*,'(a,1x,10(f12.8,1x))') 'volFracLiq        = ', mLayerVolFracLiq(1:nSnow)
+          write(*,'(a,1x,10(f12.8,1x))') 'iLayerLiqFluxSnow = ', flux_data%var(iLookFLUX%iLayerLiqFluxSnow)%dat*iden_water*data_step
+          write(*,'(a,1x,10(f12.8,1x))') 'mLayerLiqFluxSnow = ', flux_data%var(iLookFLUX%mLayerLiqFluxSnow)%dat*iden_water*data_step
+          write(*,'(a,1x,10(f12.8,1x))') 'change volFracLiq = ', mLayerVolFracLiq(1:nSnow) - liqSnowInit
+        endif
         deallocate(liqSnowInit, stat=err)
         if(err/=0)then
           message=trim(message)//'unable to deallocate space for the initial volumetric liquid water content of snow'
@@ -1541,36 +1549,22 @@ subroutine coupled_em(&
           message=trim(message)//'SWE does not balance'
           err=20; return
         endif  ! if failed mass balance check
+      else
+        delSWE = 0._rkind
       endif  ! if snow layers exist
 
       ! -----
       ! * balance checks for soil...
       ! ----------------------------
-
-      ! compute the liquid water and ice content at the end of the time step
-      scalarTotalSoilLiq = sum(iden_water*mLayerVolFracLiq(nSnow+1:nLayers)*mLayerDepth(nSnow+1:nLayers))
-      scalarTotalSoilIce = sum(iden_water*mLayerVolFracIce(nSnow+1:nLayers)*mLayerDepth(nSnow+1:nLayers))   ! NOTE: no expansion of soil, hence use iden_water
-
-      ! get the total water in the soil (liquid plus ice) at the end of the time step (kg m-2)
-      scalarTotalSoilWat = scalarTotalSoilLiq + scalarTotalSoilIce
-
-      ! get the total aquifer storage at the start of the time step (kg m-2)
-      balanceAquifer1 = scalarAquiferStorage*iden_water
-
-      ! get the input and output to/from the soil zone (kg m-2)
-      balanceSoilInflux        = averageSoilInflux*iden_water*data_step
-      balanceSoilBaseflow      = averageSoilBaseflow*iden_water*data_step
-      balanceSoilDrainage      = averageSoilDrainage*iden_water*data_step
-      balanceSoilET            = (averageCanopyTranspiration + averageGroundEvaporation)*data_step
-      balanceSoilCompress      = averageSoilCompress*data_step
-
       ! check the individual layers
       if(printBalance)then
-        write(*,'(a,1x,10(f12.8,1x))') 'liqSoilInit       = ', liqSoilInit
-        write(*,'(a,1x,10(f12.8,1x))') 'volFracLiq        = ', mLayerVolFracLiq(nSnow+1:nLayers)
-        write(*,'(a,1x,10(f12.8,1x))') 'iLayerLiqFluxSoil = ', flux_data%var(iLookFLUX%iLayerLiqFluxSoil)%dat*iden_water*data_step
-        write(*,'(a,1x,10(f12.8,1x))') 'mLayerLiqFluxSoil = ', flux_data%var(iLookFLUX%mLayerLiqFluxSoil)%dat*data_step
-        write(*,'(a,1x,10(f12.8,1x))') 'change volFracLiq = ', mLayerVolFracLiq(nSnow+1:nLayers) - liqSoilInit
+        if(nSoil>0)then
+          write(*,'(a,1x,10(f12.8,1x))') 'liqSoilInit       = ', liqSoilInit
+          write(*,'(a,1x,10(f12.8,1x))') 'volFracLiq        = ', mLayerVolFracLiq(nSnow+1:nLayers)
+          write(*,'(a,1x,10(f12.8,1x))') 'iLayerLiqFluxSoil = ', flux_data%var(iLookFLUX%iLayerLiqFluxSoil)%dat*iden_water*data_step
+          write(*,'(a,1x,10(f12.8,1x))') 'mLayerLiqFluxSoil = ', flux_data%var(iLookFLUX%mLayerLiqFluxSoil)%dat*iden_water*data_step
+          write(*,'(a,1x,10(f12.8,1x))') 'change volFracLiq = ', mLayerVolFracLiq(nSnow+1:nLayers) - liqSoilInit
+        endif
         deallocate(liqSoilInit, stat=err)
         if(err/=0)then
         message=trim(message)//'unable to deallocate space for the initial soil moisture'
@@ -1578,24 +1572,58 @@ subroutine coupled_em(&
         endif
       endif
 
-      ! check the soil water balance
-      scalarSoilWatBalError  = scalarTotalSoilWat - (balanceSoilWater0 + (balanceSoilInflux + balanceSoilET - balanceSoilBaseflow - balanceSoilDrainage - balanceSoilCompress) )
-      if(abs(scalarSoilWatBalError) > absConvTol_liquid*iden_water*10._rkind .and. checkMassBalance_ds)then  ! NOTE: kg m-2, so need coarse tolerance to account for precision issues
-        write(*,*)               'solution method       = ', ixSolution
-        write(*,'(a,1x,f20.10)') 'data_step             = ', data_step
-        write(*,'(a,1x,f20.10)') 'balanceSoilCompress   = ', balanceSoilCompress
-        write(*,'(a,1x,f20.10)') 'scalarTotalSoilLiq    = ', scalarTotalSoilLiq
-        write(*,'(a,1x,f20.10)') 'scalarTotalSoilIce    = ', scalarTotalSoilIce
-        write(*,'(a,1x,f20.10)') 'balanceSoilWater0     = ', balanceSoilWater0
-        write(*,'(a,1x,f20.10)') 'balanceSoilWater1     = ', scalarTotalSoilWat
-        write(*,'(a,1x,f20.10)') 'balanceSoilInflux     = ', balanceSoilInflux
-        write(*,'(a,1x,f20.10)') 'balanceSoilBaseflow   = ', balanceSoilBaseflow
-        write(*,'(a,1x,f20.10)') 'balanceSoilDrainage   = ', balanceSoilDrainage
-        write(*,'(a,1x,f20.10)') 'balanceSoilET         = ', balanceSoilET
-        write(*,'(a,1x,f20.10)') 'scalarSoilWatBalError = ', scalarSoilWatBalError
-        message=trim(message)//'soil hydrology does not balance'
-        err=20; return
-      end if
+      ! check soil water balance 
+      if(nSoil>0)then
+        ! compute the liquid water and ice content at the end of the time step
+        scalarTotalSoilLiq = sum(iden_water*mLayerVolFracLiq(nSnow+1:nLayers)*mLayerDepth(nSnow+1:nLayers))
+        scalarTotalSoilIce = sum(iden_water*mLayerVolFracIce(nSnow+1:nLayers)*mLayerDepth(nSnow+1:nLayers))   ! NOTE: no expansion of soil, hence use iden_water
+
+        ! get the total water in the soil (liquid plus ice) at the end of the time step (kg m-2)
+        scalarTotalSoilWat = scalarTotalSoilLiq + scalarTotalSoilIce
+
+        ! get the input and output to/from the soil zone (kg m-2)
+        balanceSoilInflux        = averageSoilInflux*iden_water*data_step
+        balanceSoilBaseflow      = averageSoilBaseflow*iden_water*data_step
+        balanceSoilDrainage      = averageSoilDrainage*iden_water*data_step
+        balanceSoilET            = (averageCanopyTranspiration + averageGroundEvaporation)*data_step
+        balanceSoilCompress      = averageSoilCompress*data_step
+
+        ! check the soil water balance
+        scalarSoilWatBalError  = scalarTotalSoilWat - (balanceSoilWater0 + (balanceSoilInflux + balanceSoilET - balanceSoilBaseflow - balanceSoilDrainage - balanceSoilCompress) )
+        if(abs(scalarSoilWatBalError) > absConvTol_liquid*iden_water*10._rkind .and. checkMassBalance_ds)then  ! NOTE: kg m-2, so need coarse tolerance to account for precision issues
+          write(*,*)               'solution method       = ', ixSolution
+          write(*,'(a,1x,f20.10)') 'data_step             = ', data_step
+          write(*,'(a,1x,f20.10)') 'balanceSoilCompress   = ', balanceSoilCompress
+          write(*,'(a,1x,f20.10)') 'scalarTotalSoilLiq    = ', scalarTotalSoilLiq
+          write(*,'(a,1x,f20.10)') 'scalarTotalSoilIce    = ', scalarTotalSoilIce
+          write(*,'(a,1x,f20.10)') 'balanceSoilWater0     = ', balanceSoilWater0
+          write(*,'(a,1x,f20.10)') 'balanceSoilWater1     = ', scalarTotalSoilWat
+          write(*,'(a,1x,f20.10)') 'balanceSoilInflux     = ', balanceSoilInflux
+          write(*,'(a,1x,f20.10)') 'balanceSoilBaseflow   = ', balanceSoilBaseflow
+          write(*,'(a,1x,f20.10)') 'balanceSoilDrainage   = ', balanceSoilDrainage
+          write(*,'(a,1x,f20.10)') 'balanceSoilET         = ', balanceSoilET
+          write(*,'(a,1x,f20.10)') 'scalarSoilWatBalError = ', scalarSoilWatBalError
+          message=trim(message)//'soil hydrology does not balance'
+          err=20; return
+        end if
+      else
+        scalarTotalSoilLiq = 0._rkind
+        scalarTotalSoilIce = 0._rkind
+        scalarTotalSoilWat = 0._rkind
+        scalarSoilWatBalError = 0._rkind
+      endif ! if soil layers exist
+
+            ! -----
+      ! * balance checks for the aquifer...
+      ! ------------------------------------
+      ! Currently no balance checks for the aquifer
+      ! get the total aquifer storage at the end of the time step (kg m-2)
+      balanceAquifer1 = scalarAquiferStorage*iden_water
+
+      ! -----
+      ! sum of water changes in all of the domains to get the total water change rate
+      ! -------------------------------------------------------
+      scalarTotalMassChange = ((scalarTotalSoilWat - balanceSoilWater0) + delSWE + delCanWat + (balanceAquifer1-balanceAquifer0))/data_step
 
       ! -----
       ! save the enthalpy or temperature component of enthalpy, and total enthalpy
@@ -1642,10 +1670,11 @@ subroutine coupled_em(&
                         err,cmessage)            ! intent(out): error control
         if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
       endif
-      ! save the total soil enthalpy
-      scalarTotalSoilEnthalpy = sum(mLayerEnthalpy(nSnow+1:nLayers) * mLayerDepth(nSnow+1:nLayers))/sum(mLayerDepth(nSnow+1:nLayers))
-      ! save the total snow enthalpy
+      scalarTotalSnowEnthalpy = realMissing
+      scalarTotalSoilEnthalpy = realMissing
+      ! save the total enthalpies
       if(nSnow>0) scalarTotalSnowEnthalpy = sum(mLayerEnthalpy(1:nSnow) * mLayerDepth(1:nSnow))/sum(mLayerDepth(1:nSnow))
+      if(nSoil>0) scalarTotalSoilEnthalpy = sum(mLayerEnthalpy(nSnow+1:nLayers) * mLayerDepth(nSnow+1:nLayers))/sum(mLayerDepth(nSnow+1:nLayers))
 
       ! save the surface temperature (just to make things easier to visualize)
       prog_data%var(iLookPROG%scalarSurfaceTemp)%dat(1) = prog_data%var(iLookPROG%mLayerTemp)%dat(1)

@@ -539,16 +539,24 @@ subroutine vegNrgFlux(&
         ! NOTE: variables are constant over the substep, to simplify relating energy and mass fluxes
         if (firstFluxCall) then
           scalarLatHeatSubVapCanopy = getLatentHeatValue(canopyTempTrial)
-          if (nSnow > 0) then ! case when there is snow on the ground (EXCLUDE "snow without a layer" -- in this case, evaporate from the soil)
+          if (nSnow>0) then ! case when there is snow on the ground (EXCLUDE "snow without a layer" -- in this case, evaporate from the soil)
             if (groundTempTrial > Tfreeze) then; err=20; message=trim(message)//'do not expect ground temperature > 0 when snow is on the ground'; return; end if
             scalarLatHeatSubVapGround = LH_sub  ! sublimation from snow
           else ! case when the ground is less than a layer of snow (e.g., bare soil or snow without a layer)
-            scalarLatHeatSubVapGround = LH_vap  ! evaporation of water in the soil pores: this occurs even if frozen because of super-cooled water
-          end if  ! (there is snow enough for a layer on the ground)
+            if (nSoil>0)then
+              scalarLatHeatSubVapGround = LH_vap  ! evaporation of water in the soil pores: this occurs even if frozen because of super-cooled water
+            else
+              err=20; message=trim(message)//'unable to identify snow-free ground surface'; return
+            end if
+          end if  ! end if there is snow on the ground
         end if  ! (first flux call)
 
-        ! compute the roughness length of the ground (ground below the canopy or non-vegetated surface)
-        z0Ground = z0Soil*(1._rkind - scalarGroundSnowFraction) + z0Snow*scalarGroundSnowFraction     ! roughness length (m)
+        ! compute the roughness length (m) of the ground (ground below the canopy or non-vegetated surface)
+        if (nSoil>0)then
+          z0Ground = z0Soil*(1._rkind - scalarGroundSnowFraction) + z0Snow*scalarGroundSnowFraction
+        else
+          err=20; message=trim(message)//'unable to identify ground surface under potential snow'; return
+        end if
 
         ! compute the total vegetation area index (leaf plus stem)
         VAI        = scalarLAI + scalarSAI  ! vegetation area index
@@ -573,7 +581,9 @@ subroutine vegNrgFlux(&
         if (.not.computeVegFlux) scalarCanopyEmissivity=0._rkind
 
         ! compute emissivity of the ground surface (-)
-        groundEmissivity = scalarGroundSnowFraction*snowEmissivity + (1._rkind - scalarGroundSnowFraction)*soilEmissivity  ! emissivity of the ground surface (-)
+        if (nSoil>0)then
+          groundEmissivity = scalarGroundSnowFraction*snowEmissivity + (1._rkind - scalarGroundSnowFraction)*soilEmissivity
+        end if
 
         ! compute the fraction of canopy that is wet
         ! NOTE: we either sublimate or evaporate over the entire substep
@@ -678,31 +688,36 @@ subroutine vegNrgFlux(&
         !         (2) derivative calculations are rather complex (iterations within the Ball-Berry routine); and
         !         (3) stomatal resistance does not change rapidly
         if (firstFluxCall) then
-          ! compute soil moisture factor controlling stomatal resistance
-          call soilResist(&
-                          ! input (model decisions)
-                          ix_soilStress,                     & ! intent(in):  choice of function for the soil moisture control on stomatal resistance
-                          ix_groundwatr,                     & ! intent(in):  groundwater parameterization
-                          ! input (state variables)
-                          mLayerMatricHead(1:nSoil),         & ! intent(in):  matric head in each soil layer (m)
-                          mLayerVolFracLiq(nSnow+1:nLayers), & ! intent(in):  volumetric fraction of liquid water in each soil layer (-)
-                          scalarAquiferStorage,              & ! intent(in):  aquifer storage (m)
-                          ! input (diagnostic variables)
-                          mLayerRootDensity(1:nSoil),        & ! intent(in):  root density in each layer (-)
-                          scalarAquiferRootFrac,             & ! intent(in):  fraction of roots below the lowest soil layer (-)
-                          ! input (parameters)
-                          plantWiltPsi,                      & ! intent(in):  matric head at wilting point (m)
-                          soilStressParam,                   & ! intent(in):  parameter in the exponential soil stress function (-)
-                          critSoilWilting,                   & ! intent(in):  critical vol. liq. water content when plants are wilting (-)
-                          critSoilTranspire,                 & ! intent(in):  critical vol. liq. water content when transpiration is limited (-)
-                          critAquiferTranspire,              & ! intent(in):  critical aquifer storage value when transpiration is limited (m)
-                          ! output
-                          scalarTranspireLim,                & ! intent(out): weighted average of the transpiration limiting factor (-)
-                          mLayerTranspireLim(1:nSoil),       & ! intent(out): transpiration limiting factor in each layer (-)
-                          scalarTranspireLimAqfr,            & ! intent(out): transpiration limiting factor for the aquifer (-)
-                          err,cmessage                       ) ! intent(out): error control
-          if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
-          
+          if (nSoil>0) then !  need values for aquifer
+            ! compute soil moisture factor controlling stomatal resistance, and for transpiration limiting factor in aquifer and soil
+            call soilResist(&
+                            ! input (model decisions)
+                            ix_soilStress,                     & ! intent(in):  choice of function for the soil moisture control on stomatal resistance
+                            ix_groundwatr,                     & ! intent(in):  groundwater parameterization
+                            ! input (state variables)
+                            mLayerMatricHead(1:nSoil),         & ! intent(in):  matric head in each soil layer (m)
+                            mLayerVolFracLiq(nSnow+1:nLayers), & ! intent(in):  volumetric fraction of liquid water in each soil layer (-)
+                            scalarAquiferStorage,              & ! intent(in):  aquifer storage (m)
+                            ! input (diagnostic variables)
+                            mLayerRootDensity(1:nSoil),        & ! intent(in):  root density in each layer (-)
+                            scalarAquiferRootFrac,             & ! intent(in):  fraction of roots below the lowest soil layer (-)
+                            ! input (parameters)
+                            plantWiltPsi,                      & ! intent(in):  matric head at wilting point (m)
+                            soilStressParam,                   & ! intent(in):  parameter in the exponential soil stress function (-)
+                            critSoilWilting,                   & ! intent(in):  critical vol. liq. water content when plants are wilting (-)
+                            critSoilTranspire,                 & ! intent(in):  critical vol. liq. water content when transpiration is limited (-)
+                            critAquiferTranspire,              & ! intent(in):  critical aquifer storage value when transpiration is limited (m)
+                            ! output
+                            scalarTranspireLim,                & ! intent(out): weighted average of the transpiration limiting factor (-)
+                            mLayerTranspireLim(1:nSoil),       & ! intent(out): transpiration limiting factor in each layer (-)
+                            scalarTranspireLimAqfr,            & ! intent(out): transpiration limiting factor for the aquifer (-)
+                            err,cmessage                       ) ! intent(out): error control
+            if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
+          else
+            ! set transpiration limiting factor in the case of aquifer with no soil
+            scalarTranspireLim     = 1._rkind ! no soil
+            scalarTranspireLimAqfr = 0._rkind ! no roots in aquifer
+          endif          
           ! compute the saturation vapor pressure for vegetation temperature
           TV_celcius = canopyTempTrial - Tfreeze
           call satVapPress(TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
@@ -778,11 +793,14 @@ subroutine vegNrgFlux(&
         ! compute the relative humidity in the top soil layer and the resistance at the ground surface
         ! NOTE: computations are based on start-of-step values, so only compute for the first flux call
         if (firstFluxCall) then
-        ! soil water evaporation factor [0-1]
-          soilEvapFactor = mLayerVolFracLiq(nSnow+1)/(theta_sat - theta_res)
-          ! resistance from the soil [s m-1]
-          scalarSoilResistance = scalarGroundSnowFraction*1._rkind + (1._rkind - scalarGroundSnowFraction)*EXP(8.25_rkind - 4.225_rkind*soilEvapFactor)  ! Sellers (1992)
+          if (nSoil>0)then
+            ! soil water evaporation factor [0-1]
+            soilEvapFactor = mLayerVolFracLiq(nSnow+1)/(theta_sat - theta_res)
+            ! resistance from the soil [s m-1]
+            scalarSoilResistance = scalarGroundSnowFraction*1._rkind + (1._rkind - scalarGroundSnowFraction)*EXP(8.25_rkind - 4.225_rkind*soilEvapFactor)  ! Sellers (1992)
           !scalarSoilResistance = scalarGroundSnowFraction*0._rkind + (1._rkind - scalarGroundSnowFraction)*exp(8.25_rkind - 6.0_rkind*soilEvapFactor)    ! Niu adjustment to decrease resitance for wet soil
+          end if
+                  
           ! relative humidity in the soil pores [0-1]
           if (mLayerMatricHead(1) > -1.e+6_rkind) then  ! avoid problems with numerical precision when soil is very dry
             if (groundTempTrial < 0._rkind) then
@@ -930,7 +948,7 @@ subroutine vegNrgFlux(&
           scalarSnowSublimation   = scalarLatHeatGround/LH_sub
         else
           ! NOTE: this should only occur when we have no snow layers, so check
-          if (nSnow > 0) then; err=20; message=trim(message)//'only expect ground evaporation when there are no snow layers'; return; end if
+          if (nSnow>0) then; err=20; message=trim(message)//'only expect ground evaporation when there are no snow layers'; return; end if
           scalarGroundEvaporation = scalarLatHeatGround/LH_vap
           scalarSnowSublimation   = 0._rkind  ! no sublimation from snow if no snow layers have formed
         end if

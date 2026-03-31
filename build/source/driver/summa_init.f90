@@ -66,7 +66,7 @@ subroutine summa_initialize(summa1_struc, err, message)
   USE summa_type, only:summa1_type_dec                        ! master summa data type
   ! subroutines and functions: initial priming
   USE summa_util, only:getCommandArguments                    ! process command line arguments
-  USE summaFileManager,only:summa_SetTimesDirsAndFiles       ! sets directories and filenames
+  USE summaFileManager,only:summa_SetTimesDirsAndFiles        ! sets directories and filenames
   USE summa_globalData,only:summa_defineGlobalData            ! used to define global summa data structures
   USE time_utils_module,only:elapsedSec                       ! calculate the elapsed time
   ! subroutines and functions: read dimensions (NOTE: NetCDF)
@@ -244,7 +244,7 @@ subroutine summa_initialize(summa1_struc, err, message)
         case('bpar'  ); call allocGlobal(bpar_meta,    bparStruct,    err, cmessage)   ! basin-average parameters
         case('bvar'  ); call allocGlobal(bvar_meta,    bvarStruct,    err, cmessage)   ! basin-average variables
         case('lookup'); call allocGlobal(lookup_meta,  lookupStruct,  err, cmessage)   ! basin-average variables
-        case('deriv' ); cycle
+        case('deriv' ); cycle ! derivatives are not stored in the data structure, but are instead computed on the fly and stored in local variables
         case default; err=20; message='unable to find structure name: '//trim(structInfo(iStruct)%structName)
       end select
       ! check errors

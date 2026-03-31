@@ -1176,13 +1176,18 @@ subroutine opSplittin(&
             ! add hydrology states for scalar variables
             if (iStateTypeSplit==massSplit .and. flux_meta(iVar)%varType==iLookVarType%scalarv) then
              select case(iDomainSplit)
-              case(snowSplit); if(iLayer==nSnow)   fluxMask%var(iVar)%dat = desiredFlux
-              case(soilSplit); 
-                if(iVar==iLookFLUX%scalarSoilDrainage .or. iVar==iLookFLUX%scalarAquiferRecharge & ! soil drainage, aq recharge changes with the bottom layer
-                   .or. iVar==iLookFLUX%scalarSoilBaseflow) then                                   ! soil baseflow changes with all layers, so compute after bottom layer
-                  if(iLayer==nLayers) fluxMask%var(iVar)%dat = desiredFlux
-                else ! other scalar variables in the soil domain change with the surface layer
-                  if(iLayer==nSnow+1) fluxMask%var(iVar)%dat = desiredFlux
+              case(snowSplit) ! snow scalar variables change with the bottom layer
+                if(nSnow>0 .and. iLayer==nSnow) fluxMask%var(iVar)%dat = desiredFlux
+              case(soilSplit)
+                if(nSoil>0)then
+                  if(iLayer==nLayers)then 
+                    ! soil drainage, aq recharge, soil baseflow changes with all layers, so compute after bottom layer
+                    if((iVar==iLookFLUX%scalarSoilDrainage .or. iVar==iLookFLUX%scalarAquiferRecharge &
+                     .or. iVar==iLookFLUX%scalarSoilBaseflow)) fluxMask%var(iVar)%dat = desiredFlux
+                  ! other scalar variables in the soil domain change with the surface layer
+                  elseif(iLayer==nSnow+1)then
+                    fluxMask%var(iVar)%dat = desiredFlux
+                  end if
                 end if
              end select
             end if  ! if hydrology split and scalar

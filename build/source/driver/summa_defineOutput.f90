@@ -118,7 +118,7 @@ contains
  ! *****************************************************************************
 
  ! define the file
- call def_output(using_buffer,summaVersion,buildTime,gitBranch,gitHash,nGRU,nHRU,gru_struc(1)%hruInfo(1)%nSoil,fileout,err,cmessage)
+ call def_output(using_buffer,summaVersion,buildTime,gitBranch,gitHash,nGRU,nHRU,fileout,err,cmessage)
  if(err/=0)then; message=trim(message)//trim(cmessage); return; endif
 
  ! write parameters with no time dimension

@@ -333,7 +333,7 @@ contains
    end associate
 
    ! if snow layers exist, compute snow depth and SWE
-   if(nSnow > 0)then
+   if(nSnow>0)then
     progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarSWE)%dat(1) = sum( (progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracLiq)%dat(1:nSnow)*iden_water + &
                                                                          progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracIce)%dat(1:nSnow)*iden_ice)  * &
                                                                          progData%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerDepth)%dat(1:nSnow) )

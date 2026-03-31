@@ -20,7 +20,7 @@
 
 module convert_funcs_module
 USE nr_type                                 ! variable types
-USE multiconst                             ! fixed parameters (lh vapzn, etc.)
+USE multiconst                              ! fixed parameters (lh vapzn, etc.)
 implicit none
 private
 public::RELHM2SPHM,SPHM2RELHM,WETBULBTMP,satVapPress,vapPress,getLatentHeatValue

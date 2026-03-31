@@ -97,6 +97,7 @@ contains
  ! output constraints
  USE globalData,only:maxLayers                               ! maximum number of layers
  USE globalData,only:maxSnowLayers                           ! maximum number of snow layers
+ USE globalData,only:maxSoilLayers                           ! maximum number of soil layers
  ! timing variables
  USE globalData,only:startSetup,endSetup                     ! date/time for the start and end of the parameter setup
  USE globalData,only:elapsedSetup                            ! elapsed time for the parameter setup
@@ -190,8 +191,16 @@ contains
   case default; err=20; message=trim(message)//'unable to identify option to combine/sub-divide snow layers'; return
  end select ! (option to combine/sub-divide snow layers)
 
- ! get the maximum number of layers
- maxLayers = gru_struc(1)%hruInfo(1)%nSoil + maxSnowLayers
+ ! get the maximum number of layers for soil and total
+ !  (max snow layers are fixed as above, snow layers may change)
+ maxLayers     = 0
+ maxSoilLayers = 0
+ do iGRU=1,nGRU
+  do iHRU=1,gru_struc(iGRU)%hruCount
+   maxSoilLayers = max(maxSoilLayers, gru_struc(iGRU)%hruInfo(iHRU)%nSoil)
+   maxLayers = max(maxLayers, maxSnowLayers+gru_struc(iGRU)%hruInfo(iHRU)%nSoil)
+  end do
+ end do
 
  ! *****************************************************************************
  ! *** read local attributes for each HRU
@@ -361,10 +370,10 @@ contains
 
   ! identify the total basin area for a GRU (m2)
   associate(totalArea => bvarStruct%gru(iGRU)%var(iLookBVAR%basin__totalArea)%dat(1) )
-  totalArea = 0._rkind
-  do iHRU=1,gru_struc(iGRU)%hruCount
-   totalArea = totalArea + attrStruct%gru(iGRU)%hru(iHRU)%var(iLookATTR%HRUarea)
-  end do
+   totalArea = 0._rkind
+   do iHRU=1,gru_struc(iGRU)%hruCount
+    totalArea = totalArea + attrStruct%gru(iGRU)%hru(iHRU)%var(iLookATTR%HRUarea)
+   end do
   end associate
 
  end do ! GRU

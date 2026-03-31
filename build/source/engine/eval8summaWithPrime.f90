@@ -618,31 +618,34 @@ subroutine eval8summaWithPrime(&
 
     ! compute soil compressibility (-) and its derivative w.r.t. matric head (m)
     ! NOTE: we already extracted trial matrix head and volumetric liquid water as part of the flux calculations
-    if(scalarSolution)then
-      ixLayerDesired = pack(ixControlVolume, ixMapFull2Subset/=integerMissing)
-      ixTop  = ixLayerDesired(1)
-      ixBot  = ixLayerDesired(1)
+    if(nSoil>0)then
+      if(scalarSolution)then
+        ixLayerDesired = pack(ixControlVolume, ixMapFull2Subset/=integerMissing)
+        ixTop  = ixLayerDesired(1)
+        ixBot  = ixLayerDesired(1)
+      else
+        ixTop  = 1
+        ixBot  = nSoil
+      endif
+      call soilCmpresPrime(&
+                      ! input:
+                      ixRichards,                             & ! intent(in):    choice of option for Richards' equation
+                      ixTop,ixBot,                            & ! intent(in):    top and bottom defining desired layers
+                      mLayerMatricHeadPrime(1:nSoil),         & ! intent(in):    matric head at the start of the time step (m s-1)
+                      mLayerVolFracLiqTrial(nSnow+1:nLayers), & ! intent(in):    trial value for the volumetric liquid water content in each soil layer (-)
+                      mLayerVolFracIceTrial(nSnow+1:nLayers), & ! intent(in):    trial value for the volumetric ice content in each soil layer (-)
+                      specificStorage,                        & ! intent(in):    specific storage coefficient (m-1)
+                      theta_sat,                              & ! intent(in):    soil porosity (-)
+                      ! output:
+                      mLayerCompress,                         & ! intent(inout): compressibility of the soil matrix (-)
+                      dCompress_dPsi,                         & ! intent(inout): derivative in compressibility w.r.t. matric head (m-1)
+                      err,cmessage)                             ! intent(out):   error code and error message
+      if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
+      ! compute the total change in storage associated with compression of the soil matrix (kg m-2 s-1)
+      scalarSoilCompress = sum(mLayerCompress(1:nSoil)*mLayerDepth(nSnow+1:nLayers))*iden_water
     else
-      ixTop  = 1
-      ixBot  = nSoil
+      scalarSoilCompress = 0._qp
     endif
-    call soilCmpresPrime(&
-                    ! input:
-                    ixRichards,                             & ! intent(in):    choice of option for Richards' equation
-                    ixTop,ixBot,                            & ! intent(in):    top and bottom defining desired layers
-                    mLayerMatricHeadPrime(1:nSoil),         & ! intent(in):    matric head at the start of the time step (m s-1)
-                    mLayerVolFracLiqTrial(nSnow+1:nLayers), & ! intent(in):    trial value for the volumetric liquid water content in each soil layer (-)
-                    mLayerVolFracIceTrial(nSnow+1:nLayers), & ! intent(in):    trial value for the volumetric ice content in each soil layer (-)
-                    specificStorage,                        & ! intent(in):    specific storage coefficient (m-1)
-                    theta_sat,                              & ! intent(in):    soil porosity (-)
-                    ! output:
-                    mLayerCompress,                         & ! intent(inout): compressibility of the soil matrix (-)
-                    dCompress_dPsi,                         & ! intent(inout): derivative in compressibility w.r.t. matric head (m-1)
-                    err,cmessage)                             ! intent(out):   error code and error message
-    if(err/=0)then; message=trim(message)//trim(cmessage); return; end if  ! (check for errors)
-
-    ! compute the total change in storage associated with compression of the soil matrix (kg m-2 s-1)
-    scalarSoilCompress = sum(mLayerCompress(1:nSoil)*mLayerDepth(nSnow+1:nLayers))*iden_water
 
     ! compute the residual vector
     if (insideSUN)then

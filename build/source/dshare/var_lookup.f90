@@ -411,8 +411,8 @@ MODULE var_lookup
   ! enthalpy
   integer(i4b)    :: scalarCanopyEnthTemp            = integerMissing ! temperature component of enthalpy of the vegetation canopy (J m-3)
   integer(i4b)    :: mLayerEnthTemp                  = integerMissing ! temperature component of enthalpy of the snow+soil layers (J m-3)
-  integer(i4b)    :: scalarTotalSoilEnthalpy         = integerMissing ! total enthalpy of the soil column (J m-3)
   integer(i4b)    :: scalarTotalSnowEnthalpy         = integerMissing ! total enthalpy of the snow column (J m-3)
+  integer(i4b)    :: scalarTotalSoilEnthalpy         = integerMissing ! total enthalpy of the soil column (J m-3)
   ! forcing
   integer(i4b)    :: scalarVPair                     = integerMissing ! vapor pressure of the air above the vegetation canopy (Pa)
   integer(i4b)    :: scalarVP_CanopyAir              = integerMissing ! vapor pressure of the canopy air space (Pa)
@@ -465,6 +465,8 @@ MODULE var_lookup
   integer(i4b)    :: mLayerThetaResid                = integerMissing ! residual volumetric water content in each snow layer (-)
   integer(i4b)    :: mLayerPoreSpace                 = integerMissing ! total pore space in each snow layer (-)
   integer(i4b)    :: mLayerMeltFreeze                = integerMissing ! change in ice content due to melt/freeze in each layer (kg m-3)
+  ! total mass changes 
+  integer(i4b)    :: scalarTotalMassChange           = integerMissing ! mass change of all system together (kg m-2 s-1)
   ! soil hydrology
   integer(i4b)    :: scalarInfilArea                 = integerMissing ! fraction of area where water can infiltrate, may be frozen (-)
   integer(i4b)    :: scalarSaturatedArea             = integerMissing ! fraction of area that is considered saturated (-)
@@ -830,6 +832,7 @@ MODULE var_lookup
   integer(i4b)    :: basin__AquiferTranspire    = integerMissing ! transpiration from the aquifer (m s-1)
   integer(i4b)    :: basin__TotalRunoff         = integerMissing ! total runoff to channel from all active components (m s-1)
   integer(i4b)    :: basin__SoilDrainage        = integerMissing ! soil drainage (m s-1)
+  integer(i4b)    :: basin__StorageChange       = integerMissing ! change in total basin storage (kg m-2 s-1)
   ! define variables for runoff
   integer(i4b)    :: routingRunoffFuture        = integerMissing ! runoff in future time steps (m s-1)
   integer(i4b)    :: routingFractionFuture      = integerMissing ! fraction of runoff in future time steps (-)
@@ -945,7 +948,7 @@ MODULE var_lookup
                                                                          71, 72, 73, 74, 75, 76, 77, 78, 79, 80,&
                                                                          81, 82, 83, 84, 85, 86, 87, 88, 89, 90,&
                                                                          91, 92, 93, 94, 95, 96, 97, 98, 99,100,&
-                                                                        101,102,103)
+                                                                        101,102,103, 104)
  ! named variables: model fluxes
  type(iLook_flux),    public,parameter :: iLookFLUX     =iLook_flux    (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12, 13, 14, 15, 16, 17, 18, 19, 20,&
@@ -977,7 +980,7 @@ MODULE var_lookup
  type(iLook_bpar),    public,parameter :: iLookBPAR     =iLook_bpar    (  1,  2,  3,  4,  5)
  ! named variables: basin-average variables
  type(iLook_bvar),    public,parameter :: iLookBVAR     =iLook_bvar    (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
-                                                                         11, 12, 13)
+                                                                         11, 12, 13, 14)
  ! named variables in variable type structure
  type(iLook_varType), public,parameter :: iLookVarType  =iLook_varType (  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,&
                                                                          11, 12)

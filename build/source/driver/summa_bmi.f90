@@ -66,7 +66,7 @@ module summabmi
   USE globalData, only: fileout, output_fileSuffix            ! output filename and suffix
   USE globalData, only: outFreq                               ! output frequency flags
   USE globalData, only: ncid                                  ! netcdf output file id
-  USE globalData, only: maxLayers, maxSnowLayers              ! maximum number of layers and snow layers
+  USE globalData, only: maxLayers,maxSnowLayers,maxSoilLayers ! maximum number of layers and snow layers
   USE globalData, only: ixProgress                            ! define frequency to write progress
   USE globalData, only: ixRestart                             ! define frequency to write restart files
   USE globalData, only: newOutputFile                         ! define option for new output files
@@ -112,7 +112,7 @@ module summabmi
      character(len=256)                 :: fileout, output_fileSuffix        ! output filename and suffix
      logical(lgt),dimension(maxvarFreq) :: outFreq                           ! true if the output frequency is desired
      integer(i4b),dimension(maxvarFreq) :: ncid                              ! netcdf output file id
-     integer(i4b)                       :: maxLayers, maxSnowLayers          ! maximum number of layers and snow layers, could be different for different GRUs
+     integer(i4b)                       :: maxLayers,maxSnowLayers,maxSoilLayers ! maximum number of layers, snow layers, and soil layers, could be different for different GRUs
      integer(i4b)                       :: ixProgress                        ! define frequency to write progress
      integer(i4b)                       :: ixRestart                         ! define frequency to write restart files
      integer(i4b)                       :: newOutputFile                     ! define option for new output files
@@ -359,6 +359,7 @@ module summabmi
      outFreq = this%model%outFreq
      maxLayers = this%model%maxLayers
      maxSnowLayers = this%model%maxSnowLayers
+     maxSoilLayers = this%model%maxSoilLayers
      urbanVegCategory = this%model%urbanVegCategory
      ixProgress = this%model%ixProgress
      ixRestart = this%model%ixRestart

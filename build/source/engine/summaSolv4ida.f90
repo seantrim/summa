@@ -388,17 +388,13 @@ subroutine summaSolv4ida(&
     if(detect_events)then
       nRoot = 0
       if(ixVegNrg/=integerMissing) nRoot = nRoot+1
-      if(nSnow>0)then
-        do i = 1,nSnow
-          if(ixSnowOnlyNrg(i)/=integerMissing) nRoot = nRoot+1
-        enddo
-      endif
-      if(nSoil>0)then
-        do i = 1,nSoil
-          if(ixSoilOnlyHyd(i)/=integerMissing) nRoot = nRoot+1
-          if(ixSoilOnlyNrg(i)/=integerMissing) nRoot = nRoot+1
-        enddo
-      endif
+      do i = 1,nSnow
+        if(ixSnowOnlyNrg(i)/=integerMissing) nRoot = nRoot+1
+      enddo
+      do i = 1,nSoil
+        if(ixSoilOnlyHyd(i)/=integerMissing) nRoot = nRoot+1
+        if(ixSoilOnlyNrg(i)/=integerMissing) nRoot = nRoot+1
+      enddo
       allocate( rootsfound(nRoot) )
       allocate( rootdir(nRoot) )
       rootdir = 0
@@ -821,35 +817,31 @@ subroutine find_rootdir(eqns_data,rootdir)
     if(eqns_data%scalarCanopyTempPrev > Tfreeze) rootdir(ind) = -1
   endif
 
-  if(nSnow>0)then
-    do i = 1,nSnow
-      ! identify the critical point when the snow layer begins to freeze
-      if(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)/=integerMissing)then
-        ind = ind+1
-        rootdir(ind) = 1
-        if(eqns_data%mLayerTempPrev(i) > Tfreeze) rootdir(ind) = -1
-      endif
-    end do
-  endif
+  do i = 1,nSnow
+    ! identify the critical point when the snow layer begins to freeze
+    if(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)/=integerMissing)then
+      ind = ind+1
+      rootdir(ind) = 1
+      if(eqns_data%mLayerTempPrev(i) > Tfreeze) rootdir(ind) = -1
+    endif
+  end do
 
-  if(nSoil>0)then
-    do i = 1,nSoil
-      xPsi = eqns_data%mLayerMatricHeadPrev(i)
-      ! identify the critical point when soil matrix potential goes below 0 and Tfreeze depends only on temp
-      if (eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i)/=integerMissing)then
-        ind = ind+1
-        rootdir(ind) = 1
-        if(xPsi > 0._rkind ) rootdir(ind) = -1
-      endif
-      ! identify the critical point when the soil layer begins to freeze
-      if(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)/=integerMissing)then
-        ind = ind+1
-        TcSoil = crit_soilT(xPsi)
-        rootdir(ind) = 1
-        if(eqns_data%mLayerTempPrev(i+nSnow) > TcSoil) rootdir(ind) = -1
-      endif
-    end do
-  endif
+  do i = 1,nSoil
+    xPsi = eqns_data%mLayerMatricHeadPrev(i)
+    ! identify the critical point when soil matrix potential goes below 0 and Tfreeze depends only on temp
+    if (eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i)/=integerMissing)then
+      ind = ind+1
+      rootdir(ind) = 1
+      if(xPsi > 0._rkind ) rootdir(ind) = -1
+    endif
+    ! identify the critical point when the soil layer begins to freeze
+    if(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)/=integerMissing)then
+      ind = ind+1
+      TcSoil = crit_soilT(xPsi)
+      rootdir(ind) = 1
+      if(eqns_data%mLayerTempPrev(i+nSnow) > TcSoil) rootdir(ind) = -1
+    endif
+  end do
 
 end subroutine find_rootdir
 
@@ -922,42 +914,38 @@ integer(c_int) function layerDisCont4ida(t, sunvec_u, sunvec_up, gout, user_data
     end if
   endif
 
-  if(nSnow>0)then
-    do i = 1,nSnow
-      ! identify the critical point when the snow layer begins to freeze
-      if(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)/=integerMissing)then
-        ind = ind+1
-        if(enthalpyStateVec)then
-          gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i))
-        else
-          gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)) - Tfreeze
-        end if
-      endif
-    end do
-  endif
-
-  if(nSoil>0)then
-    do i = 1,nSoil
-      ! identify the critical point when soil matrix potential goes below 0 and Tfreeze depends only on temp
-      if (eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i)/=integerMissing)then
-        ind = ind+1
-        xPsi = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i))
-        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i))
+  do i = 1,nSnow
+    ! identify the critical point when the snow layer begins to freeze
+    if(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)/=integerMissing)then
+      ind = ind+1
+      if(enthalpyStateVec)then
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i))
       else
-        xPsi = eqns_data%prog_data%var(iLookPROG%mLayerMatricHead)%dat(i)
-      endif
-      ! identify the critical point when the soil layer begins to freeze
-      if(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)/=integerMissing)then
-        ind = ind+1
-        if(enthalpyStateVec)then
-          gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i))
-        else 
-          TcSoil = crit_soilT(xPsi)
-          gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)) - TcSoil
-        end if
-      endif
-    end do
-  endif
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSnowOnlyNrg)%dat(i)) - Tfreeze
+      end if
+    endif
+  end do
+
+  do i = 1,nSoil
+    ! identify the critical point when soil matrix potential goes below 0 and Tfreeze depends only on temp
+    if (eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i)/=integerMissing)then
+      ind = ind+1
+      xPsi = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i))
+      gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyHyd)%dat(i))
+    else
+      xPsi = eqns_data%prog_data%var(iLookPROG%mLayerMatricHead)%dat(i)
+    endif
+    ! identify the critical point when the soil layer begins to freeze
+    if(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)/=integerMissing)then
+      ind = ind+1
+      if(enthalpyStateVec)then
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i))
+      else 
+        TcSoil = crit_soilT(xPsi)
+        gout(ind) = uu(eqns_data%indx_data%var(iLookINDEX%ixSoilOnlyNrg)%dat(i)) - TcSoil
+      end if
+    endif
+  end do
 
   ! return success
   ierr = 0

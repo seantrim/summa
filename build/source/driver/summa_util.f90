@@ -29,7 +29,7 @@ USE globalData,only:integerMissing      ! missing integer value
 USE globalData,only:realMissing         ! missing double precision value
 
 ! provide access to file IDs
-USE globalData,only:ncid               ! file id of netcdf output file
+USE globalData,only:ncid                ! file id of netcdf output file
 
 ! privacy
 implicit none

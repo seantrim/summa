@@ -25,6 +25,7 @@ USE nr_type
 
 ! data types
 USE data_types,only:&
+               hru_info,                 & ! HRU info                (i4b)
                var_i,                    & ! x%var(:)                (i4b)
                var_d,                    & ! x%var(:)                (rkind)
                var_ilength,              & ! x%var(:)%dat            (i4b)
@@ -35,7 +36,6 @@ USE data_types,only:&
 ! access vegetation data
 USE globalData,only:greenVegFrac_monthly   ! fraction of green vegetation in each month (0-1)
 USE globalData,only:overwriteRSMIN         ! flag to overwrite RSMIN
-USE globalData,only:maxSoilLayers          ! Maximum Number of Soil Layers
 
 ! provide access to Noah-MP constants
 USE module_sf_noahmplsm,only:isWater       ! parameter for water land cover type
@@ -91,7 +91,7 @@ contains
                        hruId,               & ! intent(in):    hruId
                        dt_init,             & ! intent(inout): used to initialize the length of the sub-step for each HRU
                        computeVegFlux,      & ! intent(inout): flag to indicate if we are computing fluxes over vegetation (false=no, true=yes)
-                       nSnow,nSoil,nLayers, & ! intent(inout): number of snow and soil layers
+                       hruInfo,             & ! intent(inout):  HRU number of snow and soil layers
                        ! data structures (input)
                        timeVec,             & ! intent(in):    model time data
                        typeData,            & ! intent(in):    local classification of soil veg etc. for each HRU
@@ -123,7 +123,7 @@ contains
  integer(i8b)      , intent(in)    :: hruId               ! hruId
  real(rkind)       , intent(inout) :: dt_init             ! used to initialize the length of the sub-step for each HRU
  logical(lgt)      , intent(inout) :: computeVegFlux      ! flag to indicate if we are computing fluxes over vegetation (false=no, true=yes)
- integer(i4b)      , intent(inout) :: nSnow,nSoil,nLayers ! number of snow and soil layers
+ type(hru_info)    , intent(inout) :: hruInfo             ! HRU number of snow and soil layers
  ! data structures (input)
  integer(i4b)      , intent(in)    :: timeVec(:)          ! int vector               -- model time data
  type(var_i)       , intent(in)    :: typeData            ! x%var(:)                 -- local classification of soil veg etc. for each HRU
@@ -167,7 +167,7 @@ contains
  call REDPRM(typeData%var(iLookTYPE%vegTypeIndex),      & ! vegetation type index
              typeData%var(iLookTYPE%soilTypeIndex),     & ! soil type
              typeData%var(iLookTYPE%slopeTypeIndex),    & ! slope type index
-             maxSoilLayers,                             & ! number of soil layers
+             10000_i4b,                                 & ! number of soil layers
              urbanVegCategory)                            ! vegetation category for urban areas
 
  ! overwrite the minimum resistance
@@ -226,9 +226,8 @@ contains
  if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
 
  ! update the number of layers
- nSnow   = indxData%var(iLookINDEX%nSnow)%dat(1)     ! number of snow layers
- nSoil   = indxData%var(iLookINDEX%nSoil)%dat(1)     ! number of soil layers
- nLayers = indxData%var(iLookINDEX%nLayers)%dat(1)   ! total number of layers
+ hruInfo%nSnow   = indxData%var(iLookINDEX%nSnow)%dat(1)     ! number of snow layers
+ hruInfo%nSoil   = indxData%var(iLookINDEX%nSoil)%dat(1)     ! number of soil layers
 
  end subroutine run_oneHRU
 

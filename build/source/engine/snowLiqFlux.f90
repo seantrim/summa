@@ -39,9 +39,9 @@ USE var_lookup,only:iLookDIAG              ! named variables for structure eleme
 USE data_types,only:var_d                  ! x%var(:)     [rkind]
 USE data_types,only:var_dlength            ! x%var(:)%dat [rkind]
 USE data_types,only:var_ilength            ! x%var(:)%dat [i4b]
-USE data_types,only:in_type_snowLiqFlux     ! data type for intent(in) arguments
-USE data_types,only:io_type_snowLiqFlux     ! data type for intent(inout) arguments
-USE data_types,only:out_type_snowLiqFlux    ! data type for intent(out) arguments
+USE data_types,only:in_type_snowLiqFlux    ! data type for intent(in) arguments
+USE data_types,only:io_type_snowLiqFlux    ! data type for intent(inout) arguments
+USE data_types,only:out_type_snowLiqFlux   ! data type for intent(out) arguments
 
 ! privacy
 implicit none

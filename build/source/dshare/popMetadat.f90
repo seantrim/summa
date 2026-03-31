@@ -381,8 +381,8 @@ subroutine popMetadat(err,message)
   ! enthalpy
   diag_meta(iLookDIAG%scalarCanopyEnthTemp)            = var_info('scalarCanopyEnthTemp'           , 'temperature component of enthalpy of the vegetation canopy'       , 'J m-3'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%mLayerEnthTemp)                  = var_info('mLayerEnthTemp'                 , 'temperature component of enthalpy of the snow+soil layers'        , 'J m-3'           , get_ixVarType('midToto'), iMissVec, iMissVec, .false.)
-  diag_meta(iLookDIAG%scalarTotalSoilEnthalpy)         = var_info('scalarTotalSoilEnthalpy'        , 'total enthalpy of the soil column'                                , 'J m-3'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%scalarTotalSnowEnthalpy)         = var_info('scalarTotalSnowEnthalpy'        , 'total enthalpy of the snow column'                                , 'J m-3'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  diag_meta(iLookDIAG%scalarTotalSoilEnthalpy)         = var_info('scalarTotalSoilEnthalpy'        , 'total enthalpy of the soil column'                                , 'J m-3'           , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   ! forcing
   diag_meta(iLookDIAG%scalarVPair)                     = var_info('scalarVPair'                    , 'vapor pressure of the air above the vegetation canopy'            , 'Pa'              , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%scalarVP_CanopyAir)              = var_info('scalarVP_CanopyAir'             , 'vapor pressure of the canopy air space'                           , 'Pa'              , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
@@ -435,6 +435,8 @@ subroutine popMetadat(err,message)
   diag_meta(iLookDIAG%mLayerThetaResid)                = var_info('mLayerThetaResid'               , 'residual volumetric water content in each snow layer'             , '-'               , get_ixVarType('midSnow'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%mLayerPoreSpace)                 = var_info('mLayerPoreSpace'                , 'total pore space in each snow layer'                              , '-'               , get_ixVarType('midSnow'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%mLayerMeltFreeze)                = var_info('mLayerMeltFreeze'               , 'ice content change from melt/freeze in each layer'                , 'kg m-3'          , get_ixVarType('midToto'), iMissVec, iMissVec, .false.)
+  ! total mass changes 
+  diag_meta(iLookDIAG%scalarTotalMassChange)           = var_info('scalarTotalMassChange'          , 'mass change of all system together (kg m-2 s-1)'                  , 'kg m-2 s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   ! soil hydrology
   diag_meta(iLookDIAG%scalarInfilArea)                 = var_info('scalarInfilArea'                , 'fraction of unfrozen area where water can infiltrate'             , '-'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   diag_meta(iLookDIAG%scalarSaturatedArea)             = var_info('scalarSaturatedArea'            , 'fraction of area that is considered saturated'                    , '-'               , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
@@ -688,19 +690,20 @@ subroutine popMetadat(err,message)
   ! -----
   ! * basin-wide runoff and aquifer fluxes...
   ! -----------------------------------------
-  bvar_meta(iLookBVAR%basin__TotalArea)        = var_info('basin__TotalArea'       , 'total basin area'                                       , 'm2'    , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__SurfaceRunoff)    = var_info('basin__SurfaceRunoff'   , 'surface runoff'                                         , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__ColumnOutflow)    = var_info('basin__ColumnOutflow'   , 'outflow from all "outlet" HRUs (with no downstream HRU)', 'm3 s-1', get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__AquiferStorage)   = var_info('basin__AquiferStorage'  , 'aquifer storage'                                        , 'm'     , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__AquiferRecharge)  = var_info('basin__AquiferRecharge' , 'recharge to the aquifer'                                , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__AquiferBaseflow)  = var_info('basin__AquiferBaseflow' , 'baseflow from the aquifer'                              , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__AquiferTranspire) = var_info('basin__AquiferTranspire', 'transpiration loss from the aquifer'                    , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__TotalRunoff)      = var_info('basin__TotalRunoff'     , 'total runoff to channel from all active components'     , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%basin__SoilDrainage)     = var_info('basin__SoilDrainage'    , 'soil drainage'                                          , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%routingRunoffFuture)     = var_info('routingRunoffFuture'    , 'runoff in future time steps'                            , 'm s-1' , get_ixVarType('routing'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%routingFractionFuture)   = var_info('routingFractionFuture'  , 'fraction of runoff in future time steps'                , '-'     , get_ixVarType('routing'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%averageInstantRunoff)    = var_info('averageInstantRunoff'   , 'instantaneous runoff'                                   , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
-  bvar_meta(iLookBVAR%averageRoutedRunoff)     = var_info('averageRoutedRunoff'    , 'routed runoff'                                          , 'm s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__TotalArea)        = var_info('basin__TotalArea'       , 'total basin area'                                       , 'm2'         , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__SurfaceRunoff)    = var_info('basin__SurfaceRunoff'   , 'surface runoff'                                         , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__ColumnOutflow)    = var_info('basin__ColumnOutflow'   , 'outflow from all "outlet" HRUs (with no downstream HRU)', 'm3 s-1'     , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__AquiferStorage)   = var_info('basin__AquiferStorage'  , 'aquifer storage'                                        , 'm'          , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__AquiferRecharge)  = var_info('basin__AquiferRecharge' , 'recharge to the aquifer'                                , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__AquiferBaseflow)  = var_info('basin__AquiferBaseflow' , 'baseflow from the aquifer'                              , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__AquiferTranspire) = var_info('basin__AquiferTranspire', 'transpiration loss from the aquifer'                    , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__TotalRunoff)      = var_info('basin__TotalRunoff'     , 'total runoff to channel from all active components'     , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__SoilDrainage)     = var_info('basin__SoilDrainage'    , 'soil drainage'                                          , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%basin__StorageChange)    = var_info('basin__StorageChange'   , 'change in total basin storage'                          , 'kg m-2 s-1' , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%routingRunoffFuture)     = var_info('routingRunoffFuture'    , 'runoff in future time steps'                            , 'm s-1'      , get_ixVarType('routing'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%routingFractionFuture)   = var_info('routingFractionFuture'  , 'fraction of runoff in future time steps'                , '-'          , get_ixVarType('routing'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%averageInstantRunoff)    = var_info('averageInstantRunoff'   , 'instantaneous runoff'                                   , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
+  bvar_meta(iLookBVAR%averageRoutedRunoff)     = var_info('averageRoutedRunoff'    , 'routed runoff'                                          , 'm s-1'      , get_ixVarType('scalarv'), iMissVec, iMissVec, .false.)
   ! -----
   ! * temperature and enthalpy lookup tables...
   ! -------------------------------------------
@@ -943,7 +946,6 @@ subroutine read_output_file(err,message)
     ! process time-varying variables
     select case(trim(structName))
       case('forc','prog','diag','flux','bvar')
-
         ! * ensure that the frequency index exists for time varying variables
         if(nWords<freqIndex)then
           message=trim(message)//'must define desired output frequency for time-varing output: variable='//trim(varName)
@@ -977,9 +979,8 @@ subroutine read_output_file(err,message)
           freqName = trim(lineWords(freqIndex))
         endif
         if(trim(structName)=='time' .or. trim(structName)=='indx') then
-          if (freqName/='timestep' .and. freqName/='1') then
-            write(*,*)'WARNING: timestep only variable '//trim(varName)//': outputting at timestep level since it cannot be aggregated'
-          endif
+          if (freqName/='timestep' .and. freqName/='1')&
+          write(*,*)'WARNING: timestep only variable '//trim(varName)//': outputting at timestep level since it cannot be aggregated'
         else
           write(*,*)'WARNING: temporally constant variable '//trim(varName)//': outputting parameter in timestep file with no time dimension'
         endif

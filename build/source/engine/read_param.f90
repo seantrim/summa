@@ -27,6 +27,9 @@ USE globalData,only:realMissing     ! missing real number
 ! runtime options
 USE globalData,only:iRunModeFull,iRunModeGRU,iRunModeHRU ! run modes
 
+! input sizes
+USE globalData,only:maxSoilLayers          ! maximum number of soil layers
+
 ! common modules
 USE nr_type
 USE netcdf
@@ -255,8 +258,8 @@ contains
      err=20; return
     endif
 
-    ! check that the dimension length is correct
-    if(size(mparStruct%gru(iGRU)%hru(localHRU_ix)%var(ixParam)%dat) /= nSoil_file)then
+    ! check that the dimension length is correct (maxSoilLayers is the maximum number of soil layers in the model)
+    if(maxSoilLayers /= nSoil_file)then
      message=trim(message)//'unexpected number of soil layers in parameter file'
      err=20; return
     endif
