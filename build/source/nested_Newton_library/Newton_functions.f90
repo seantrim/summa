@@ -975,7 +975,7 @@ contains
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
   real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
-  real(r8b), parameter :: m_tol=100._r8b*epsilon(1._r8b)
+  real(r8b), parameter :: m_tol=0.1_r8b !100._r8b*epsilon(1._r8b)
   real(r8b)            :: alpha ! step size
   real(r8b)            :: alpha_temp ! step size (temporary)
   real(r8b)            :: alpha_prev ! step size (from previous line search iteration)
@@ -988,7 +988,7 @@ contains
   character(256) :: cmessage ! error message from SUMMA
   logical, parameter :: debug_output=.false.
 
-  ! working options: 'I' for inner iterations, 'L' for last inner iteration
+  ! working options: 'I' for inner iterations, 'L' for last inner iteration, 'C' for classical (lmax=0)
 
   ! initial solutions and option validation
   if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
