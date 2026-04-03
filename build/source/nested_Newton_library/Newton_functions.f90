@@ -975,7 +975,7 @@ contains
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
   real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
-  real(r8b), parameter :: m_tol=0.1_r8b !100._r8b*epsilon(1._r8b)
+  !real(r8b), parameter :: m_tol=0.1_r8b !100._r8b*epsilon(1._r8b)
   real(r8b)            :: alpha ! step size
   real(r8b)            :: alpha_temp ! step size (temporary)
   real(r8b)            :: alpha_prev ! step size (from previous line search iteration)
@@ -1027,13 +1027,15 @@ contains
   ! check that local slope is negative (needed to reduce the line search objective function)
   if (m < 0._rkind) then
    do_line_search = .true.
-  else if ((0._r8b <= m).and.(m <= m_tol)) then ! non-negative slope with allowance for round-off error
+  !else if ((0._r8b <= m).and.(m <= m_tol)) then ! non-negative slope with allowance for round-off error
+  ! do_line_search = .false. ! skip line search (there would be no improvement anyway)
+  !else ! non-negative but exceeding tolerance
+  ! print *, "m=",m
+  ! print *, "option=",option
+  ! print *, "Error in SUMMA_nested_line_search: initial slope is non-negative"
+  ! stop
+  else
    do_line_search = .false. ! skip line search (there would be no improvement anyway)
-  else ! non-negative but exceeding tolerance
-   print *, "m=",m
-   print *, "option=",option
-   print *, "Error in SUMMA_nested_line_search: initial slope is non-negative"
-   stop
   end if
 
   if (debug_output) then
