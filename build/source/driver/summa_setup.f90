@@ -94,8 +94,9 @@ contains
  USE globalData,only:startGRU                                ! index of the starting GRU for parallelization run
  USE globalData,only:checkHRU                                ! index of the HRU for a single HRU run
  USE globalData,only:iRunMode                                ! define the current running mode
- ! output constraints
+! output constraints
  USE globalData,only:maxLayers                               ! maximum number of layers
+ USE globalData,only:maxSoilLayers                           ! maximum number of soil layers
  USE globalData,only:maxSnowLayers                           ! maximum number of snow layers
  USE globalData,only:maxSoilLayers                           ! maximum number of soil layers
  ! timing variables
@@ -191,8 +192,7 @@ contains
   case default; err=20; message=trim(message)//'unable to identify option to combine/sub-divide snow layers'; return
  end select ! (option to combine/sub-divide snow layers)
 
- ! get the maximum number of layers for soil and total
- !  (max snow layers are fixed as above, snow layers may change)
+ ! get the maximum number of layers
  maxLayers     = 0
  maxSoilLayers = 0
  do iGRU=1,nGRU
