@@ -1055,11 +1055,8 @@ contains
    ! compute objective function
    call f_obj % line_search_objective(.true.,option,updated_solution,L1)
 
-   ! update variables in nested Newton algorithm
+   ! update solution in nested Newton algorithm
    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
-
-   ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
-   !call f_and_J_values
 
    ! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
    if (.not.(f_obj % feasible)) then
@@ -1157,13 +1154,23 @@ contains
   subroutine f_and_J_values
    ! ** post-processing to obtain function and Jacobian values needed for next nested Newton iteration **
    if (option == 'C') then
+    ! have f -- need f1, J1, f2, and J2
     ! f1 quantities
     call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
     call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
-    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
     ! f2 quantities
     call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
     call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for total f 
+   else if (option == 'I') then
+    ! have f1 -- need J1 (f2 and J2 don't change)
+    ! f1 quantities
+    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+   else if (option == 'L') then
+    ! have f and f2 -- need J2, f1, J1
+    call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+    call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+   else
+    print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
    end if
   end subroutine f_and_J_values
 
