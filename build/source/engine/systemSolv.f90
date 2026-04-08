@@ -1071,7 +1071,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 1999_i4b; nested_Newton % lmax = 20_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1178,13 +1178,13 @@ contains
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
    nested_Newton % f1_vec(:)=0._r8b
    nested_Newton % f1_vec(:)=merge(real(resVec,r8b),nested_Newton % f1_vec,nested_Newton % stateMask1) ! -------- replace with new procedure?
-   nested_Newton % f1_eval_flag = .true. 
-   nested_Newton % J1_eval_flag = .true. 
+   nested_Newton % f1_eval_flag = .false. 
+   nested_Newton % J1_eval_flag = .false. 
 
    nested_Newton % f2_vec(:)=0._r8b
    nested_Newton % f2_vec(:)=merge(-real(resVec,r8b),nested_Newton % f2_vec,nested_Newton % stateMask2) ! sign change so that f=f1-f2
-   nested_Newton % f2_eval_flag = .true. 
-   nested_Newton % J2_eval_flag = .true.
+   nested_Newton % f2_eval_flag = .false. 
+   nested_Newton % J2_eval_flag = .false.
 
    ! get intial Jacobians
    call nested_Newton % J1_J2_eval(stateVecTrial) 

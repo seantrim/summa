@@ -974,16 +974,16 @@ contains
   real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
-  real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
+  !real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
   !real(r8b), parameter :: m_tol=0.1_r8b !100._r8b*epsilon(1._r8b)
-  real(r8b)            :: alpha ! step size
+  real(r8b)            :: alpha      ! step size
   real(r8b)            :: alpha_temp ! step size (temporary)
   real(r8b)            :: alpha_prev ! step size (from previous line search iteration)
   real(r8b)            :: rhs1,rhs2,aCoef,bCoef,disc ! constants for cubic interpolant
   logical   :: do_line_search
   logical   :: converged ! checkConv convergence flag
-  integer(i4b), parameter :: i_max = 5_i4b !5_i4b ! max number of line search iterations
-  integer(i4b)   :: i ! loop index
+  integer(i4b), parameter :: i_max = 5_i4b ! max number of line search iterations
+  integer(i4b)   :: i        ! loop index
   integer(i4b)   :: err      ! SUMMA error code
   character(256) :: cmessage ! error message from SUMMA
   logical, parameter :: debug_output=.false.
@@ -991,9 +991,9 @@ contains
   ! working options: 'I' for inner iterations, 'L' for last inner iteration, 'C' for classical (lmax=0)
 
   ! initial solutions and option validation
-  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases
+  if (option == 'I') then ! inner case
    initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
-  else if ((option == 'F').or.(option == 'L').or.(option == 'C')) then ! outer case (O) or first inner iteration (F) or last inner iteration (L)
+  else if ((option == 'L').or.(option == 'C')) then ! last inner iteration (L) or classical (C)
    initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
   else
    print *, "Error in SUMMA_nested_line_search: option is not supported"
@@ -1014,9 +1014,9 @@ contains
    call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)
 
   ! compute search direction
-  if ((option == 'N').or.(option == 'I')) then ! nested or inner cases or first inner iteration (F)
+  if (option == 'I') then ! nested or inner cases or first inner iteration (F)
    p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
-  else if ((option == 'F').or.(option == 'L').or.(option == 'C')) then
+  else if ((option == 'L').or.(option == 'C')) then
    p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
   end if
 
@@ -1057,21 +1057,9 @@ contains
 
    ! update variables in nested Newton algorithm
    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
-   !if (option == 'N') then ! nested case
-   ! ! f1 quantities
-   ! call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
-   ! call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
-   ! f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
-   ! ! f2 quantities
-   ! call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
-   ! call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for total f 
-   ! f_obj % xk0(:) = updated_solution(:)     ! apply updated solution
-   !else if (option == 'F') then ! inner case
-   ! f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
-   !else if (option == 'I') then ! inner case
-   ! !call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for f1 
-   ! f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
-   !end if
+
+   ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
+   !call f_and_J_values
 
    ! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
    if (.not.(f_obj % feasible)) then
@@ -1092,14 +1080,21 @@ contains
    ! check convergence
    if (converged) then
     f_obj % xkp1lp1(:) = updated_solution(:) ! accept updated solution and exit
+    call f_and_J_values ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
     return 
    end if
    
    ! exit early if not doing the line search (only alpha=1.0 solution is used)
-   if (.not.do_line_search) return
+   if (.not.do_line_search) then
+    call f_and_J_values ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
+    return
+   end if
 
    ! check if the objective function is accepted using the Armijo-Goldstein Criterion
-   if (L1 <= L0 + alpha*c*m) return
+   if (L1 <= L0 + alpha*c*m) then
+    call f_and_J_values ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
+    return
+   end if
 
    ! * adjust the step size in preparation for next line search iteration *
    !alpha = alpha * tao ! basic reduction by a constant factor
@@ -1157,6 +1152,21 @@ contains
   ! should not be able to reach this point
   print *, "Error in SUMMA_nested_line_search: no return criteria were triggered"
 
+ contains
+ 
+  subroutine f_and_J_values
+   ! ** post-processing to obtain function and Jacobian values needed for next nested Newton iteration **
+   if (option == 'C') then
+    ! f1 quantities
+    call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution
+    ! f2 quantities
+    call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
+    call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for total f 
+   end if
+  end subroutine f_and_J_values
+
  end subroutine SUMMA_nested_line_search
 
  subroutine SUMMA_line_search_objective(f_obj,evaluate_f,option,solution,L)
@@ -1171,10 +1181,7 @@ contains
   ! local
   real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
 
-  if ((option == 'N').or.(option == 'F')) then ! nested case (N) or first inner iteration (F)
-   if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
-   L=f_obj % out_SS4HG % fNew ! scaled
-  else if (option == 'C') then ! classical case
+  if (option == 'C') then ! classical case
    if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
    L=f_obj % out_SS4HG % fNew ! scaled
   else if (option == 'I') then ! inner case
@@ -1197,18 +1204,6 @@ contains
                         & )
    end if
    L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-  else if (option == 'O') then ! outer case
-   !if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2
-   !if (f_obj % banded) then
-   ! print *, "Error in SUMMA_line_search_objective: banded Jacobians not implemented"; stop
-   !else
-   ! f_obj % rVecScaled(:) = f_obj % fScale(:) * ( &
-   !                     & f_obj % f1_vec(:) + matmul(f_obj % J1,solution - f_obj % xkp1l) - f_obj % f2_vec(:) &
-   !                     & )
-   !end if
-   !L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-   if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
-   L=f_obj % out_SS4HG % fNew ! scaled
   else 
    print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
   end if
