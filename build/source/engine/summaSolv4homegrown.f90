@@ -428,7 +428,6 @@ contains
                               &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input
                               &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                ! input-output
                               &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,out_LSR)                            ! output
-     !stop !!!!!!!!!!! SJT: debug --- take out
      call out_LSR % finalize(fNew,converged,err,cmessage)
     end if
  
@@ -516,7 +515,6 @@ contains
   real(rkind)                    :: gradScaledNested(2 * in_SS4HG % nState) ! scaled gradient vector (all elements)
   real(rkind)                    :: p(2 * in_SS4HG % nState)             ! search direction vector (all elements)
   real(rkind)                    :: xIncNested(2 * in_SS4HG % nState)    ! search increment vector (all elements)
-  logical(lgt),parameter         :: debug_output=.false. ! for optional debug output
   logical(lgt),parameter         :: allow_nested=.true. ! allow nested Newton line search method (else revert to homegrown)
   ! --------------------------------------------------------------------------------------------------------
   associate(&
@@ -537,18 +535,6 @@ contains
    ! initialize error control
    err=0; message='lineSearchRefinement/'
    converged = .false.
-
-   ! debug output
-   if (debug_output) then
-     print *, "Line Search:"
-     print *, "nested=",in_SS4HG % nested
-     print *, "sum(rVecScaled)=",sum(rVecScaled)
-     if (in_SS4HG % nested.and.allow_nested) then
-       print *, "sum(aJac1Scaled-aJac2Scaled)=",sum(in_SS4HG % aJac1Scaled - in_SS4HG % aJac2Scaled)
-     else
-       print *, "sum(aJacScaled)=",sum(aJacScaled)
-     end if
-   end if
 
    ! initialize for nested Newton line search
    if ((in_SS4HG % nested).and.(allow_nested)) then ! nested Newton iterations
@@ -589,19 +575,6 @@ contains
 
       ! compute the initial slope
       slopeInit = dot_product(gradScaled,newtStepScaled)
-    end if
-
-    ! debug output
-    if (debug_output) then
-      if (in_SS4HG % nested.and.allow_nested) then
-        print *, "sum(gradScaled-grad2Scaled)", sum(gradScaled(:)-grad2Scaled(:))
-        print *, "sum(xkp1l),sum(xk0)=",sum(in_SS4HG % xkp1l(1:nState)),sum(in_SS4HG % xk0(1:nState))
-        print *, "sum(inner),sum(outer)=",sum(p(1:nState)),sum(p(nState+1:2*nState))
-      else
-        print *, "sum(gradScaled)", sum(gradScaled(:))
-        print *, "sum(newtStepScaled)=",sum(newtStepScaled)
-      end if
-      print *, "slopeInit=",slopeInit
     end if
 
     ! SJT: testing the addition of an initial slope check --- not originally present (homegrown solver triggers this error for Miller Sand)
@@ -655,16 +628,6 @@ contains
       stateVecNew = stateVecTrial + xInc
     end if   
 
-    ! debug
-    if (debug_output) then
-      print *, "before constraints:"
-      if (in_SS4HG % nested) then
-       print *, "sum(stateVecNew)=",sum(io_SS4HG % stateVecNewNested(1:nState)),sum(io_SS4HG % stateVecNewNested(nState+1:2*nState))
-      else
-       print *, "sum(stateVecNew)=",sum(stateVecNew)
-      end if
-    end if
-
     ! impose solution constraints adjusting state vector and iteration increment
     ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
     if (in_SS4HG % nested.and.allow_nested) then ! nested Newton iterations
@@ -691,16 +654,6 @@ contains
       xInc = stateVecNew - stateVecTrial
     end if   
 
-    ! debug
-    if (debug_output) then
-      print *, "after constraints:"
-      if (in_SS4HG % nested) then
-       print *, "sum(stateVecNew)=",sum(io_SS4HG % stateVecNewNested(1:nState)),sum(io_SS4HG % stateVecNewNested(nState+1:2*nState))
-      else
-       print *, "sum(stateVecNew)=",sum(stateVecNew)
-      end if
-    end if
-
     ! compute the residual vector and objective function
     ! NOTE: This calls eval8summa in a wrapper subroutine
     call eval8summa_wrapper(stateVecNew,fScale,in_SS4HG,model_decisions,&
@@ -708,16 +661,6 @@ contains
                            &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&
                            &fluxVecNew,resSinkNew,resVecNew,fNew,feasible,err,cmessage)
     if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
-
-    ! debug
-    if (debug_output) then
-      print *, 'iLine, xLambda                 = ', iLine, xLambda
-      print *, 'fOld                           = ', fOld
-      print *, 'fNew                           = ', fNew
-      print *, 'fOld + alpha*slopeInit*xLambda = ', fOld + alpha*slopeInit*xLambda
-      print *, 'sum(resVecNew) = ', sum(resVecNew)
-      print *, 'feasible = ',feasible
-    end if
 
     ! check line search
     if (globalPrintFlag) then
@@ -736,10 +679,6 @@ contains
       ! inner iteration component
       converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,io_SS4HG % resVecNew_inner,&
                 & p(1:nState)*xScale(:),io_SS4HG % stateVecNewNested(1:nState),out_SS4HG)
-      if (debug_output) then
-        print *, "converged = ", out_SS4HG % converged
-        if (converged) print *, "" ! for debug line numbers to match classical case
-      end if
       if (converged) then ! if converged, accept inner iteration solution
         stateVecNew(:) = io_SS4HG % stateVecNewNested(1:nState)
         return
@@ -748,9 +687,6 @@ contains
       ! outer iteration component
       converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,io_SS4HG % resVecNew_outer,&
                 & p(nState+1:2*nState)*xScale(:),io_SS4HG % stateVecNewNested(nState+1:2*nState),out_SS4HG)
-      if (debug_output) then
-        print *, "converged = ", out_SS4HG % converged
-      end if
       if (converged) then ! if converged, accept outer iteration solution
         stateVecNew(:) = io_SS4HG % stateVecNewNested(nState+1:2*nState)
         return
@@ -758,11 +694,6 @@ contains
     else ! classical Newton iterations
       ! NOTE: some efficiency gains possible by scaling the full newton step outside the line search loop
       converged = checkConv(mSoil,in_SS4HG,mpar_data,indx_data,prog_data,resVecNew,newtStepScaled*xScale,stateVecNew,out_SS4HG)
-      ! debug
-      if (debug_output) then
-        print *, "converged = ", out_SS4HG % converged, converged
-        print *, "" ! add line to match line numbers with nested case
-      end if
       if (converged) return
     end if
 
