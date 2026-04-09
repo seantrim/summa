@@ -49,11 +49,10 @@ contains
    ! begin LAPACK operations
    B(:,1)=-f_obj % f_vec(:) ! initialize right-side vector used by LAPACK
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
+   f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
    if (f_obj % refinement) then
-    call f_obj % apply_refinement_classical(f_obj % J,f_obj % xk,B(:,1),f_obj % xkp1) ! apply Newton step refinement to obtain next guess
-   else
-    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
+    call f_obj % apply_nested_line_search('C')
    end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
@@ -138,8 +137,6 @@ contains
     f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
     if (f_obj % refinement_inner) then
-     ! f_obj % J updated on last J1 evaluation
-     !call f_obj % apply_refinement_inner(f_obj % J,f_obj % xkp1l,B(:,1),f_obj % xkp1lp1)
      if (f_obj % lmax == 0) then ! classical regime
       call f_obj % apply_nested_line_search('C')
      else if (l < f_obj % lmax) then ! initial inner iterations

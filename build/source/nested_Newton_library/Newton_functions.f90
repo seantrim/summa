@@ -179,10 +179,7 @@ module Newton_functions
    procedure :: J2_eval => Jacobian_f_energy_SUMMA_vec_full ! solver
    procedure :: J1_J2_eval => Jacobian_f_mass_energy_SUMMA_vec_full ! solver
    procedure :: apply_constraints  => SUMMA_imposeConstraints
-   procedure :: apply_refinement_classical   => SUMMA_refine_Newton_step_classical
-   procedure :: apply_refinement_inner       => SUMMA_refine_Newton_step_inner
-   procedure :: apply_refinement_outer       => SUMMA_refine_Newton_step_outer
-   procedure :: apply_nested_line_search     => SUMMA_nested_line_search
+   procedure :: apply_nested_line_search => SUMMA_nested_line_search
    procedure :: line_search_objective => SUMMA_line_search_objective
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
@@ -654,272 +651,6 @@ contains
 
 
  !! ******************************* SUMMA procedures below ******************************* !!
- subroutine SUMMA_refine_Newton_step_classical(f_obj,J,xvec0,xStep,xvec1)
-  ! ** interface to SUMMA's refine_Newton_step subroutine **
-  use matrixOper_module,  only: scaleMatrices
-  ! object
-  class(f_obj_type),intent(inout)   :: f_obj
-  ! input
-  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
-  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
-  ! input-output
-  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
-
-  call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
-
-  ! store non-linear function vector for next Newton iteration
-  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
-
-  ! update function value for line search
-  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
-
- end subroutine SUMMA_refine_Newton_step_classical
-
- subroutine SUMMA_refine_Newton_step_inner(f_obj,J,xvec0,xStep,xvec1)
-  ! ** interface to SUMMA's refine_Newton_step subroutine **
-  use matrixOper_module,  only: scaleMatrices
-  ! object
-  class(f_obj_type),intent(inout)   :: f_obj
-  ! input
-  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
-  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
-  ! input-output
-  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
-  ! local
-  logical,parameter :: trivial_decomposition = .false.
-
-  ! update function value for line search (based on previous evaluation of f1, f2, or f)
-  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
-
-  call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
-
-  ! store non-linear function vector for next Newton iteration
-  if (trivial_decomposition) then
-   f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b) ! trivial decomposition (f2=0)
-  end if
-
- end subroutine SUMMA_refine_Newton_step_inner
-
- subroutine SUMMA_refine_Newton_step_outer(f_obj,J,xvec0,xStep,xvec1)
-  ! ** interface to SUMMA's refine_Newton_step subroutine **
-  use matrixOper_module,  only: scaleMatrices
-  ! object
-  class(f_obj_type),intent(inout)   :: f_obj
-  ! input
-  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
-  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
-  ! input-output
-  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
-  ! local
-  logical,parameter :: trivial_decomposition = .false.
-
-  ! update function value for line search (based on previous evaluation of f1, f2, or f)
-  f_obj % in_SS4HG % fOld = f_obj % out_SS4HG % fNew
-
-  call SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
-
-  ! store non-linear function vector for next Newton iteration
-  if (trivial_decomposition) then
-   f_obj % f2_vec(:) = real(f_obj % resVec(:),r8b) ! trivial decomposition (f1=0)
-  else
-   if (.not.f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec1) ! non-trivial decomposition
-   if (.not.f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xvec1) ! non-trivial decomposition
-  end if
-
- end subroutine SUMMA_refine_Newton_step_outer
-
- subroutine SUMMA_refine_Newton_step(f_obj,J,xvec0,xStep,xvec1)
-  ! ** interface to SUMMA's refine_Newton_step subroutine **
-  use matrixOper_module,  only: scaleMatrices
-  ! object
-  class(f_obj_type),intent(inout)   :: f_obj
-  ! input
-  real(r8b),intent(in)              :: J(1:f_obj % nrow,1:f_obj % n) ! nested Newton solver Jacobian matrix
-  real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
-  real(r8b),intent(in)              :: xStep(1:f_obj % n) ! unrefined Newton step
-  ! input-output
-  real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
-  ! local
-  integer(i4b) :: nBands ! SUMMA's leading dimension for banded Jacobians
-  integer(i4b) :: mSoil  ! number of soil layers in the solution vector
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA Jacobian matrix
-  real(rkind)  :: newtStepScaled(1:f_obj % in_SS4HG % nState)                 ! full newton step (scaled)
-  real(rkind)  :: stateVecTrial(1:f_obj % in_SS4HG % nState)                  ! unrefined guess
-  real(rkind)  :: stateVecNew(1:f_obj % in_SS4HG % nState)                    ! refined guess
-  logical(lgt)   :: return_flag
-  integer(i4b)   :: err
-  character(256) :: cmessage
-  
-  if ((f_obj % scaling).and.(.not.f_obj % nested)) then ! reuse scaled arrays already computed
-
-   newtStepScaled = xStep(:) ! assume xStep is already scaled on input
-
-  else ! scale arrays
-
-   ! * Get Scaled Jacobians *
-   if (f_obj % nested) then ! nested iterations
-
-    ! get SUMMA Jacobian from solver Jacobian for non-linear function f1
-    if (f_obj % banded) then ! banded storage
-     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-      nBands=nrow_banded+subdiag
-      aJac(1:subdiag,1:n) = 0._rkind
-      aJac(subdiag+1:nBands,1:n) = f_obj % J1(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
-     end associate
-    else ! full matrix storage
-     aJac(:,:) = f_obj % J1(:,:)
-    end if
-
-    ! Scale Jacobian for f1
-    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
-     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,f_obj % in_SS4HG % aJac1Scaled,err,cmessage) ! matches solve_linear_system
-    end associate
-    if (err/=0) then
-     if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
-     end if
-    end if
-
-    ! get SUMMA Jacobian from solver Jacobian for non-linear function f2
-    if (f_obj % banded) then ! banded storage
-     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-      nBands=nrow_banded+subdiag
-      aJac(1:subdiag,1:n) = 0._rkind
-      aJac(subdiag+1:nBands,1:n) = f_obj % J2(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
-     end associate
-    else ! full matrix storage
-     aJac(:,:) = f_obj % J2(:,:)
-    end if
-
-    ! Scale Jacobian for f2
-    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
-     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,f_obj % in_SS4HG % aJac2Scaled,err,cmessage) ! matches solve_linear_system
-    end associate
-    if (err/=0) then
-     if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
-     end if
-    end if
-
-   else ! classical iterations
-
-    ! get SUMMA Jacobian from solver Jacobian for total non-linear function f
-    if (f_obj % banded) then ! banded storage
-     associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-      nBands=nrow_banded+subdiag
-      aJac(1:subdiag,1:n) = 0._rkind
-      aJac(subdiag+1:nBands,1:n) = J(1:nrow_banded,1:n) ! SUMMA's aJac has extra storage rows
-     end associate
-    else ! full matrix storage
-     aJac(:,:) = J(:,:)
-    end if
-
-    ! scale Jacobian for f 
-    associate(ixMatrix => f_obj % in_SS4HG % ixMatrix, nState => f_obj % in_SS4HG % nState)
-     call scaleMatrices(ixMatrix,nState,aJac,f_obj % fScale,f_obj % xScale,f_obj % aJacScaled,err,cmessage) ! matches solve_linear_system
-    end associate
-    if (err/=0) then
-     if (f_obj % out_error) then
-      write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: scaleMatrices message="//trim(cmessage); stop
-     end if
-    end if
-
-   end if
-
-   ! * Get Other Scaled Variables *
-   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
-   if (f_obj % nested) then ! if computing the Newton step
-    if (f_obj % scaling) then
-     ! assume xvec1 is already scaled on input (e.g., from LAPACK solution for nested iterations)
-     newtStepScaled = xvec1(:) - xvec0(:)/f_obj % xScale(:) 
-    else 
-     newtStepScaled(:) = (xvec1(:) - xvec0(:)) / f_obj % xScale(:) ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-    end if
-    f_obj % in_SS4HG % xk0 = f_obj % xk0
-    f_obj % in_SS4HG % xkp1l = f_obj % xkp1l
-    f_obj % in_SS4HG % xkp1lp1 = f_obj % xkp1lp1
-    f_obj % io_SS4HG % f_vec(:)  = f_obj % f_vec(:)  ! initialize function values for line search
-    f_obj % io_SS4HG % f1_vec(:) = f_obj % f1_vec(:)
-    f_obj % io_SS4HG % f2_vec(:) = f_obj % f2_vec(:)
-    !f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! step refinement uses updated total f
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * (f_obj % f1_vec(:)-f_obj % f2_vec(:)) ! uses constant f2 during inner iterations
-    f_obj % in_SS4HG % fOld = 0.5_rkind*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-    f_obj % in_SS4HG % inner = f_obj % inner ! which nested iteration loop?
-   else ! if Newton step is provided on input
-    newtStepScaled(:) = xStep(:) / f_obj % xScale(:)             ! get scaled Newton step (consistent with scaling for aJacScaled and rVecScaled)
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec(:) ! matches solve_linear_system
-   end if
-
-  end if
-
-  ! get the number of soil layers in the solution vector
-  mSoil = size(f_obj % indx_data % var(iLookINDEX % ixMatOnly) % dat)
-
-  ! set unrefined guess
-  stateVecTrial(:) = xvec0(:) 
-
-  associate(&
-   ! input
-   in_SS4HG       => f_obj % in_SS4HG , & 
-   fScale         => f_obj % fScale   , & 
-   xScale         => f_obj % xScale   , & 
-   ! input: SUMMA data structures
-   model_decisions => f_obj % model_decisions , &
-   lookup_data     => f_obj % lookup_data     , &
-   type_data       => f_obj % type_data       , &
-   attr_data       => f_obj % attr_data       , &
-   mpar_data       => f_obj % mpar_data       , &
-   forc_data       => f_obj % forc_data       , &
-   bvar_data       => f_obj % bvar_data       , &
-   prog_data       => f_obj % prog_data       , &
-   ! input-output
-   sMul              => f_obj % sMul              , &
-   io_SS4HG          => f_obj % io_SS4HG          , &
-   indx_data         => f_obj % indx_data         , & 
-   diag_data         => f_obj % diag_data         , &
-   flux_data         => f_obj % flux_data         , & 
-   deriv_data        => f_obj % deriv_data        , &
-   dBaseflow_dMatric => f_obj % dBaseflow_dMatric , &
-   ! output
-   fluxVecNew      => f_obj % fluxVec0      , &
-   resSinkNew      => f_obj % rAdd          , &
-   resVecNew       => f_obj % resVec        , &
-   out_SS4HG       => f_obj % out_SS4HG       &  
-  &)
-    call refine_Newton_step(in_SS4HG,mSoil,stateVecTrial,newtStepScaled,f_obj%aJacScaled,f_obj%rVecScaled,fScale,xScale,& ! input
-                           &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,&     ! input
-                           &sMul,io_SS4HG,indx_data,diag_data,flux_data,deriv_data,dBaseflow_dMatric,&                    ! input-output
-                           &stateVecNew,fluxVecNew,resSinkNew,resVecNew,out_SS4HG,return_flag)                            ! output
-  end associate
-
-  ! check for errors in refine_Newton_step call
-  if (return_flag) then
-   if (f_obj % out_error) then
-    write(f_obj % unit,*) "Error in SUMMA_refine_Newton_step: refine_Newton_step message="//trim(f_obj % out_SS4HG % message); stop
-   end if
-  end if
-
-  ! update inner and outer iteration solutions based on line search
-  if (f_obj % nested) then
-   associate(nState => f_obj % in_SS4HG % nState)
-    ! update inner iteration values
-    f_obj % xkp1lp1(:) = f_obj % io_SS4HG % stateVecNewNested(1:nState) ! solution vector
-    f_obj % f1_vec(:) = f_obj % io_SS4HG % f1_vec(:)                    ! non-linear function f1
-    call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,f_obj % io_SS4HG % aJac1,f_obj % J,f_obj % J1) ! transform aJac1 into J1
-    ! update outer iteration values
-    f_obj % xk0(:) = f_obj % io_SS4HG % stateVecNewNested(nState+1:2*nState) ! solution vector
-    f_obj % f2_vec(:) = f_obj % io_SS4HG % f2_vec(:)                    ! non-linear function f2
-    call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,f_obj % io_SS4HG % aJac2,f_obj % J,f_obj % J2) ! transform aJac2 into J2 (negative sign applied)
-   end associate
-  end if
-
-  ! store refined guess
-  xvec1(:) = stateVecNew(:)
-
- end subroutine SUMMA_refine_Newton_step
 
  subroutine SUMMA_get_scaled_Jacobian(f_obj,J,aJacScaled)
   ! ** Get scaled SUMMA Jacobian from nested Newton solver Jacobian **
@@ -994,32 +725,39 @@ contains
   if (option == 'I') then ! inner case
    initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
   else if ((option == 'L').or.(option == 'C')) then ! last inner iteration (L) or classical (C)
-   initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
+   if (f_obj % nested) then
+    initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
+   else
+    initial_solution(:) = f_obj % xk(:)   ! previous outer iteration
+   end if
   else
    print *, "Error in SUMMA_nested_line_search: option is not supported"
    stop
   end if
 
-  ! **** initial setup operations to be moved outside of nested Newton solver loop ****
   ! compute initial objective function (scaled)
   call f_obj % line_search_objective(.true.,option,initial_solution,L0)
 
   ! compute initial Jacobian (scaled) -- assumes only stored Jacobians (from nested Newton equation LHS) are used
-  f_obj % J(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:) ! solver Jacobian
-  call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J,aJacScaled) ! get scaled SUMMA Jacobian
-  ! **** end initial setup operations to be moved outside of nested Newton solver loop ****
-
+  if (f_obj % nested) then
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % Jdiff,aJacScaled) ! get scaled SUMMA Jacobian
+  else
+   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J,aJacScaled) ! get scaled SUMMA Jacobian
+  end if
 
   ! compute gradient of objective function (scaled)
-   call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)
+  call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)
 
   ! compute search direction
   if (option == 'I') then ! nested or inner cases or first inner iteration (F)
    p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
   else if ((option == 'L').or.(option == 'C')) then
-   p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
+   if (f_obj % nested) then
+    p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
+   else
+    p(:)=f_obj % xkp1 - f_obj % xk       ! classical Newton step
+   end if
   end if
-
 
   ! compute local slope (use scaled values)
   m = dot_product(grad_L,p(:)/f_obj % xScale(:)) ! confirmed against homegrown line search
@@ -1055,9 +793,6 @@ contains
    ! compute objective function
    call f_obj % line_search_objective(.true.,option,updated_solution,L1)
 
-   ! update solution in nested Newton algorithm
-   f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
-
    ! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
    if (.not.(f_obj % feasible)) then
     print *, "Error in SUMMA_nested_line_search: not feasible"
@@ -1065,7 +800,7 @@ contains
    end if
 
    ! get convergence flag
-   converged = SUMMA_checkConv(f_obj,p,f_obj % xkp1lp1)
+   converged = SUMMA_checkConv(f_obj,p,updated_solution)
    
    if (debug_output) then
     print *, "i=",i
@@ -1076,7 +811,6 @@ contains
 
    ! check convergence
    if (converged) then
-    f_obj % xkp1lp1(:) = updated_solution(:) ! accept updated solution and exit
     call f_and_J_values ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
     return 
    end if
@@ -1153,24 +887,36 @@ contains
  
   subroutine f_and_J_values
    ! ** post-processing to obtain function and Jacobian values needed for next nested Newton iteration **
-   if (option == 'C') then
-    ! have f -- need f1, J1, f2, and J2
-    ! f1 quantities
-    call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
-    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
-    ! f2 quantities
-    call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
-    call f_obj % J2_eval(updated_solution)   ! get J2 based on eval8summa call for total f 
-   else if (option == 'I') then
-    ! have f1 -- need J1 (f2 and J2 don't change)
-    ! f1 quantities
-    call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
-   else if (option == 'L') then
-    ! have f and f2 -- need J2, f1, J1
-    call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
-    call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+
+   ! update solution in nested Newton algorithm
+   if (f_obj % nested) then
+    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    else
-    print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
+    f_obj % xkp1(:)    = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
+   end if
+
+   if (.not.converged) then
+    ! obtain remaining function and Jacobian variables needed for next Newton iteration
+    if (option == 'C') then
+     if (f_obj % nested) then
+      ! have f -- need f1, J1, f2, and J2
+      call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+      call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
+      call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
+     else
+      ! have f -- need J
+      call f_obj % J_eval(updated_solution)
+     end if 
+    else if (option == 'I') then
+     ! have f1 -- need J1 (f2 and J2 don't change)
+     call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+    else if (option == 'L') then
+     ! have f and f2 -- need J2, f1, J1
+     call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+     call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+    else
+     print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
+    end if
    end if
   end subroutine f_and_J_values
 

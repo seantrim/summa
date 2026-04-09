@@ -457,7 +457,6 @@ contains
   ! provide access to the external procedures
   USE matrixOper_module, only: computGradient
   USE eval8summa_module, only: imposeConstraints
-  USE iso_fortran_env,only: real128 !!!!!!!!!!!!!!!!!!!!!! SJT: testing with quad precision
   implicit none
   ! input
   type(in_type_lineSearchRefinement),intent(in) :: in_LSR      ! class object for intent(in) arguments

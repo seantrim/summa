@@ -278,7 +278,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -971,8 +971,7 @@ contains
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
   use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
-  type(f_obj_type) :: nested_Newton,nested_Newton_ref          ! nested Newton solver object
-  logical(lgt),parameter :: debug_output=.false. ! flag controlling debug output
+  type(f_obj_type) :: nested_Newton                            ! nested Newton solver object
 
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
@@ -1054,7 +1053,7 @@ contains
   ! * Nested Newton solver options *
 
   ! Newton iteration type
-  nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
+  nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
    ! set method for computing relative convergence error
@@ -1071,7 +1070,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 20_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1103,6 +1102,7 @@ contains
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+   nested_Newton % kmax = 99_i4b
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1147,33 +1147,6 @@ contains
    
    
    call nested_Newton % get_mass_energy_masks()
-   if (debug_output) then
-    print *, "nSubset1=",nested_Newton % nSubset1 
-    print *, "stateMask1=",nested_Newton % stateMask1 
-    print *, "nSubset2=",nested_Newton % nSubset2 
-    print *, "stateMask2=",nested_Newton % stateMask2
-   end if 
-
-   ! initialize input variables for Newton step refinement
-   nested_Newton % in_SS4HG % nested_Newton_flag = nested_Newton_flag
-   nested_Newton % in_SS4HG % nested = nested_Newton % nested
-   nested_Newton % in_SS4HG % stateMask1 = nested_Newton % stateMask1 ! allocate on assignment
-   nested_Newton % in_SS4HG % stateMask2 = nested_Newton % stateMask2 ! allocate on assignment
-   allocate(nested_Newton % in_SS4HG % aJac1Scaled, mold = nested_Newton % aJacScaled)
-   allocate(nested_Newton % in_SS4HG % aJac2Scaled, mold = nested_Newton % aJacScaled)
-   allocate(nested_Newton % in_SS4HG % xk0, mold = nested_Newton % xk0)
-   allocate(nested_Newton % in_SS4HG % xkp1l, mold = nested_Newton % xkp1l)
-   allocate(nested_Newton % in_SS4HG % xkp1lp1, mold = nested_Newton % xkp1lp1)
-   allocate(nested_Newton % io_SS4HG % stateVecTrialNested(1:2_i4b*nState))
-   allocate(nested_Newton % io_SS4HG % stateVecNewNested(1:2_i4b*nState))
-   allocate(nested_Newton % io_SS4HG % f_vec , mold = nested_Newton % f_vec )
-   allocate(nested_Newton % io_SS4HG % f1_vec, mold = nested_Newton % f1_vec)
-   allocate(nested_Newton % io_SS4HG % f2_vec, mold = nested_Newton % f2_vec)
-   allocate(nested_Newton % io_SS4HG % aJac1(nested_Newton % in_SS4HG % nLeadDim,nested_Newton % in_SS4HG % nState))
-   allocate(nested_Newton % io_SS4HG % aJac2(nested_Newton % in_SS4HG % nLeadDim,nested_Newton % in_SS4HG % nState))
-   allocate(nested_Newton % io_SS4HG % dMat, source = nested_Newton % dMat) ! note: allocate and initialize
-   allocate(nested_Newton % io_SS4HG % resVecNew_inner, mold = nested_Newton % f_vec )
-   allocate(nested_Newton % io_SS4HG % resVecNew_outer, mold = nested_Newton % f_vec )
 
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
    nested_Newton % f1_vec(:)=0._r8b
@@ -1193,42 +1166,15 @@ contains
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
    nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
+   nested_Newton % J_eval_flag = .false.  ! no need to recalculate the Jacobian values (already computed in systemSolv and Newton step refinement) 
+
+   ! get intial Jacobian
+   call nested_Newton % J_eval(stateVecTrial) 
   end if
 
   ! set up initial guess
   nested_Newton % x1(:) = stateVecTrial(:)  ! initialize solution from previous time step
   call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
-
-!!!!!!!!!!!!!!!! SJT: Start Test Block --- take out
-  if (debug_output) then
-   print *, "systemSolv A00:"
-   stateVecTrial(1)=stateVecTrial(1)-100._rkind ! perturbation for testing
-   nested_Newton_ref = nested_Newton ! object to compute reference values (to avoid unintended side effects)
-   call nested_Newton_ref % f_vec_eval(stateVecTrial)
-   call nested_Newton_ref % J_eval(stateVecTrial)
-   print *, "f=",nested_Newton_ref % f_vec
-   print *, "sum(f) =",sum(nested_Newton_ref % f_vec)
-   print *, "sum(J) =",sum(nested_Newton_ref % J)
-
-   if (nested_Newton % nested) then 
-    call nested_Newton % f1_vec_eval(stateVecTrial(:))
-    call nested_Newton % J1_eval(stateVecTrial(:))
- 
-    call nested_Newton % f2_vec_eval(stateVecTrial(:))
-    call nested_Newton % J2_eval(stateVecTrial(:))
- 
-    print *, "f1-f2="
-    print *, nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:)
-    print *, "sum(f1-f2)="
-    print *, sum(nested_Newton % f1_vec(:) - nested_Newton % f2_vec(:))
-    print *, "sum(J1)=",sum(nested_Newton % J1)
-    print *, "sum(J2)=",sum(nested_Newton % J2)
-    print *, "sum(J1-J2)",sum(nested_Newton % J1 - nested_Newton % J2)
-   end if
- 
-   stop
-  end if
-!!!!!!!!!!!!!!!! SJT: End Test Block --- take out
 
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
@@ -1262,8 +1208,6 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
-  !print *, "niter=",niter ! SJT: --- take out ---
-  !print *, "fOld=",fOld ! SJT: --- take out ---
   !stop
  end subroutine nested_Newton_iterations
 

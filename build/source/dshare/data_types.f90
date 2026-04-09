@@ -960,17 +960,6 @@ MODULE data_types
    logical(lgt)             :: computeVegFlux     ! intent(in): flag to indicate if computing fluxes over vegetation
    logical(lgt)             :: scalarSolution     ! intent(in): flag to denote if implementing the scalar solution
    real(rkind)              :: fOld               ! intent(in): old function evaluation
-   ! variables used in step refinement for nested Newton iterations
-   logical                  :: nested_Newton_flag ! intent(in): flag indicating nested Newton library use ---- to be replaced with model decision ----
-   logical                  :: nested             ! intent(in): nested iteration = .true., classical iterations = .false.
-   logical                  :: inner              ! intent(in): flag indicating if nested algorithm is in inner iteration phase 
-   logical(lgt),allocatable :: stateMask1(:)      ! intent(in): state mask for non-linear function f1
-   logical(lgt),allocatable :: stateMask2(:)      ! intent(in): state mask for non-linear function f2
-   real(rkind) ,allocatable :: aJac1Scaled(:,:)   ! intent(in): scaled Jacobian for f1 (SUMMA storage scheme) 
-   real(rkind) ,allocatable :: aJac2Scaled(:,:)   ! intent(in): scaled Jacobian for f2 (SUMMA storage scheme)
-   real(rkind) ,allocatable :: xk0(:)             ! intent(in): guess for previous outer iteration
-   real(rkind) ,allocatable :: xkp1l(:)           ! intent(in): guess for previous inner iteration
-   real(rkind) ,allocatable :: xkp1lp1(:)         ! intent(in): guess for current inner iteration
   contains
    procedure :: initialize => initialize_in_summaSolv4homegrown
  end type in_type_summaSolv4homegrown
@@ -980,17 +969,6 @@ MODULE data_types
    logical(lgt)             :: firstFluxCall   ! intent(inout): flag to indicate if we are processing the first flux call
    real(rkind)              :: xMin,xMax       ! intent(inout): brackets of the root
    integer(i4b)             :: ixSaturation    ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-   ! variables used in step refinement for nested Newton iterations
-   real(rkind) ,allocatable :: f_vec(:)        ! intent(inout): total non-linear function f (f = f1-f2)
-   real(rkind) ,allocatable :: f1_vec(:)       ! intent(inout): component non-linear function f1 (constant in outer iterations)
-   real(rkind) ,allocatable :: f2_vec(:)       ! intent(inout): component non-linear function f2 (constant in inner iterations)
-   real(rkind) ,allocatable :: aJac1(:,:)      ! intent(inout): component Jacobian J1 (SUMMA storage scheme)
-   real(rkind) ,allocatable :: aJac2(:,:)      ! intent(inout): component Jacobian J2 (SUMMA storage scheme)
-   real(rkind) ,allocatable :: dMat(:)         ! intent(inout): diagonal matrix (excludes flux derivatives)
-   real(rkind) ,allocatable :: stateVecTrialNested(:) ! intent(inout): trial total state vector containing elements for inner and outer iterations 
-   real(rkind) ,allocatable :: stateVecNewNested(:)   ! intent(inout): new total state vector containing elements for inner and outer iterations 
-   real(rkind) ,allocatable :: resVecNew_inner(:)   ! intent(inout): new residual vector for inner iteration line search solution 
-   real(rkind) ,allocatable :: resVecNew_outer(:)   ! intent(inout): new residual vector for outer iteration line search solution 
   contains
    procedure :: initialize => initialize_io_summaSolv4homegrown
    procedure :: finalize   => finalize_io_summaSolv4homegrown
@@ -2372,11 +2350,6 @@ contains
   in_SS4NR % computeVegFlux = computeVegFlux 
   in_SS4NR % scalarSolution = scalarSolution
   in_SS4NR % fOld           = fOld
-  ! Newton step refinement variables for nested iterations
-  ! note: initialize with default values           
-  in_SS4NR % nested_Newton_flag = .false. ! --- to be replaced by model decision --- 
-  in_SS4NR % nested             = .false.
-  in_SS4NR % inner              = .false. 
  end subroutine initialize_in_summaSolv4homegrown
 
  subroutine initialize_io_summaSolv4homegrown(io_SS4NR,firstFluxCall,xMin,xMax,ixSaturation)
