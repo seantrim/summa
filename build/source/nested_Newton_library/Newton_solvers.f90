@@ -412,8 +412,8 @@ contains
    B(:,:)=X(:,:) ! put solution in output vector
   end if
 
-  ! compute descaled solution if needed (not needed for Newton step refinement)
-  if ((f_obj % scaling) .and. (.not.f_obj % refinement)) call f_obj % custom_descaling(B)
+  ! compute descaled solution if needed
+  if (f_obj % scaling) call f_obj % custom_descaling(B)
 
   ! error control
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver

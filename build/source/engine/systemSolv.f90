@@ -1053,7 +1053,7 @@ contains
   ! * Nested Newton solver options *
 
   ! Newton iteration type
-  nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+  nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
    ! set method for computing relative convergence error
@@ -1070,7 +1070,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 20_i4b!10_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1079,6 +1079,7 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
+   nested_Newton % L0 = fOld ! initial line search objective function value
    nested_Newton % refinement        = .false. ! apply refine_Newton_step following outer/classical iterations
    nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
 
@@ -1108,6 +1109,7 @@ contains
    nested_Newton % linear_system_solver = "LAPACK_standard"
 
    ! Newton step refinement
+   nested_Newton % L0 = fOld ! initial line search objective function value
    nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
 
    ! constraints 

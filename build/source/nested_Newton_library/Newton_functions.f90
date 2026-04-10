@@ -160,6 +160,7 @@ module Newton_functions
  end type f_obj_inputs
 
  type,extends(f_obj_inputs),public :: f_obj_type
+   real(r8b) :: L0 ! initial line search objective function value
   contains
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
@@ -702,7 +703,7 @@ contains
   real(r8b) :: updated_solution(1:f_obj % n) ! updated solution vector
   real(r8b) :: p(1:f_obj % n) ! search direction
   real(r8b) :: grad_L(1:f_obj % n) ! gradient of objective function L
-  real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
+  !real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
   !real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
@@ -735,18 +736,12 @@ contains
    stop
   end if
 
-  ! compute initial objective function (scaled)
-  call f_obj % line_search_objective(.true.,option,initial_solution,L0)
-
-  ! compute initial Jacobian (scaled) -- assumes only stored Jacobians (from nested Newton equation LHS) are used
-  if (f_obj % nested) then
-   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % Jdiff,aJacScaled) ! get scaled SUMMA Jacobian
-  else
-   call SUMMA_get_scaled_Jacobian(f_obj,f_obj % J,aJacScaled) ! get scaled SUMMA Jacobian
-  end if
+  ! get initial objective function (scaled) from systemSolv or previous Newton iteration
+  L0 = f_obj % L0
 
   ! compute gradient of objective function (scaled)
-  call SUMMA_computeGradient(f_obj,aJacScaled,f_obj % rVecScaled,grad_L)
+  ! note: uses scaled Jacobian from LAPACK system (J for classical, Jdiff=J1-J2 for nested)
+  call SUMMA_computeGradient(f_obj,f_obj % aJacScaled,f_obj % rVecScaled,grad_L)
 
   ! compute search direction
   if (option == 'I') then ! nested or inner cases or first inner iteration (F)
@@ -895,7 +890,11 @@ contains
     f_obj % xkp1(:)    = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    end if
 
-   if (.not.converged) then
+   if (.not.converged) then ! if outer/classical iterations not converged, prep for next Newton iteration
+
+    ! store objective function value for next Newton iteration
+    f_obj % L0 = L1
+
     ! obtain remaining function and Jacobian variables needed for next Newton iteration
     if (option == 'C') then
      if (f_obj % nested) then
@@ -917,6 +916,7 @@ contains
     else
      print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
     end if
+
    end if
   end subroutine f_and_J_values
 
