@@ -44,6 +44,7 @@ module Newton_functions
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
    integer(i4b) :: nrow_banded       ! # of matrix rows for banded storage
+   integer(i4b) :: k,l               ! indices for classical/outer and inner iterations
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
@@ -736,8 +737,14 @@ contains
    stop
   end if
 
-  ! get initial objective function (scaled) from systemSolv or previous Newton iteration
-  L0 = f_obj % L0
+  ! get initial objective function (scaled)
+  if ((option == 'I').and.(f_obj % l == 0)) then ! first inner scheme iteration for the current outer iteration
+   call f_obj % line_search_objective(.false.,option,initial_solution,L0) ! --- trying to reuse computed functions and Jacobians ---
+  else if (option == 'L') then
+   call f_obj % line_search_objective(.true.,option,initial_solution,L0) ! need to compute when switching to outer scheme
+  else
+   L0 = f_obj % L0 ! from systemSolv or previous Newton iteration (classical and inner schemes)
+  end if
 
   ! compute gradient of objective function (scaled)
   ! note: uses scaled Jacobian from LAPACK system (J for classical, Jdiff=J1-J2 for nested)
@@ -890,13 +897,11 @@ contains
     f_obj % xkp1(:)    = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    end if
 
-   if (.not.converged) then ! if outer/classical iterations not converged, prep for next Newton iteration
-
-    ! store objective function value for next Newton iteration
-    f_obj % L0 = L1
+   if ((.not.converged).and.(f_obj % k < f_obj % kmax)) then ! if outer/classical iterations not converged, prep for next Newton iteration (if applicable)
 
     ! obtain remaining function and Jacobian variables needed for next Newton iteration
     if (option == 'C') then
+
      if (f_obj % nested) then
       ! have f -- need f1, J1, f2, and J2
       call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
@@ -906,18 +911,29 @@ contains
       ! have f -- need J
       call f_obj % J_eval(updated_solution)
      end if 
+     f_obj % L0 = L1 ! store previous objective function value
+
     else if (option == 'I') then
-     ! have f1 -- need J1 (f2 and J2 don't change)
+
+     ! have f and f1 -- need J1 (f2 and J2 don't change)
      call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+     f_obj % L0 = L1 ! store previous inner scheme objective function value (does not apply if switching to outer line search scheme)
+
     else if (option == 'L') then
+
      ! have f and f2 -- need J2, f1, J1
      call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
      call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+
+     !! prep for switch to inner line search scheme
+     !call f_obj % line_search_objective(.false.,'I',updated_solution,f_obj % L0) ! ---- doesn't have the correct outer iterate guess 
+
     else
-     print *, "Error in SUMMA_line_search_objective: option is not supported"; stop
+      print *, "Error in SUMMA_nested_line_search: option is not supported"; stop
     end if
 
    end if
+
   end subroutine f_and_J_values
 
  end subroutine SUMMA_nested_line_search
@@ -930,9 +946,6 @@ contains
   character(1)     ,intent(in)    :: option ! line search option
   real(r8b)        ,intent(in)    :: solution(1:f_obj % n) ! updated solution vector
   real(r8b)        ,intent(out)   :: L ! objective function value
-
-  ! local
-  real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
 
   if (option == 'C') then ! classical case
    if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f

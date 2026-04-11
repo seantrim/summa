@@ -43,6 +43,7 @@ contains
   exit_flag=.false.
   f_obj % xk(:) = f_obj % x0(:) ! initialize
   do k=0,f_obj % kmax
+   f_obj % k = k ! store index 
    if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ! compute non-linear function vector (f_obj % f_vec)
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
@@ -56,7 +57,7 @@ contains
    end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
-   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
+   if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
     exit
@@ -69,14 +70,14 @@ contains
   if (exit_flag.eqv..true.) then
    if (f_obj % out_detail) then
     final_mean=sum(f_obj % xkp1)/f_obj % n 
-    write(f_obj % unit,'(i4,3(g23.15))') k+1,final_mean,f_obj % R(1)
+    write(f_obj % unit,'(i4,3(g23.15))') f_obj % k+1,final_mean,f_obj % R(1)
    end if
-   f_obj % kcount=k+1
+   f_obj % kcount=f_obj % k+1
   else
-   f_obj % kcount=k
+   f_obj % kcount=f_obj % k
   end if
 
-  if (k.gt.f_obj % kmax) then
+  if (f_obj % k.gt.f_obj % kmax) then
    if (f_obj % out_warning) then
     write(f_obj % unit,*) "Warning - classical Newton solver has reached the maximum number of iterations&
                           & - accuracy may not be sufficient."
@@ -113,6 +114,8 @@ contains
   f_obj % xk0(:)=f_obj % x0(:) ! initial guess
   outer: do k=0,f_obj % kmax
 
+   f_obj % k = k ! store index
+
    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
    !f2mJ2xk0(:) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)
@@ -121,6 +124,7 @@ contains
 
    f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
+    f_obj % l = l ! store index
     if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)

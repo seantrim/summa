@@ -1109,7 +1109,20 @@ contains
    nested_Newton % linear_system_solver = "LAPACK_standard"
 
    ! Newton step refinement
-   nested_Newton % L0 = fOld ! initial line search objective function value
+   ! note: classical and inner line search schemes have the same initial objective function value
+   !if (nested_Newton % lmax == 0_i4b) then ! classical line search scheme
+    nested_Newton % L0 = fOld ! initial line search objective function value
+   !else ! inner line search scheme
+   ! if (f_obj % banded) then
+   !  message=trim(message)//'nested_Newton_iterations: banded option for line search objective function not implemented'
+   !  err=20; return_flag=.true.; return ! fatal error
+   ! else
+   !  f_obj % rVecScaled(:) = f_obj % fScale(:) * ( &
+   !                      & f_obj % f1_vec(:) - ( f_obj % f2_vec(:) + matmul(f_obj % J2,solution - f_obj % xk0) )&
+   !                      & )
+   ! end if
+   ! L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
+   !end if
    nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
 
    ! constraints 
