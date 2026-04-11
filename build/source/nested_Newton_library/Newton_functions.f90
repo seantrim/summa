@@ -897,21 +897,23 @@ contains
     f_obj % xkp1(:)    = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    end if
 
-   if ((.not.converged).and.(f_obj % k < f_obj % kmax)) then ! if outer/classical iterations not converged, prep for next Newton iteration (if applicable)
+   if (.not.converged) then ! if outer/classical iterations not converged, prep for next Newton iteration (if applicable)
 
     ! obtain remaining function and Jacobian variables needed for next Newton iteration
     if (option == 'C') then
 
-     if (f_obj % nested) then
-      ! have f -- need f1, J1, f2, and J2
-      call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
-      call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
-      call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
-     else
-      ! have f -- need J
-      call f_obj % J_eval(updated_solution)
-     end if 
-     f_obj % L0 = L1 ! store previous objective function value
+     if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
+      if (f_obj % nested) then
+       ! have f -- need f1, J1, f2, and J2
+       call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+       call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
+       call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
+      else
+       ! have f -- need J
+       call f_obj % J_eval(updated_solution)
+      end if 
+      f_obj % L0 = L1 ! store previous objective function value
+     end if
 
     else if (option == 'I') then
 
@@ -921,12 +923,14 @@ contains
 
     else if (option == 'L') then
 
-     ! have f and f2 -- need J2, f1, J1
-     call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
-     call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+     if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
+      ! have f and f2 -- need J2, f1, J1
+      call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+      call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
 
-     !! prep for switch to inner line search scheme
-     !call f_obj % line_search_objective(.false.,'I',updated_solution,f_obj % L0) ! ---- doesn't have the correct outer iterate guess 
+      !! prep for switch to inner line search scheme
+      !call f_obj % line_search_objective(.false.,'I',updated_solution,f_obj % L0) ! ---- doesn't have the correct outer iterate guess 
+     end if
 
     else
       print *, "Error in SUMMA_nested_line_search: option is not supported"; stop
