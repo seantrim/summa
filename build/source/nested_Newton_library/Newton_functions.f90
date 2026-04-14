@@ -32,7 +32,6 @@ module Newton_functions
    logical      :: constraints       ! flag to indicate that constraints are to be applied between outer/classical iterations
    logical      :: constraints_inner ! flag to indicate that constraints are to be applied between inner iterations
    logical      :: refinement        ! flag to indicate that refinement is to be applied following outer/classical iterations
-   logical      :: refinement_inner  ! flag to indicate that refinement is to be applied following inner iterations
    logical      :: scaling           ! flag to indicate that user-specified scaling is to be applied for linear systems
    logical      :: f_eval_flag       ! flag to indicate that the total non-linear function vector is to be computed
    logical      :: f1_eval_flag      ! flag to indicate that the non-linear function 1 vector is to be computed
@@ -40,6 +39,7 @@ module Newton_functions
    logical      :: J_eval_flag       ! flag to indicate that the total Jacobian is to be computed
    logical      :: J1_eval_flag      ! flag to indicate that Jacobian 1 is to be computed
    logical      :: J2_eval_flag      ! flag to indicate that Jacobian 2 is to be computed
+   logical      :: evaluate_B        ! flag to indicate if we are evaluating the RHS vector of the Newton iteration equations
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
@@ -67,6 +67,7 @@ module Newton_functions
    character(:),allocatable :: convergence_inner    ! string for convergence control option for inner iterations
    character(:),allocatable :: linear_system_solver ! string for selecting solver for linear systems
    character(:),allocatable :: matrix_vector        ! string for selecting method for matrix-vector products
+   character(1)             :: line_search_option   ! line search option/scheme
    ! solver output
    character(:),allocatable :: output ! string for solver output control option
    integer(i4b) :: unit        ! file unit number for solver output
@@ -219,7 +220,6 @@ contains
    f_obj % constraints       = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
    f_obj % constraints_inner = .false. ! flag to indicate that constraints are to be applied between inner iterations
    f_obj % refinement        = .false. ! flag to indicate that refinement is to be applied following outer/classical iterations
-   f_obj % refinement_inner  = .false. ! flag to indicate that refinement is to be applied following inner iterations
    f_obj % scaling           = .false. ! flag to indicate that user-specified scaling is to be applied for linear systems
    f_obj % f_eval_flag       = .true.  ! flag to indicate that the total non-linear function vector is to be computed
    f_obj % f1_eval_flag      = .true.  ! flag to indicate that the non-linear function 1 vector is to be computed
@@ -738,13 +738,27 @@ contains
   end if
 
   ! get initial objective function (scaled)
-  if ((option == 'I').and.(f_obj % l == 0)) then ! first inner scheme iteration for the current outer iteration
-   call f_obj % line_search_objective(.false.,option,initial_solution,L0) ! --- trying to reuse computed functions and Jacobians ---
-  else if (option == 'L') then
-   call f_obj % line_search_objective(.true.,option,initial_solution,L0) ! need to compute when switching to outer scheme
+  if ((f_obj % k == 0).and.(f_obj % l == 0)) then ! use initial value from systemSolv for initial iteration (all schemes)
+    L0 = f_obj % L0 ! from systemSolv
   else
-   L0 = f_obj % L0 ! from systemSolv or previous Newton iteration (classical and inner schemes)
+   if ((option == 'I').and.(f_obj % l == 0)) then ! first inner scheme iteration for the current outer iteration
+   !if ((option == 'I')) then ! first inner scheme iteration for the current outer iteration --- works with A
+    call f_obj % line_search_objective(.false.,option,initial_solution,L0) ! --- trying to reuse computed functions and Jacobians --- works with A
+    !call f_obj % line_search_objective(.true.,option,initial_solution,L0) ! works with A
+   else if (option == 'L') then
+    call f_obj % line_search_objective(.true.,option,initial_solution,L0) ! need to compute when switching to outer scheme -- works
+   else
+    L0 = f_obj % L0 ! from systemSolv or previous Newton iteration (classical and inner schemes)
+   end if
   end if
+
+  !if ((option == 'I').and.(f_obj % l == 0)) then ! first inner scheme iteration for the current outer iteration
+  ! call f_obj % line_search_objective(.false.,option,initial_solution,L0) ! --- trying to reuse computed functions and Jacobians ---
+  !else if (option == 'L') then
+  ! call f_obj % line_search_objective(.true.,option,initial_solution,L0) ! need to compute when switching to outer scheme
+  !else
+  ! L0 = f_obj % L0 ! from systemSolv or previous Newton iteration (classical and inner schemes)
+  !end if
 
   ! compute gradient of objective function (scaled)
   ! note: uses scaled Jacobian from LAPACK system (J for classical, Jdiff=J1-J2 for nested)
@@ -953,6 +967,7 @@ contains
 
   if (option == 'C') then ! classical case
    if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
+   f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec
    L=f_obj % out_SS4HG % fNew ! scaled
   else if (option == 'I') then ! inner case
    if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1
@@ -1016,12 +1031,24 @@ contains
 
   ! get scaled variables (accoring to SUMMA's fScale and xScale vectors)
   ! note: need to match scaling applied in solve_linear_system subroutine in summaSolve4homegrown
-  B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
-  if (f_obj % nested) then ! nested iterations
-   f_obj % rVecScaled(:) = (f_obj % f1_vec(:) - f_obj % f2_vec(:)) * f_obj % fScale(:) ! compute scaled residual for Newton step refinement
-  else ! classical iterations
-   f_obj % rVecScaled(:) = -B(:,1) ! save scaled residual for reuse in Newton step refinement
-  end if
+  !if (f_obj % refinement) then
+  ! if (f_obj % line_search_option == 'L') then
+  !  B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
+  ! else if ((f_obj % line_search_option == 'I').and.(f_obj % l == 0_i4b).and.(f_obj % k > 0_i4b)) then
+  !  B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
+  ! end if
+  !else
+  ! B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
+  !end if
+
+  if (f_obj % evaluate_B) B(:,1) = f_obj % fScale(:) * B(:,1)
+
+  !B(:,1) = f_obj % fScale(:) * B(:,1) ! matches solve_linear_system
+  !if (f_obj % nested) then ! nested iterations
+  ! f_obj % rVecScaled(:) = (f_obj % f1_vec(:) - f_obj % f2_vec(:)) * f_obj % fScale(:) ! compute scaled residual for Newton step refinement
+  !else ! classical iterations
+  ! f_obj % rVecScaled(:) = -B(:,1) ! save scaled residual for reuse in Newton step refinement
+  !end if
 
   associate(&
    ixMatrix => f_obj % in_SS4HG % ixMatrix , & ! type of matrix (full or band diagonal)

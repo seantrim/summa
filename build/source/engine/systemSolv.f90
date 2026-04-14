@@ -1070,7 +1070,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 20_i4b!10_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1080,8 +1080,7 @@ contains
 
    ! Newton step refinement
    nested_Newton % L0 = fOld ! initial line search objective function value
-   nested_Newton % refinement        = .false. ! apply refine_Newton_step following outer/classical iterations
-   nested_Newton % refinement_inner  = .true. ! apply refine_Newton_step following inner iterations
+   nested_Newton % refinement        = .true. ! apply Newton step refinement following inner iterations
 
    ! constraints 
    nested_Newton % constraints       = .false. ! apply imposeConstraints between outer/classical iterations
@@ -1174,6 +1173,9 @@ contains
    nested_Newton % f2_eval_flag = .false. 
    nested_Newton % J2_eval_flag = .false.
 
+   nested_Newton % f_vec(:) = real(nested_Newton % resVec,r8b)
+   nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
+
    ! get intial Jacobians
    call nested_Newton % J1_J2_eval(stateVecTrial) 
 
@@ -1182,6 +1184,8 @@ contains
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
    nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
    nested_Newton % J_eval_flag = .false.  ! no need to recalculate the Jacobian values (already computed in systemSolv and Newton step refinement) 
+
+   nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
 
    ! get intial Jacobian
    call nested_Newton % J_eval(stateVecTrial) 

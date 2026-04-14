@@ -96,7 +96,7 @@ contains
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k,l                            ! iteration counters
   integer(i4b) :: l_total                        ! total number of inner iterations
-  logical      :: exit_outer,exit_inner 
+  logical      :: exit_outer,exit_inner          ! exit flags for outer and inner loops
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
   !real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
@@ -125,6 +125,18 @@ contains
    f_obj % inner=.true. ! inner iterations for next loop
    inner: do l=0,f_obj % lmax ! inner iterations
     f_obj % l = l ! store index
+
+    ! determine Newton step refinement option
+    if (f_obj % refinement) then
+     if (f_obj % lmax == 0) then ! classical regime
+      f_obj % line_search_option = 'C'
+     else if (l < f_obj % lmax) then ! initial inner iterations
+      f_obj % line_search_option = 'I'
+     else ! last inner iteration
+      f_obj % line_search_option = 'L'
+     end if
+    end if
+
     if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
@@ -136,18 +148,40 @@ contains
     !f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     ! SJT: solve for inner step using LAPACK ------- testing ----------------
-    B(:,1) = -(f_obj % f1_vec(:) - f_obj % f2_vec(:)) + matrix_vector_product(f_obj,f_obj % J2,f_obj % xkp1l - f_obj % xk0) 
+    ! do we need to evaluate RHS vector?
+    !f_obj % evaluate_B = .false.
+    !if (f_obj % refinement) then
+    ! if (f_obj % line_search_option == 'L') then
+    !  f_obj % evaluate_B = .true.
+    ! else if (f_obj % line_search_option == 'I') then
+    !  if (f_obj % l == 0_i4b) then
+    !   if (f_obj % k > 0_i4b) then
+    !    f_obj % evaluate_B = .true.
+    !   end if
+    !  end if
+    ! end if
+    !else
+    ! f_obj % evaluate_B = .true.
+    !end if
+    if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
+     f_obj % evaluate_B = .false.
+    else
+     f_obj % evaluate_B = .true.
+    end if
+
+    ! obtain RHS vector
+    if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
+     B(:,1) = -(f_obj % f1_vec(:) - f_obj % f2_vec(:)) + matrix_vector_product(f_obj,f_obj % J2,f_obj % xkp1l - f_obj % xk0)
+    else ! get scaled RHS from previous line search call or initial value
+     B(:,1) = -f_obj % rVecScaled(:)
+    end if
+
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
     f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
-    if (f_obj % refinement_inner) then
-     if (f_obj % lmax == 0) then ! classical regime
-      call f_obj % apply_nested_line_search('C')
-     else if (l < f_obj % lmax) then ! initial inner iterations
-      call f_obj % apply_nested_line_search('I')
-     else ! last inner iteration
-      call f_obj % apply_nested_line_search('L')
-     end if
+    ! apply Newton step refinement
+    if (f_obj % refinement) then
+     call f_obj % apply_nested_line_search(f_obj % line_search_option)
     end if
 
     call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
@@ -177,13 +211,6 @@ contains
    end if
 
    f_obj % inner=.false.
-
-   if (f_obj % refinement) then
-    f_obj % xkp1l(:) = f_obj % xkp1lp1(:) ! store unrefined inner iteration solution
-    call f_obj % f1_vec_eval(f_obj % xkp1l(:))
-    call f_obj % J1_eval(f_obj % xkp1l(:))
-    call f_obj % apply_nested_line_search('O')
-   end if
 
    call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
@@ -388,7 +415,7 @@ contains
    if (f_obj % banded) then ! banded matrix storage
     ! load banded storage matrix used by LAPACK (stores LU factors on output)
     f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
-    ! scale
+    ! scale (if needed)
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
     call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
