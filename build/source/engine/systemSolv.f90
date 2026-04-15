@@ -1070,7 +1070,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 20_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1079,7 +1079,7 @@ contains
    nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
-   nested_Newton % L0 = fOld ! initial line search objective function value
+   nested_Newton % L0                = fOld   ! initial line search objective function value
    nested_Newton % refinement        = .true. ! apply Newton step refinement following inner iterations
 
    ! constraints 
@@ -1109,19 +1109,7 @@ contains
 
    ! Newton step refinement
    ! note: classical and inner line search schemes have the same initial objective function value
-   !if (nested_Newton % lmax == 0_i4b) then ! classical line search scheme
-    nested_Newton % L0 = fOld ! initial line search objective function value
-   !else ! inner line search scheme
-   ! if (f_obj % banded) then
-   !  message=trim(message)//'nested_Newton_iterations: banded option for line search objective function not implemented'
-   !  err=20; return_flag=.true.; return ! fatal error
-   ! else
-   !  f_obj % rVecScaled(:) = f_obj % fScale(:) * ( &
-   !                      & f_obj % f1_vec(:) - ( f_obj % f2_vec(:) + matmul(f_obj % J2,solution - f_obj % xk0) )&
-   !                      & )
-   ! end if
-   ! L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-   !end if
+   nested_Newton % L0 = fOld ! initial line search objective function value
    nested_Newton % refinement  = .true.  ! apply refine_Newton_step following outer/classical iterations
 
    ! constraints 

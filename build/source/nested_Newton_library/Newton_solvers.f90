@@ -39,6 +39,14 @@ contains
   ! initialize convergence flag
   f_obj % converged = .false.
 
+  ! determine Newton step refinement option and whether we need to evaluate the RHS B vector (can be reused from the line search)
+  if (f_obj % refinement) then
+   f_obj % line_search_option = 'C'
+   f_obj % evaluate_B = .false.
+  else
+   f_obj % evaluate_B = .true.
+  end if
+
   f_obj % inner = .false. ! classical iterations only
   exit_flag=.false.
   f_obj % xk(:) = f_obj % x0(:) ! initialize
@@ -47,11 +55,18 @@ contains
    if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ! compute non-linear function vector (f_obj % f_vec)
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
-   ! begin LAPACK operations
-   B(:,1)=-f_obj % f_vec(:) ! initialize right-side vector used by LAPACK
+   ! obtain RHS vector
+   if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
+    B(:,1) = -f_obj % f_vec(:) ! initialize right-side vector used by LAPACK
+   else ! get scaled RHS from previous line search call or initial value
+    B(:,1) = -f_obj % rVecScaled(:)
+   end if
+
+   ! solve for Newton step
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
+   ! Newton step refinement
    if (f_obj % refinement) then
     call f_obj % apply_nested_line_search('C')
    end if
@@ -118,7 +133,7 @@ contains
 
    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
-   !f2mJ2xk0(:) = f_obj % f2_vec(:) - matrix_vector_product(f_obj,f_obj % J2,f_obj % xk0)
+   !f2mJ2xk0(:) = f_obj % f2_vec(:) - f_obj % matrix_vector_product(f_obj % J2,f_obj % xk0)
    exit_inner=.false.
    f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
 
@@ -143,35 +158,29 @@ contains
 
     ! begin LAPACK operations
     ! initialize right-side vector used by LAPACK ---------- OG method (solve for updated inner iteration solution directly)
-    !B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + matrix_vector_product(f_obj,f_obj % J1,f_obj % xkp1l) 
+    !B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + f_obj % matrix_vector_product(f_obj % J1,f_obj % xkp1l) 
     !call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output
     !f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     ! SJT: solve for inner step using LAPACK ------- testing ----------------
     ! do we need to evaluate RHS vector?
-    !f_obj % evaluate_B = .false.
-    !if (f_obj % refinement) then
-    ! if (f_obj % line_search_option == 'L') then
-    !  f_obj % evaluate_B = .true.
-    ! else if (f_obj % line_search_option == 'I') then
-    !  if (f_obj % l == 0_i4b) then
-    !   if (f_obj % k > 0_i4b) then
-    !    f_obj % evaluate_B = .true.
-    !   end if
-    !  end if
-    ! end if
-    !else
-    ! f_obj % evaluate_B = .true.
-    !end if
     if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
      f_obj % evaluate_B = .false.
+    else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
+     if ((k == 0_i4b).and.(l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
+      f_obj % evaluate_B = .false.
+     else if (l > 0_i4b) then
+      f_obj % evaluate_B = .false.
+     else
+      f_obj % evaluate_B = .true.
+     end if
     else
      f_obj % evaluate_B = .true.
     end if
 
     ! obtain RHS vector
     if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
-     B(:,1) = -(f_obj % f1_vec(:) - f_obj % f2_vec(:)) + matrix_vector_product(f_obj,f_obj % J2,f_obj % xkp1l - f_obj % xk0)
+     B(:,1) = -(f_obj % f1_vec(:) - f_obj % f2_vec(:)) + f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
     else ! get scaled RHS from previous line search call or initial value
      B(:,1) = -f_obj % rVecScaled(:)
     end if
@@ -348,47 +357,6 @@ contains
 
   end if
  end subroutine check_residual_vector
-
- function matrix_vector_product(f_obj,A,x) result(y)
-  ! *** Compute matrix vector product y=A*x ***
-  ! input
-  type(f_obj_type),intent(in) :: f_obj        ! class object containing solver options
-  real(r8b),intent(in) :: A(:,:)  ! input matrix 
-  real(r8b),intent(in) :: x(1:f_obj % n)              ! input vector
-
-  ! output
-  real(r8b) :: y(1:f_obj % n)                         ! product vector
-
-  ! local variables
-  character(1),parameter :: TRANS='N'                ! option for matrix transposition
-  integer(i4b) :: KL,KU                              ! # of subdiagonals and superdiagonals of A (banded storage)
-  integer(i4b) :: LDA                                ! first dimension of A
-  integer(i4b),parameter :: INCX=1_i4b, INCY=1_i4b   ! increment for elements of x and y vectors
-  real(r8b),parameter    :: ALPHA=1._r8b,BETA=0._r8b ! scalars used in LAPACK solvers
- 
-  ! set LAPACK parameters for choice of matrix storage
-  if (f_obj % banded) then ! banded storage
-   KL=f_obj % subdiag; KU=f_obj % superdiag 
-   LDA=KL + KU + 1
-  else ! full matrix storage
-   LDA=f_obj % n
-  end if
-  
-  if (f_obj % banded) then ! banded storage
-   call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
-  else ! full matrix storage
-   if (f_obj % matrix_vector == "matmul") then
-    y=matmul(A,x)
-   else if (f_obj % matrix_vector == "BLAS") then
-    call DGEMV(TRANS,f_obj % n,f_obj % n,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
-   else
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in matrix_vector_product: unsupported option."
-    end if
-    stop ! fatal error
-   end if
-  end if
- end function matrix_vector_product
 
  subroutine linear_solve(f_obj,A,B,tol)
   ! *** Solve Ax=B -- x stored in B on output *** 
