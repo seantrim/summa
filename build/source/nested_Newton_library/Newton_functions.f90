@@ -46,6 +46,7 @@ module Newton_functions
    integer(i4b) :: nrow_banded       ! # of matrix rows for banded storage
    integer(i4b) :: k,l               ! indices for classical/outer and inner iterations
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
+   integer(i4b) :: lmax_loop         ! variable max # of inner iterations (initially lmax but may change depending on observed solution convergence)
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
    integer(i4b) :: KL,KU             ! # of subdiagonals and superdiagonals for LAPACK

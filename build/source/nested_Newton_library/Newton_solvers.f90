@@ -109,7 +109,6 @@ contains
   type(f_obj_type),intent(inout) :: f_obj 
   real(r8b)    :: final_mean                     ! mean value of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
-  integer(i4b) :: k,l                            ! iteration counters
   integer(i4b) :: l_total                        ! total number of inner iterations
   logical      :: exit_outer,exit_inner          ! exit flags for outer and inner loops
   ! LAPACK Variables
@@ -127,9 +126,8 @@ contains
   exit_outer=.false.
   f_obj % inner=.false.        ! start with outer iterations
   f_obj % xk0(:)=f_obj % x0(:) ! initial guess
-  outer: do k=0,f_obj % kmax
-
-   f_obj % k = k ! store index
+  f_obj % k = 0_i4b ! intialize loop index
+  outer: do while (f_obj % k <= f_obj % kmax)
 
    if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
@@ -138,14 +136,15 @@ contains
    f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
 
    f_obj % inner=.true. ! inner iterations for next loop
-   inner: do l=0,f_obj % lmax ! inner iterations
-    f_obj % l = l ! store index
+   f_obj % l = 0_i4b ! intialize loop index
+   f_obj % lmax_loop = f_obj % lmax ! initialize lmax value used for inner loop
+   inner: do while (f_obj % l <= f_obj % lmax_loop) ! inner iterations
 
     ! determine Newton step refinement option
     if (f_obj % refinement) then
      if (f_obj % lmax == 0) then ! classical regime
       f_obj % line_search_option = 'C'
-     else if (l < f_obj % lmax) then ! initial inner iterations
+     else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
       f_obj % line_search_option = 'I'
      else ! last inner iteration
       f_obj % line_search_option = 'L'
@@ -167,9 +166,9 @@ contains
     if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
      f_obj % evaluate_B = .false.
     else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
-     if ((k == 0_i4b).and.(l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
+     if ((f_obj % k == 0_i4b).and.(f_obj % l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
       f_obj % evaluate_B = .false.
-     else if (l > 0_i4b) then
+     else if (f_obj % l > 0_i4b) then
       f_obj % evaluate_B = .false.
      else
       f_obj % evaluate_B = .true.
@@ -193,18 +192,20 @@ contains
      call f_obj % apply_nested_line_search(f_obj % line_search_option)
     end if
 
-    call check_residual_vector(f_obj,l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
+    call check_residual_vector(f_obj,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
     ! print exact convergence error for iteration l
-    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",f_obj % l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
     if (f_obj % constraints_inner) then
      call f_obj % apply_constraints(f_obj % xkp1l,f_obj % xkp1lp1) ! apply constraints without interfering with the convergence criterion
     end if
     f_obj % xkp1l(:) = f_obj % xkp1lp1(:) ! set up next inner iteration
+
+    f_obj % l = f_obj % l + 1_i4b
    end do inner
 
-   if (l.gt.f_obj % lmax) then
-    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l,sum(f_obj % xkp1lp1)/f_obj % n,f_obj % R_inner(1)
+   if (f_obj % l.gt.f_obj % lmax_loop) then
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",f_obj % l,sum(f_obj % xkp1lp1)/f_obj % n,f_obj % R_inner(1)
     if (f_obj % out_warning) then
      write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of inner iterations&
                            & - accuracy may not be sufficient."
@@ -213,17 +214,17 @@ contains
    ! inner iteration counts 
    if (exit_inner) then
     ! final output for inner iterations
-    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",l+1,sum(f_obj % xkp1lp1)/f_obj % n,f_obj % R_inner(1) 
-    l_total=l_total+(l+1)
+    if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,2(g23.15))') "  ",f_obj % l+1,sum(f_obj % xkp1lp1)/f_obj % n,f_obj % R_inner(1) 
+    l_total=l_total+(f_obj % l+1_i4b)
    else
-    l_total=l_total+l
+    l_total=l_total+f_obj % l
    end if
 
    f_obj % inner=.false.
 
-   call check_residual_vector(f_obj,k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
+   call check_residual_vector(f_obj,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
-    write(f_obj % unit,'(i4,3(g23.15))') k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
+    write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
    if (exit_outer) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
@@ -232,6 +233,8 @@ contains
 
    if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk0,f_obj % xkp1lp1) ! apply constraints without interfering with the convergence criterion
    f_obj % xk0(:) = f_obj % xkp1lp1(:)
+
+   f_obj % k = f_obj % k + 1_i4b
   end do outer
 
   ! outer iterations counts 
@@ -240,17 +243,17 @@ contains
    if (f_obj % out_detail) then
     final_mean=sum(f_obj % xkp1lp1)/f_obj % n
     if (f_obj % convergence .ne. 'custom') then
-     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean,f_obj % R(1) ! mean of final solution 
+     write(f_obj % unit,'(i4,2(g23.15))') f_obj % k+1,final_mean,f_obj % R(1) ! mean of final solution 
     else ! custom methods don't have f_obj % R computed
-     write(f_obj % unit,'(i4,2(g23.15))') k+1,final_mean ! mean of final solution 
+     write(f_obj % unit,'(i4,2(g23.15))') f_obj % k+1,final_mean ! mean of final solution 
     end if
    end if
-   f_obj % kcount = k+1
+   f_obj % kcount = f_obj % k+1_i4b
   else
-   f_obj % kcount = k
+   f_obj % kcount = f_obj % k
   end if
 
-  if (k.gt.f_obj % kmax) then
+  if (f_obj % k.gt.f_obj % kmax) then
    if (f_obj % out_warning) then
     write(f_obj % unit,*) "Warning - nested Newton solver has reached the maximum number of outer iterations&
                           & - accuracy may not be sufficient."
@@ -291,6 +294,14 @@ contains
   if (convergence.eq.'custom') then ! use custom convergence criterion
    exit_flag = f_obj % custom_convergence()
    if (exit_flag) return  ! set exit flag if criterion is satisfied
+
+   ! if doing line search for inner iterations and inner iterate has not changed, ensure that one more inner iteration is performed using the outer line search scheme
+   ! note: this eliminates unproductive inner iterations
+   if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
+    if (all(xkp1 == xk)) then
+     f_obj % lmax_loop = f_obj % l + 1_i4b; return
+    end if
+   end if
   else
 
    ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
@@ -352,7 +363,12 @@ contains
 
    ! check exact error from current iteration and estimated error for next iteration
    if ((R(0).lt.tol).or.(R(1).lt.tol)) then
-    exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+    ! if doing line search for inner iterations, ensure that one more inner iteration is performed using the outer line search scheme
+    if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
+     f_obj % lmax_loop = f_obj % l + 1_i4b; return
+    else
+     exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+    end if
    end if
 
   end if
