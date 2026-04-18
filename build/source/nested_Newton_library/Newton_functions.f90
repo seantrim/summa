@@ -933,6 +933,8 @@ contains
  
   subroutine f_and_J_values
    ! ** post-processing to obtain function and Jacobian values needed for next nested Newton iteration **
+   logical, parameter :: periodic_J1 = .false. ! periodic evaluation of J1 during inner loop?
+   logical :: evaluate_J1 ! flag for only evaluating J1 on every other inner iteration
 
    ! update solution in nested Newton algorithm
    if (f_obj % nested) then
@@ -960,9 +962,21 @@ contains
      end if
 
     else if (option == 'I') then
-
      ! have f and f1 -- need J1 (f2 and J2 don't change)
-     call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+
+     ! SJT: testing computing J1 every other inner iteration
+     if (periodic_J1) then
+      ! check if f_obj % l is even
+      if (mod(f_obj % l,2_i4b) == 0_i4b) then ! if l is even
+       evaluate_J1 = .false. ! reuse previous value for next odd l value
+      else ! if l is odd
+       evaluate_J1 = .true. ! evaluate J1 to be used for next even l value
+      end if
+      if (evaluate_J1) call f_obj % J1_eval(updated_solution)   
+     else ! evaluate J1 on every inner iteration
+      call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+     end if 
+
      f_obj % L0 = L1 ! store previous inner scheme objective function value (does not apply if switching to outer line search scheme)
 
     else if (option == 'L') then
@@ -971,9 +985,6 @@ contains
       ! have f and f2 -- need J2, f1, J1
       call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
       call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
-
-      !! prep for switch to inner line search scheme
-      !call f_obj % line_search_objective(.false.,'I',updated_solution,f_obj % L0) ! ---- doesn't have the correct outer iterate guess 
      end if
 
     else
@@ -1288,7 +1299,7 @@ contains
   character(LEN=256)              :: cmessage          ! error message of downwind routine
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
-  logical(lgt),parameter          :: dual = .true. !.false.
+  logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
 
   ! * initialize operations for split_select object *
 
