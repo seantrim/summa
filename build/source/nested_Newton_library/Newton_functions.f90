@@ -40,6 +40,7 @@ module Newton_functions
    logical      :: J1_eval_flag      ! flag to indicate that Jacobian 1 is to be computed
    logical      :: J2_eval_flag      ! flag to indicate that Jacobian 2 is to be computed
    logical      :: evaluate_B        ! flag to indicate if we are evaluating the RHS vector of the Newton iteration equations
+   logical      :: dual              ! flag to indicate if dual method is used (.true. to switch selection of f1 and f2)
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
@@ -1167,6 +1168,7 @@ contains
   !       - objects for summaSolve4homegrown were reused where possible
   class(f_obj_inputs),intent(inout) :: f_obj
   real(r8b),intent(in)              :: xvec(1:f_obj % n) ! current guess
+  logical,parameter :: mass_flag=.true.,energy_flag=.true.
 
   ! update
   associate(&
@@ -1186,6 +1188,8 @@ contains
                     .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
                     f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                     f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
+                    mass_flag,                         & ! intent(in):    flag to compute mass terms
+                    energy_flag,                       & ! intent(in):    flag to compute energy terms
                     ! input: state vectors
                     stateVecTrial,                   & ! intent(in):    model state vector
                     f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1299,7 +1303,7 @@ contains
   character(LEN=256)              :: cmessage          ! error message of downwind routine
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
-  logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
+  !logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
 
   ! * initialize operations for split_select object *
 
@@ -1333,7 +1337,7 @@ contains
   end if
 
   ! assign masks
-  if (dual) then ! assign masks for f1 (energy) and f2 (mass)
+  if (f_obj % dual) then ! assign masks for f1 (energy) and f2 (mass)
    f_obj % stateMask2 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
    f_obj % stateMask1 = split_select % stateMask           ! no transformation --- allocate on assignment
   else ! assign masks for f1 (mass) and f2 (energy)
@@ -1342,7 +1346,7 @@ contains
   end if
 
   ! get counts for mass and energy splits
-  if (dual) then
+  if (f_obj % dual) then
    f_obj % nSubset2 = split_select % nState - split_select % nSubset ! transform to get count for mass split
    f_obj % nSubset1 = split_select % nSubset                         ! no transformation for energy split
   else
@@ -1434,11 +1438,20 @@ contains
 
   ! local
   real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
+  logical                         :: mass_flag,energy_flag ! flags to compute mass and energy terms
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
+  if (f_obj % dual) then ! dual method (f1 -> energy)
+   mass_flag = .false.
+   energy_flag = .true.
+  else ! original method (f1 -> mass)
+   mass_flag = .true.
+   energy_flag = .false.
+  end if
+
   call f_obj % f_state_SUMMA_vec_full(&
-               &xvec,&
+               &mass_flag,energy_flag,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,resVec)
 
@@ -1480,11 +1493,20 @@ contains
 
   ! local
   real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
+  logical                         :: mass_flag,energy_flag ! flags to compute mass and energy terms
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
+  if (f_obj % dual) then ! dual method (f2 -> mass)
+   mass_flag = .true.
+   energy_flag = .false.
+  else ! original method (f2 -> energy)
+   mass_flag = .false.
+   energy_flag = .true.
+  end if
+
   call f_obj % f_state_SUMMA_vec_full(&
-               &xvec,&
+               &mass_flag,energy_flag,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,resVec)
 
@@ -1543,7 +1565,7 @@ contains
 
  end subroutine Jacobian_f_mass_energy_SUMMA_vec_full
 
- subroutine f_state_SUMMA_vec_full(f_obj,xvec,&
+ subroutine f_state_SUMMA_vec_full(f_obj,mass_flag,energy_flag,xvec,&
                                   &indx_data,diag_data,flux_data,deriv_data,sMul,&
                                   &dBaseflow_dMatric,resVec)
   ! *** Compute SUMMA's vector non-linear function for mass or energy state variables -- uses fully-coupled eval8summa call ***
@@ -1551,6 +1573,7 @@ contains
 
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
+  logical,intent(in)              :: mass_flag,energy_flag ! flags to compute mass and energy terms 
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
@@ -1565,6 +1588,7 @@ contains
   real(rkind) :: fluxVec0(1:f_obj % n) ! flux vector
   real(rkind) :: fRHS(1:f_obj % n)     ! RHS function for ARKODE
   real(rkind) :: rAdd(1:f_obj % n)     ! additional (sink) terms on the RHS of the state equation
+  !logical,parameter :: mass_flag=.true.,energy_flag=.true.
 
   ! evaluate residual vector for mass split
   call eval8summa(&
@@ -1581,6 +1605,8 @@ contains
                    .false.,                           & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation (.false. based on usage of eval8summa in summaSolve4homegrown)
                    f_obj % in_SS4HG % computeVegFlux, & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
+                   mass_flag,                         & ! intent(in):    flag to compute mass terms
+                   energy_flag,                       & ! intent(in):    flag to compute energy terms
                    ! input: state vectors
                    xvec,                            & ! intent(in):    model state vector
                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations

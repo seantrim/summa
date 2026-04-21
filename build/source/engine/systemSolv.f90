@@ -468,6 +468,8 @@ contains
                     firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
                     computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                     scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                    .true.,                  & ! intent(in):    flag to compute mass terms
+                    .true.,                  & ! intent(in):    flag to compute energy terms
                     ! input: state vectors
                     stateVecTrial,           & ! intent(in):    model state vector
                     fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1056,6 +1058,10 @@ contains
   nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
+
+   ! use dual method?
+   nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
+
    ! set method for computing relative convergence error
     ! 'strict' uses two consecutive iterations and is extremely conservative
     !     |--> (actually computes the convergence error of the previous iteration)

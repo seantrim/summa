@@ -82,6 +82,8 @@ subroutine computResid(&
                       nSoil,                     & ! intent(in):  number of soil layers
                       nLayers,                   & ! intent(in):  total number of layers
                       mixdformNrg,               & ! intent(in):  flag to use enthalpy formulation
+                      mass_flag,                 & ! intent(in):  flag to compute mass terms
+                      energy_flag,               & ! intent(in):  flag to compute energy terms
                       ! input: flux vectors
                       sMul,                      & ! intent(in):  state vector multiplier (used in the residual calculations)
                       fVec,                      & ! intent(in):  flux vector
@@ -122,6 +124,7 @@ subroutine computResid(&
   integer(i4b),intent(in)            :: nSoil                     ! number of soil layers
   integer(i4b),intent(in)            :: nLayers                   ! total number of layers in the snow+soil domain
   logical(lgt),intent(in)            :: mixdformNrg               ! flag to use enthalpy formulation
+  logical(lgt),intent(in)            :: mass_flag,energy_flag     ! flags to compute mass and energy terms
   ! input: flux vectors
   real(qp),intent(in)                :: sMul(:)   ! NOTE: qp      ! state vector multiplier (used in the residual calculations)
   real(rkind),intent(in)             :: fVec(:)                   ! flux vector
@@ -215,6 +218,13 @@ subroutine computResid(&
     ! initialize error control
     err=0; message="computResid/"
 
+    ! initialize state type flags !SJT
+    !mass_flag=.true.
+    !energy_flag=.true.
+
+    ! initialize rVec
+    rVec(:) = 0._qp
+
     ! ---
     ! * compute sink terms...
     ! -----------------------
@@ -222,33 +232,37 @@ subroutine computResid(&
     ! intialize additional terms on the RHS as zero
     rAdd(:) = 0._rkind
 
-    ! compute energy associated with melt freeze for the vegetation canopy (J m-3)
-    if (ixVegNrg/=integerMissing) rAdd(ixVegNrg) = rAdd(ixVegNrg) + LH_fus*( scalarCanopyIceTrial - scalarCanopyIce )/canopyDepth
+    if (energy_flag) then
+      ! compute energy associated with melt freeze for the vegetation canopy (J m-3)
+      if (ixVegNrg/=integerMissing) rAdd(ixVegNrg) = rAdd(ixVegNrg) + LH_fus*( scalarCanopyIceTrial - scalarCanopyIce )/canopyDepth
  
-    ! compute energy associated with melt/freeze for snow
-    ! NOTE: allow expansion of ice during melt-freeze for snow; deny expansion of ice during melt-freeze for soil
-    if (nSnowSoilNrg>0) then
-      ! loop through non-missing energy state variables in the snow+soil domain
-      do concurrent (iLayer=1:nLayers,ixSnowSoilNrg(iLayer)/=integerMissing)           
-        select case( layerType(iLayer) )
-          case(iname_snow); rAdd( ixSnowSoilNrg(iLayer) ) = rAdd( ixSnowSoilNrg(iLayer) )&
-                                                        & + LH_fus*iden_ice  *( mLayerVolFracIceTrial(iLayer) - mLayerVolFracIce(iLayer) )
-          case(iname_soil); rAdd( ixSnowSoilNrg(iLayer) ) = rAdd( ixSnowSoilNrg(iLayer) )&
-                                                        & + LH_fus*iden_water*( mLayerVolFracIceTrial(iLayer) - mLayerVolFracIce(iLayer) )
-        end select
-      end do 
+      ! compute energy associated with melt/freeze for snow
+      ! NOTE: allow expansion of ice during melt-freeze for snow; deny expansion of ice during melt-freeze for soil
+      if (nSnowSoilNrg>0) then
+        ! loop through non-missing energy state variables in the snow+soil domain
+        do concurrent (iLayer=1:nLayers,ixSnowSoilNrg(iLayer)/=integerMissing)           
+          select case( layerType(iLayer) )
+            case(iname_snow); rAdd( ixSnowSoilNrg(iLayer) ) = rAdd( ixSnowSoilNrg(iLayer) )&
+                                                          & + LH_fus*iden_ice  *( mLayerVolFracIceTrial(iLayer) - mLayerVolFracIce(iLayer) )
+            case(iname_soil); rAdd( ixSnowSoilNrg(iLayer) ) = rAdd( ixSnowSoilNrg(iLayer) )&
+                                                          & + LH_fus*iden_water*( mLayerVolFracIceTrial(iLayer) - mLayerVolFracIce(iLayer) )
+          end select
+        end do 
+      end if
     end if
 
-    ! sink terms soil hydrology (-)
-    ! NOTE 1: state variable is volumetric water content, so melt-freeze is not included
-    ! NOTE 2: ground evaporation was already included in the flux at the upper boundary
-    ! NOTE 3: rAdd(ixSnowOnlyWat)=0, and is defined in the initialization above
-    ! NOTE 4: same sink terms for matric head and liquid matric potential
-    if (nSoilOnlyHyd>0) then ! loop through non-missing hydrology state variables in the snow+soil domain
-      do concurrent (iLayer=1:nSoil,ixSoilOnlyHyd(iLayer)/=integerMissing) 
-        rAdd( ixSoilOnlyHyd(iLayer) ) = rAdd( ixSoilOnlyHyd(iLayer) )&
-                                    & + ( ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) - mLayerCompress(iLayer) )*dt
-      end do
+    if (mass_flag) then
+      ! sink terms soil hydrology (-)
+      ! NOTE 1: state variable is volumetric water content, so melt-freeze is not included
+      ! NOTE 2: ground evaporation was already included in the flux at the upper boundary
+      ! NOTE 3: rAdd(ixSnowOnlyWat)=0, and is defined in the initialization above
+      ! NOTE 4: same sink terms for matric head and liquid matric potential
+      if (nSoilOnlyHyd>0) then ! loop through non-missing hydrology state variables in the snow+soil domain
+        do concurrent (iLayer=1:nSoil,ixSoilOnlyHyd(iLayer)/=integerMissing) 
+          rAdd( ixSoilOnlyHyd(iLayer) ) = rAdd( ixSoilOnlyHyd(iLayer) )&
+                                      & + ( ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) - mLayerCompress(iLayer) )*dt
+        end do
+      end if
     end if
 
     ! ---
@@ -258,92 +272,102 @@ subroutine computResid(&
     ! compute the residual vector for the vegetation canopy
     ! NOTE: sMul(ixVegHyd) = 1, but include as it converts all variables to quadruple precision
     ! --> energy balance
-    if (mixdformNrg) then
-      if (ixCasNrg/=integerMissing) then
-        fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )
-        rVec(ixCasNrg) = ( scalarCanairEnthalpyTrial - scalarCanairEnthalpy )&
-                     & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
-      end if
-      if (ixVegNrg/=integerMissing) then
-        fRHS(ixVegNrg) = ( fVec(ixVegNrg) + rAdd(ixVegNrg)/dt )
-        rVec(ixVegNrg) = ( scalarCanopyEnthTempTrial - scalarCanopyEnthTemp )&
+    if (energy_flag) then
+      if (mixdformNrg) then
+        if (ixCasNrg/=integerMissing) then
+          fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )
+          rVec(ixCasNrg) = ( scalarCanairEnthalpyTrial - scalarCanairEnthalpy )&
+                       & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
+        end if
+        if (ixVegNrg/=integerMissing) then
+          fRHS(ixVegNrg) = ( fVec(ixVegNrg) + rAdd(ixVegNrg)/dt )
+          rVec(ixVegNrg) = ( scalarCanopyEnthTempTrial - scalarCanopyEnthTemp )&
+                         & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+        end if
+      else
+        if (ixCasNrg/=integerMissing) then
+          fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )/real(sMul(ixCasNrg),rkind)
+          rVec(ixCasNrg) = sMul(ixCasNrg)*( scalarCanairTempTrial - scalarCanairTemp )&
+                       & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
+        end if
+        if (ixVegNrg/=integerMissing) then
+          fRHS(ixVegNrg) = 0._rkind ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives 
+          rVec(ixVegNrg) = sMul(ixVegNrg)*( scalarCanopyTempTrial - scalarCanopyTemp )&
+                       & + scalarCanopyCmTrial*( scalarCanopyWatTrial - scalarCanopyWat )/canopyDepth &
                        & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
-      end if
-    else
-      if (ixCasNrg/=integerMissing) then
-        fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )/real(sMul(ixCasNrg),rkind)
-        rVec(ixCasNrg) = sMul(ixCasNrg)*( scalarCanairTempTrial - scalarCanairTemp )&
-                     & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
-      end if
-      if (ixVegNrg/=integerMissing) then
-        fRHS(ixVegNrg) = 0._rkind ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives 
-        rVec(ixVegNrg) = sMul(ixVegNrg)*( scalarCanopyTempTrial - scalarCanopyTemp )&
-                     & + scalarCanopyCmTrial*( scalarCanopyWatTrial - scalarCanopyWat )/canopyDepth &
-                     & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+        end if
       end if
     end if
     ! --> mass balance
-    if (ixVegHyd/=integerMissing) then
-      scalarCanopyHydTrial = merge(scalarCanopyWatTrial, scalarCanopyLiqTrial, (ixStateType( ixHydCanopy(ixVegVolume) )==iname_watCanopy) )
-      scalarCanopyHyd      = merge(scalarCanopyWat,      scalarCanopyLiq,      (ixStateType( ixHydCanopy(ixVegVolume) )==iname_watCanopy) )
-      fRHS(ixVegHyd) = ( fVec(ixVegHyd) + rAdd(ixVegHyd)/dt )/real(sMul(ixVegHyd),rkind)
-      rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - ( sMul(ixVegHyd)*scalarCanopyHyd + fVec(ixVegHyd)*dt + rAdd(ixVegHyd) )
-      !rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - sMul(ixVegHyd)*scalarCanopyHyd&
-      !             & - real(fVec(ixVegHyd)*dt + rAdd(ixVegHyd),qp) ! may need all terms to be qp before doing the sum to match original 
+    if (mass_flag) then
+      if (ixVegHyd/=integerMissing) then
+        scalarCanopyHydTrial = merge(scalarCanopyWatTrial, scalarCanopyLiqTrial, (ixStateType( ixHydCanopy(ixVegVolume) )==iname_watCanopy) )
+        scalarCanopyHyd      = merge(scalarCanopyWat,      scalarCanopyLiq,      (ixStateType( ixHydCanopy(ixVegVolume) )==iname_watCanopy) )
+        fRHS(ixVegHyd) = ( fVec(ixVegHyd) + rAdd(ixVegHyd)/dt )/real(sMul(ixVegHyd),rkind)
+        rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - ( sMul(ixVegHyd)*scalarCanopyHyd + fVec(ixVegHyd)*dt + rAdd(ixVegHyd) )
+        !rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - sMul(ixVegHyd)*scalarCanopyHyd&
+        !             & - real(fVec(ixVegHyd)*dt + rAdd(ixVegHyd),qp) ! may need all terms to be qp before doing the sum to match original 
+      end if
     end if
 
     ! compute the residual vector for the snow and soil sub-domains for energy
-    if (nSnowSoilNrg>0) then
-      ! loop through non-missing energy state variables in the snow+soil domain
-      do concurrent (iLayer=1:nLayers,ixSnowSoilNrg(iLayer)/=integerMissing)   
-        if (mixdformNrg) then
-          fRHS( ixSnowSoilNrg(iLayer) ) = ( fVec( ixSnowSoilNrg(iLayer) ) + rAdd( ixSnowSoilNrg(iLayer) )/dt )
-          rVec( ixSnowSoilNrg(iLayer) ) = ( mLayerEnthTempTrial(iLayer) - mLayerEnthTemp(iLayer) )&
-                                      & - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
-        else
-          ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives
-          ! so temperature formulation will not be used for ARKODE
-          fRHS( ixSnowSoilNrg(iLayer) ) = 0._rkind ! set unused value to zero
-          rVec( ixSnowSoilNrg(iLayer) ) = sMul( ixSnowSoilNrg(iLayer) )*( mLayerTempTrial(iLayer) - mLayerTemp(iLayer) )&
-                                      & + mLayerCmTrial(iLayer)*( mLayerVolFracWatTrial(iLayer) - mLayerVolFracWat(iLayer) )&
-                                        - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
-        end if
-      end do 
+    if (energy_flag) then
+      if (nSnowSoilNrg>0) then
+        ! loop through non-missing energy state variables in the snow+soil domain
+        do concurrent (iLayer=1:nLayers,ixSnowSoilNrg(iLayer)/=integerMissing)   
+          if (mixdformNrg) then
+            fRHS( ixSnowSoilNrg(iLayer) ) = ( fVec( ixSnowSoilNrg(iLayer) ) + rAdd( ixSnowSoilNrg(iLayer) )/dt )
+            rVec( ixSnowSoilNrg(iLayer) ) = ( mLayerEnthTempTrial(iLayer) - mLayerEnthTemp(iLayer) )&
+                                        & - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
+          else
+            ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives
+            ! so temperature formulation will not be used for ARKODE
+            fRHS( ixSnowSoilNrg(iLayer) ) = 0._rkind ! set unused value to zero
+            rVec( ixSnowSoilNrg(iLayer) ) = sMul( ixSnowSoilNrg(iLayer) )*( mLayerTempTrial(iLayer) - mLayerTemp(iLayer) )&
+                                        & + mLayerCmTrial(iLayer)*( mLayerVolFracWatTrial(iLayer) - mLayerVolFracWat(iLayer) )&
+                                          - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
+          end if
+        end do 
+      end if
     end if
 
     ! compute the residual vector for the snow and soil sub-domains for hydrology
     ! NOTE: residual depends on choice of state variable
-    if (nSnowSoilHyd>0) then
-      ! loop through non-missing hydrology state variables in the snow+soil domain
-      do concurrent (iLayer=1:nLayers,ixSnowSoilHyd(iLayer)/=integerMissing) 
-        ! get the correct state variable
-        mLayerVolFracHydTrial(iLayer) = merge(mLayerVolFracWatTrial(iLayer), mLayerVolFracLiqTrial(iLayer) ,&
-                                      & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
-        mLayerVolFracHyd(iLayer)      = merge(mLayerVolFracWat(iLayer),      mLayerVolFracLiq(iLayer),&
-                                      & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
-        ! note: the following operations for fRHS assume that rAdd is from soil only -- SJT: confirm indexing for all cases
-        ! compute the residual
-        !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt
-        ! expand rAdd/dt: 
-        !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) )&
-        !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow)&
-        !                            & - mLayerCompress(iLayer)
-        ! note: mLayerCompress = fRHS * mLayerdPsi_dTheta* dCompress_dPsi
-        ! isolating fRHS: --------- SJT: FIX THIS for fRHS (indexing problem) ----------------------------------------- 
-        !fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )&
-        !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) )&
-        !                            & / (1._rkind + mLayerdPsi_dTheta(iLayer) * dCompress_dPsi(iLayer))
-        fRHS( ixSnowSoilHyd(iLayer) ) = 0._rkind !! SJT: temporary value that needs to be fixed
-        rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
-                                    & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
-      end do 
+    if (mass_flag) then
+      if (nSnowSoilHyd>0) then
+        ! loop through non-missing hydrology state variables in the snow+soil domain
+        do concurrent (iLayer=1:nLayers,ixSnowSoilHyd(iLayer)/=integerMissing) 
+          ! get the correct state variable
+          mLayerVolFracHydTrial(iLayer) = merge(mLayerVolFracWatTrial(iLayer), mLayerVolFracLiqTrial(iLayer) ,&
+                                        & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
+          mLayerVolFracHyd(iLayer)      = merge(mLayerVolFracWat(iLayer),      mLayerVolFracLiq(iLayer),&
+                                        & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
+          ! note: the following operations for fRHS assume that rAdd is from soil only -- SJT: confirm indexing for all cases
+          ! compute the residual
+          !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt
+          ! expand rAdd/dt: 
+          !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) )&
+          !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow)&
+          !                            & - mLayerCompress(iLayer)
+          ! note: mLayerCompress = fRHS * mLayerdPsi_dTheta* dCompress_dPsi
+          ! isolating fRHS: --------- SJT: FIX THIS for fRHS (indexing problem) ----------------------------------------- 
+          !fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )&
+          !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) )&
+          !                            & / (1._rkind + mLayerdPsi_dTheta(iLayer) * dCompress_dPsi(iLayer))
+          fRHS( ixSnowSoilHyd(iLayer) ) = 0._rkind !! SJT: temporary value that needs to be fixed
+          rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
+                                      & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
+        end do 
+      end if
     end if
 
     ! compute the residual vector for the aquifer
-    if (ixAqWat/=integerMissing) then
-      fRHS(ixAqWat) = ( fVec(ixAqWat) + rAdd(ixAqWat)/dt )
-      rVec(ixAqWat) = sMul(ixAqWat)*( scalarAquiferStorageTrial - scalarAquiferStorage )&
-                  & - ( fVec(ixAqWat)*dt + rAdd(ixAqWat) )
+    if (mass_flag) then ! aquifer residual included in mass portion of residual vector
+      if (ixAqWat/=integerMissing) then
+        fRHS(ixAqWat) = ( fVec(ixAqWat) + rAdd(ixAqWat)/dt )
+        rVec(ixAqWat) = sMul(ixAqWat)*( scalarAquiferStorageTrial - scalarAquiferStorage )&
+                    & - ( fVec(ixAqWat)*dt + rAdd(ixAqWat) )
+      end if
     end if
 
     ! print the state variables if requested

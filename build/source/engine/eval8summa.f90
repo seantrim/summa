@@ -101,6 +101,8 @@ subroutine eval8summa(&
                       firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
                       computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                       scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                      mass_flag,               & ! intent(in):    flag to compute mass terms
+                      energy_flag,             & ! intent(in):    flag to compute energy terms
                       ! input: state vectors
                       stateVec,                & ! intent(in):    model state vector
                       fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -158,6 +160,7 @@ subroutine eval8summa(&
   logical(lgt),intent(in)         :: firstSplitOper              ! flag to indicate if we are processing the first flux call in a splitting operation
   logical(lgt),intent(in)         :: computeVegFlux              ! flag to indicate if computing fluxes over vegetation
   logical(lgt),intent(in)         :: scalarSolution              ! flag to denote if implementing the scalar solution
+  logical(lgt),intent(in)         :: mass_flag,energy_flag       ! flags to compute mass and energy terms
   ! input: state vectors
   real(rkind),intent(in)          :: stateVec(:)                 ! model state vector
   real(rkind),intent(in)          :: fScale(:)                   ! characteristic scale of the function evaluations
@@ -605,6 +608,8 @@ subroutine eval8summa(&
                       nSoil,                      & ! intent(in):  number of soil layers
                       nLayers,                    & ! intent(in):  total number of layers
                       ixNrgConserv.ne.closedForm, & ! intent(in):  flag to use enthalpy form of residual
+                      mass_flag,                  & ! intent(in):  flag to compute mass terms 
+                      energy_flag,                & ! intent(in):  flag to compute energy terms 
                       ! input: flux vectors
                       sMul,                       & ! intent(in):  state vector multiplier (used in the residual calculations)
                       fluxVec,                    & ! intent(in):  flux vector
@@ -720,6 +725,8 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                 eqns_data%firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
                 eqns_data%computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                 eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                .true.,                            & ! intent(in):    flag to compute mass terms
+                .true.,                            & ! intent(in):    flag to compute energy terms
                 ! input: state vectors
                 stateVec,                          & ! intent(in):    model state vector
                 eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -830,6 +837,8 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                 eqns_data%firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
                 eqns_data%computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                 eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                .true.,                            & ! intent(in):    flag to compute mass terms
+                .true.,                            & ! intent(in):    flag to compute energy terms
                 ! input: state vectors
                 stateVec,                          & ! intent(in):    model state vector
                 eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations

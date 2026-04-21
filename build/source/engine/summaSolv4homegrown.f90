@@ -1068,6 +1068,8 @@ contains
                    .false.,                 & ! intent(in):    not processing the first iteration in a splitting operation
                    computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
                    scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                   .true.,                  & ! intent(in):    flag to compute mass terms
+                   .true.,                  & ! intent(in):    flag to compute energy terms
                    ! input: state vectors
                    stateVecNew,             & ! intent(in):    updated model state vector
                    fScale,                  & ! intent(in):    characteristic scale of the function evaluations
