@@ -1442,13 +1442,17 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  if (f_obj % dual) then ! dual method (f1 -> energy)
-   mass_flag = .false.
-   energy_flag = .true.
-  else ! original method (f1 -> mass)
-   mass_flag = .true.
-   energy_flag = .false.
-  end if
+  mass_flag=.true.; energy_flag=.true. ! SJT: OG method -- using for now until work continues on overhead reduction for f1 and f2
+
+  ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
+  ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
+  !if (f_obj % dual) then ! dual method (f1 -> energy)
+  ! mass_flag = .false.
+  ! energy_flag = .true.
+  !else ! original method (f1 -> mass)
+  ! mass_flag = .true.
+  ! energy_flag = .false.
+  !end if
 
   call f_obj % f_state_SUMMA_vec_full(&
                &mass_flag,energy_flag,xvec,&
@@ -1497,13 +1501,17 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  if (f_obj % dual) then ! dual method (f2 -> mass)
-   mass_flag = .true.
-   energy_flag = .false.
-  else ! original method (f2 -> energy)
-   mass_flag = .false.
-   energy_flag = .true.
-  end if
+  mass_flag=.true.; energy_flag=.true. ! SJT: OG method -- using for now until work continues on overhead reduction for f1 and f2
+
+  ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
+  ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
+  !if (f_obj % dual) then ! dual method (f2 -> mass)
+  ! mass_flag = .true.
+  ! energy_flag = .false.
+  !else ! original method (f2 -> energy)
+  ! mass_flag = .false.
+  ! energy_flag = .true.
+  !end if
 
   call f_obj % f_state_SUMMA_vec_full(&
                &mass_flag,energy_flag,xvec,&

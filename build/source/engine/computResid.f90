@@ -218,10 +218,6 @@ subroutine computResid(&
     ! initialize error control
     err=0; message="computResid/"
 
-    ! initialize state type flags !SJT
-    !mass_flag=.true.
-    !energy_flag=.true.
-
     ! initialize rVec
     rVec(:) = 0._qp
 
