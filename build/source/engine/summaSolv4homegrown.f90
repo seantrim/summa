@@ -561,8 +561,6 @@ contains
 
     ! impose solution constraints adjusting state vector and iteration increment
     ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
-    ! impose solution constraints adjusting state vector and iteration increment
-    ! NOTE: We may not need to do this (or at least, do ALL of this), as we can probably rely on the line search here
     call imposeConstraints(model_decisions,indx_data,prog_data,mpar_data,stateVecNew,stateVecTrial,nState,nSoil,nSnow,cmessage,err)
     if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
     xInc = stateVecNew - stateVecTrial

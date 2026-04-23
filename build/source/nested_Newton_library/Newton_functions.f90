@@ -840,11 +840,11 @@ contains
    ! compute objective function
    call f_obj % line_search_objective(.true.,.true.,option,updated_solution,L1)
 
-   ! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
-   if (.not.(f_obj % feasible)) then
-    print *, "Error in SUMMA_nested_line_search: not feasible"
-    stop
-   end if
+   !! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
+   !if (.not.(f_obj % feasible)) then
+   ! print *, "Error in SUMMA_nested_line_search: not feasible"
+   ! stop
+   !end if
 
    ! get convergence flag
    converged = SUMMA_checkConv(f_obj,p,updated_solution)
