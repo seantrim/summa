@@ -176,28 +176,80 @@ contains
   end subroutine initialize_convergence_stats
 
   subroutine finalize_convergence_stats
-   ! *** Finalize convergence stats object ***
-   USE globalData,only:gru_struc ! gru-hru mapping structures
-   integer(i4b) :: iGRU,iHRU     ! indices for GRUs and HRUs
+    ! *** Finalize convergence stats object ***
+    USE globalData,only:gru_struc               ! gru-hru mapping structures
+    ! index variables for GRUs and HRUs
+    integer(i4b) :: iGRU,iHRU                   ! indices for GRUs and HRUs
+    integer(i4b) :: nGRU,nHRU                   ! counts for GRUs and HRUs
+    ! parameters
+    logical(lgt),parameter :: verbose = .true.      ! output for all HRUs?
+    logical(lgt),parameter :: verbose_HRU = .false. ! output extra info per HRU?
+    ! variables for computing sums
+    integer(i4b) :: nHRU_sum
+    integer(i4b) :: high_level_step_reductions_sum
+    integer(i4b) :: low_level_step_reductions_sum
+    integer(i4b) :: low_level_step_reductions_coupled_sum
+    integer(i4b) :: splitting_failures_sum
+    integer(i4b) :: splitting_failures_coupled_sum
+      
+    ! get number of GRUs (assumes n=1 for instantiations)
+    nGRU = summa1_struc(n)%nGRU
 
-   ! print convergence information
-   print *, ""
-   print *, "Convergence Statistics:"
-   associate(nGRU => summa1_struc(n)%nGRU)
+    ! print convergence information
+    print *, ""
+    print *, "Convergence Statistics (All HRUs):"
+    if (verbose_HRU) then ! verbose output per HRU
+      do iGRU = 1,nGRU
+        print *, "GRU=",iGRU
+        do iHRU = 1,gru_struc(iGRU)%hruCount
+          print *, "HRU=",iHRU
+          print *, "coupled step reductions       =", convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions
+          print *, "substep reductions            =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions
+          print *, "monolithic substep reductions =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled
+          print *, "splitting failures            =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures
+          print *, "monolithic failures           =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled
+        end do
+      end do
+    else              ! streamlined ouput per HRU
+      do iGRU = 1,nGRU
+        print *, "GRU=",iGRU
+        do iHRU = 1,gru_struc(iGRU)%hruCount
+          print *, "HRU=",iHRU
+          print *, "monolithic substep reductions =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled
+          print *, "monolithic failures           =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled
+        end do
+      end do
+    end if
+    print *, ""
+
+    ! initialize summation variables
+    nHRU_sum                              = 0_i4b
+    high_level_step_reductions_sum        = 0_i4b 
+    low_level_step_reductions_sum         = 0_i4b 
+    low_level_step_reductions_coupled_sum = 0_i4b 
+    splitting_failures_sum                = 0_i4b
+    splitting_failures_coupled_sum        = 0_i4b
     do iGRU = 1,nGRU
-     print *, "GRU=",iGRU
-     do iHRU = 1,gru_struc(iGRU)%hruCount
-      print *, "HRU=",iHRU
-      print *, "high_level_step_reductions        =", convergence_stats%gru(iGRU)%hru(iHRU)%high_level_step_reductions
-      print *, "low_level_step_reductions         =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions
-      print *, "low_level_step_reductions_coupled =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled
-      print *, "splitting_failures                =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures
-      print *, "splitting_failures_coupled        =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled
-     end do
+      nHRU = gru_struc(iGRU)%hruCount; nHRU_sum = nHRU_sum + nHRU
+      high_level_step_reductions_sum        = high_level_step_reductions_sum        + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%high_level_step_reductions)
+      low_level_step_reductions_sum         = low_level_step_reductions_sum         + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%low_level_step_reductions)
+      low_level_step_reductions_coupled_sum = low_level_step_reductions_coupled_sum + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%low_level_step_reductions_coupled) 
+      splitting_failures_sum                = splitting_failures_sum                + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%splitting_failures)
+      splitting_failures_coupled_sum        = splitting_failures_coupled_sum        + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%splitting_failures_coupled)
     end do
-   end associate
-   print *, ""
 
+    print *, "Convergence Statistics (Mean Per HRU):"
+    print *, "coupled step reductions       =", real(high_level_step_reductions_sum,rkind)/real(nHRU_sum,rkind)
+    print *, "substep reductions            =", real(low_level_step_reductions_sum,rkind)/real(nHRU_sum,rkind)
+    print *, "monolithic substep reductions =", real(low_level_step_reductions_coupled_sum,rkind)/real(nHRU_sum,rkind)
+    print *, "splitting failures            =", real(splitting_failures_sum,rkind)/real(nHRU_sum,rkind)
+    print *, "monolithic failures           =", real(splitting_failures_coupled_sum,rkind)/real(nHRU_sum,rkind) 
+    print *, ""
   end subroutine finalize_convergence_stats
 
 end program summa_driver
