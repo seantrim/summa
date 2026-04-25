@@ -1060,7 +1060,7 @@ contains
   if (nested_Newton % nested) then ! nested iterations
 
    ! use dual method?
-   nested_Newton % dual = .false. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
+   nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
 
    ! set method for computing relative convergence error
     ! 'strict' uses two consecutive iterations and is extremely conservative
