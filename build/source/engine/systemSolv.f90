@@ -1076,7 +1076,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 20_i4b ! for state type decomposition
+   nested_Newton % kmax = 999_i4b; nested_Newton % lmax = 49_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
