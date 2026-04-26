@@ -785,6 +785,7 @@ contains
    if (option == 'I') then
     call f_obj % line_search_objective(.false.,.false.,option,initial_solution,L0) ! can reuse f, J, and rVecScaled values
    else if (option == 'L') then
+   !else if ((option == 'L').or.(option == 'C')) then ! for tests with 'C' option on last inner iteration
     call f_obj % line_search_objective(.true.,.true.,option,initial_solution,L0) ! need to compute when switching to outer scheme
    end if
   else

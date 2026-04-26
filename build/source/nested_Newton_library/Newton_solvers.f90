@@ -142,12 +142,13 @@ contains
 
     ! determine Newton step refinement option
     if (f_obj % refinement) then
-     if (f_obj % lmax == 0) then ! classical regime
+     if (f_obj % lmax == 0_i4b) then ! classical regime
       f_obj % line_search_option = 'C'
      else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
       f_obj % line_search_option = 'I'
      else ! last inner iteration
       f_obj % line_search_option = 'L'
+      !f_obj % line_search_option = 'C' ! testing 'C' scheme on last inner iteration
      end if
     end if
 
@@ -164,6 +165,7 @@ contains
     ! SJT: solve for inner step using LAPACK ------- testing ----------------
     ! do we need to evaluate RHS vector?
     if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
+    !if ((f_obj % refinement).and.(f_obj % line_search_option == 'C').and.(f_obj % lmax == 0_i4b)) then ! for testing 'C' scheme on last inner iteration
      f_obj % evaluate_B = .false.
     else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
      if ((f_obj % k == 0_i4b).and.(f_obj % l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
