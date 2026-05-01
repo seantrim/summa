@@ -64,6 +64,7 @@ contains
 
    ! solve for Newton step
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
+   if (f_obj % LAPACK_error) return ! check for LAPACK errors to all recovery (if supported by the external driver)
    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
    ! Newton step refinement
@@ -160,6 +161,7 @@ contains
     ! initialize right-side vector used by LAPACK ---------- OG method (solve for updated inner iteration solution directly)
     !B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + f_obj % matrix_vector_product(f_obj % J1,f_obj % xkp1l) 
     !call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output
+    !if (f_obj % LAPACK_error) return ! check for LAPACK errors to all recovery (if supported by the external driver)
     !f_obj % xkp1lp1(:)=B(:,1) ! update guess
 
     ! SJT: solve for inner step using LAPACK ------- testing ----------------
@@ -187,6 +189,7 @@ contains
     end if
 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
+    if (f_obj % LAPACK_error) return ! check for LAPACK errors to all recovery (if supported by the external driver)
     f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
     ! apply Newton step refinement
@@ -396,6 +399,9 @@ contains
   real(r8b) :: X(1:f_obj % n,1:1)                  ! solution to original (unscaled) system
   real(r8b) :: FERR(1:1),BERR(1:1)                 ! forward and backward error estimates (single right-hand side assumed)
 
+  ! initialize error flag (used to enable recoverable errors for external drivers)
+  f_obj % LAPACK_error = .false.
+
   ! begin LAPACK operations
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
@@ -435,10 +441,11 @@ contains
   ! error control
   if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
    if (INFO.ne.0) then
-     if (f_obj % out_error) then
+     if (f_obj % out_warning) then
       write(f_obj % unit,*) "LAPACK Error: DGESV or DGBSV exited with an error code of",info,"."
      end if
-     stop ! fatal error
+     f_obj % LAPACK_error = .true.
+     return ! recoverable error (if supported by external driver)
    end if
   else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
    if (INFO.ne.0) then
@@ -447,10 +454,11 @@ contains
       write(f_obj % unit,*) "LAPACK Warning: RCOND=",RCOND,"may be too low for an accurate solution."
      end if
     else
-     if (f_obj % out_error) then
+     if (f_obj % out_warning) then
       write(f_obj % unit,*) "LAPACK Error: DGESVX or DGBSVX exited with an error code of",info,"."
      end if
-     stop ! fatal error
+     f_obj % LAPACK_error = .true.
+     return ! recoverable error (if supported by external driver)
     end if
    end if
    if (f_obj % out_warning) then

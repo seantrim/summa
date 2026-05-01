@@ -41,6 +41,7 @@ module Newton_functions
    logical      :: J2_eval_flag      ! flag to indicate that Jacobian 2 is to be computed
    logical      :: evaluate_B        ! flag to indicate if we are evaluating the RHS vector of the Newton iteration equations
    logical      :: dual              ! flag to indicate if dual method is used (.true. to switch selection of f1 and f2)
+   logical      :: LAPACK_error      ! flag to indicate an LAPACK error (details given in solver warnings -- otherwise error will be silent)
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)

@@ -278,7 +278,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 
@@ -1192,6 +1192,12 @@ contains
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
 
+  ! check for LAPACK errors
+  if (nested_Newton % LAPACK_error) then ! if LAPACK error
+   message=trim(message)//'LAPACK error'
+   err=-20; return_flag=.true.; return ! recoverable error
+  end if
+
   ! finalize operations for SS4HG objects (not all variables are used)
   call nested_Newton % io_SS4HG &
                    & % finalize(firstFluxCall,xMin,xMax,ixSaturation) ! xMin and xMax not used
@@ -1232,7 +1238,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  localMaxIter = 2000_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 
