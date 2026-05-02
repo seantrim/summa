@@ -1400,11 +1400,12 @@ contains
    associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
     nBands=nrow_banded+subdiag ! number of non-zero bands
     J_total(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (store total Jacobian)
+    J_filter(1:nrow_banded,1:n) = 0._r8b ! initialize -- may not be needed
     if (negative) then
      do j=1,n ! column index for dense and banded storage
       do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
        k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-       aJac(k,j) = merge(-aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J1
+       aJac(k,j) = merge(-aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J2
       end do
      end do
     else
@@ -1415,7 +1416,7 @@ contains
       end do
      end do
     end if
-    J_filter(1:nrow_banded,1:n) =  aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+    J_filter(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
    end associate
   else ! full matrix storage
    J_total(:,:) = aJac(:,:) ! store total Jacobian (for Newton step refinement)
@@ -1559,6 +1560,7 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  real(rkind)  :: aJac2(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
   integer(i4b) :: i,j,k ! loop indices
   integer(i4b) :: nBands ! # of bands for banded storage
 
@@ -1567,11 +1569,13 @@ contains
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
+  aJac2=aJac ! save total SUMMA Jacobian because it is filtered on output after calls to filter_SUMMA_Jacobian
+
   ! get nested Newton solver Jacobian J1
   call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
 
   ! get nested Newton solver Jacobian J2
-  call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
+  call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac2,f_obj % J,f_obj % J2) ! negative sign applied
 
  end subroutine Jacobian_f_mass_energy_SUMMA_vec_full
 
