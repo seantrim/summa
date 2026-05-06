@@ -6,7 +6,7 @@ module Newton_functions
  use nr_type,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
  use eval8summa_module, only: eval8summa,imposeConstraints           ! SUMMA's eval8summa and imposeConstraints routines
  use computJacob_module,only: computJacob                            ! SUMMA's computJacob routine 
- use summaSolv4homegrown_module,only: refine_Newton_step,checkConv ! SUMMA's refine_Newton_step and checkConv procedures
+ use summaSolv4homegrown_module,only: checkConv ! SUMMA's checkConv procedures
  use data_types,only: in_type_computJacob,out_type_computJacob ! objects for SUMMA's computJacob routine
  use data_types,only: in_type_summaSolv4homegrown,&           ! objects for SUMMA's summaSolv4homegrown routine
                      &io_type_summaSolv4homegrown,&
