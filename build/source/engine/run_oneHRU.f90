@@ -81,7 +81,7 @@ public::run_oneHRU
 contains
 
  ! ************************************************************************************************
- ! public subroutine run_oneGRU: simulation for a single GRU
+ ! public subroutine run_oneHRU: simulation for a single HRU
  ! ************************************************************************************************
 
  ! simulation for a single HRU

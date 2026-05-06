@@ -119,20 +119,20 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 	add_compile_definitions(DEBUG)
 	# Notes: - optimization -Og is selected here to maximize information displayed in debugging software (e.g., gdb)
 	#        - however, it may be useful to vary the optimization level to test for optimization related issues
-	set(FLAGS_NOAH -g -Og -fbacktrace -Wall -fcheck=all,no-array-temps -Wfatal-errors -ffree-line-length-none -fPIC -ffree-form      ${FLAGS_OPT})
-	set(FLAGS_ALL  -g -Og -fbacktrace -Wall -fcheck=all,no-array-temps -Wfatal-errors -ffree-line-length-none -fPIC -cpp -frecursive ${FLAGS_OPT})
-	set(FLAGS_CXX  -g -Og -fbacktrace -Wall -fcheck=all,no-array-temps -Wfatal-errors -std=c++17 ${FLAGS_OPT})
+    set(FLAGS_NOAH -g -Og -fbacktrace -fbounds-check -ffree-form -ffree-line-length-none -fmax-errors=0 -fPIC -Wfatal-errors ${FLAGS_OPT})
+    set(FLAGS_ALL -g -Og -fbacktrace -fbounds-check -ffree-line-length-none -fmax-errors=0 -fPIC -Wfatal-errors -cpp ${FLAGS_OPT})
+    set(FLAGS_CXX -g -Og -fbounds-check -Wfatal-errors -std=c++17 ${FLAGS_OPT})
 else()
 	message("\nSetting SUMMA Release Options")
-	if (CMAKE_Fortran_COMPILER MATCHES gfortran)
-		set(FLAGS_NOAH -O3 -Wfatal-errors -ffree-line-length-none -fPIC -ffree-form      ${FLAGS_OPT})
-		set(FLAGS_ALL  -O3 -Wfatal-errors -ffree-line-length-none -fPIC -cpp -frecursive ${FLAGS_OPT})
-		set(FLAGS_CXX  -O3 -Wfatal-errors -std=c++17 ${FLAGS_OPT})
-	else(CMAKE_Fortran_COMPILER MATCHES ifx) # ifx does not currently compile SUMMA -- derived type modifications needed in source code
-		set(FLAGS_NOAH -O3 -heap-arrays -fPIC -free   ${FLAGS_OPT})
-		set(FLAGS_ALL  -O3 -heap-arrays -fPIC -cxxlib ${FLAGS_OPT})
-		set(FLAGS_CXX  -O3 -std=c++17    ${FLAGS_OPT})
-	endif()
+    set(FLAGS_NOAH -O3 -ffree-form -ffree-line-length-none -fmax-errors=0 -fPIC -Wfatal-errors ${FLAGS_OPT})
+    set(FLAGS_ALL -O3 -ffree-line-length-none -fmax-errors=0 -fPIC -Wfatal-errors -cpp ${FLAGS_OPT})
+    set(FLAGS_CXX -O3 -Wfatal-errors -std=c++17 ${FLAGS_OPT})
+endif()
+
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    # Suppress libgfortran end-of-run IEEE summaries (e.g., IEEE_DENORMAL).
+    list(APPEND FLAGS_NOAH -ffpe-summary=none)
+    list(APPEND FLAGS_ALL -ffpe-summary=none)
 endif()
 
 #=========================================================================================
@@ -155,6 +155,9 @@ set(NUMREC_DIR ${F_MASTER}/build/source/numrec)
 
 # SUMMA Source Files are defined in the CMakeLists.txt file in the subdirectory
 add_subdirectory(${F_MASTER}/build/source/)
+
+# Noah-MP files use free-form syntax even though they use .F extension.
+set_source_files_properties(${NOAHMP} PROPERTIES Fortran_FORMAT FREE)
 
 
 #=========================================================================================

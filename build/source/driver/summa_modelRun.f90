@@ -272,10 +272,6 @@ contains
                   ! error control
                   err,cmessage)                   ! intent(out):   error control
 
-  ! Underflow occurs benignly and overflow occurs rarely in the physics; we do not want to stop the model when they occur
-  call ieee_set_flag(ieee_underflow, .false.)
-  call ieee_set_flag(ieee_overflow, .false.)
-
   ! check errors
   call handle_err(err, cmessage)
 

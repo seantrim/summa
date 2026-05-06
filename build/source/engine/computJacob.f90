@@ -617,7 +617,7 @@ subroutine fluxJacAdd(&
 
         ! - sub-diagonal elements for snow, sub-diagonal only (water does not move upwards in snow)
         if(iLayer<nSnow .and. mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then
-          aJac(ixInd(full,ixSnowOnlyHyd(iLayer+1),watState),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot  ! dVol(below)/dLiq(above)
+          if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixInd(full,ixSnowOnlyHyd(iLayer+1),watState),watState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*convLiq2tot  ! dVol(below)/dLiq(above)
         endif
 
       end do ! (looping through liquid water states in the snow domain)
@@ -654,7 +654,7 @@ subroutine fluxJacAdd(&
         if(nrgState/=integerMissing)then
           ! - sub-diagonal elements for snow, sub-diagonal only (water does not move upwards in snow)
           if(iLayer<nSnow .and. mLayerVolFracIce(iLayer+1)<=maxVolIceContent)then
-            aJac(ixInd(full,ixSnowOnlyHyd(iLayer+1),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! dVol(below)/dT(above)
+            if(ixSnowOnlyHyd(iLayer+1)/=integerMissing) aJac(ixInd(full,ixSnowOnlyHyd(iLayer+1),nrgState),nrgState) = -(dt/mLayerDepth(iLayer+1))*iLayerLiqFluxSnowDeriv(iLayer)*mLayerdTheta_dTk(iLayer)  ! dVol(below)/dT(above)
           endif 
         endif ! (if the energy state for the current layer is within the state subset)
 
