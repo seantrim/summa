@@ -303,6 +303,17 @@ subroutine systemSolv(&
         if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
          call nested_Newton_iterations; if (return_flag) return ! nested Newton library
         else
+         !! SJT: skip fully coupled and go to operator splitting
+         !if (split_select % ixCoupling == fullyCoupled) then ! if fully coupled then manufacture a failure to force operator splitting 
+         !  ! set output arguments
+         !  niter             = 100_i4b ! set to localMaxIter
+         !  nSteps            = 1_i4b
+         !  reduceCoupledStep = .false.
+         !  tooMuchMelt       = .false.
+         !  message=trim(message)//'failed to converge'
+         !  err=-20; return_flag=.true.; return
+         !end if
+         !! end SJT
          call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
         end if
     end select
@@ -1077,7 +1088,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 39_i4b; nested_Newton % lmax = 49_i4b ! for state type decomposition
+   nested_Newton % kmax = 39_i4b; nested_Newton % lmax = 4_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1255,7 +1266,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  !localMaxIter = 2000_i4b ! SJT: testing --------------- take out ---------------------
+  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 
