@@ -289,6 +289,7 @@ contains
   real(r8b)                :: R_vec(1:f_obj % n) ! residual vector
   real(r8b)                :: b                  ! exponent used for convergence error estimation 
   character(:),allocatable :: convergence        ! convergence option string that adapts to inner and outer/classical iterations
+  real(r8b)                :: power ! convergence rate for facilitating dynamic switching between classical and nested regimes
 
   if (f_obj % inner) then ! inner iterations
    convergence = f_obj % convergence_inner
@@ -297,6 +298,7 @@ contains
   end if
 
   if (convergence.eq.'custom') then ! use custom convergence criterion
+
    exit_flag = f_obj % custom_convergence()
    if (exit_flag) return  ! set exit flag if criterion is satisfied
 
@@ -307,6 +309,25 @@ contains
      f_obj % lmax_loop = f_obj % l + 1_i4b; return
     end if
    end if
+
+   ! SJT: new dynamic lmax option for switching between classical and nested regimes
+   if (f_obj % dynamic) then
+    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
+     if (f_obj % lmax_loop == 0_i4b) then
+      call compute_relative_residual
+      if (f_obj % k == 0_i4b) then
+       f_obj % R_vec = R_vec(:)
+      else
+       power = minval(log(R_vec)/log(f_obj % R_vec)) ! minimum convergence rate detected
+       if (power < 1.5_r8b) then ! if convergence rate is not sufficiently high with classical go to nested
+        f_obj % lmax_loop = f_obj % lmax ! ------------ be sure to set lmax_loop to zero before nested loopds if dynamic option is used ------------------
+        ! ----------- do we want to restart with OG initial guess or use the current classical sln as initial guess and continue? --------------------
+       end if
+      end if
+     end if
+    end if
+   end if
+
   else
 
    ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
@@ -315,15 +336,17 @@ contains
     if (exit_flag)  return  ! set exit flag if criterion is satisfied
    end if
 
-   do i=1,f_obj % n
-    if (xk(i).ne.0._r8b) then
-     R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
-    else if (xkp1(i).ne.0._r8b) then
-     R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
-    else
-     R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
-    end if
-   end do
+   ! compute current residual
+   call compute_relative_residual
+   !do i=1,f_obj % n
+   ! if (xk(i).ne.0._r8b) then
+   !  R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+   ! else if (xkp1(i).ne.0._r8b) then
+   !  R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+   ! else
+   !  R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+   ! end if
+   !end do
 
    ! store previous residuals
    if (iteration.gt.0) then
@@ -377,6 +400,22 @@ contains
    end if
 
   end if
+
+  contains
+
+   subroutine compute_relative_residual
+    ! ** compute current residual **
+    do i=1,f_obj % n
+     if (xk(i).ne.0._r8b) then
+      R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+     else if (xkp1(i).ne.0._r8b) then
+      R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+     else
+      R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+     end if
+    end do
+   end subroutine compute_relative_residual
+
  end subroutine check_residual_vector
 
  subroutine linear_solve(f_obj,A,B,tol)

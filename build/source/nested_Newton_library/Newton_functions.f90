@@ -42,6 +42,7 @@ module Newton_functions
    logical      :: evaluate_B        ! flag to indicate if we are evaluating the RHS vector of the Newton iteration equations
    logical      :: dual              ! flag to indicate if dual method is used (.true. to switch selection of f1 and f2)
    logical      :: LAPACK_error      ! flag to indicate an LAPACK error (details given in solver warnings -- otherwise error will be silent)
+   logical      :: dynamic           ! flag to indicate if lmax is dynamically determined in nested algorithm
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
@@ -63,6 +64,7 @@ module Newton_functions
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
+   real(r8b),allocatable    :: R_vec(:)      ! relative residual vector
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
@@ -221,6 +223,8 @@ contains
 
    f_obj % banded            = .false. ! flag for banded Jacobians
    f_obj % nested            = .false. ! flag for nested algorithm
+   f_obj % dynamic           = .false. ! flag for dynamic switching between classical and nested regimes
+   f_obj % dual              = .false. ! flag to use dual method for selecting f1 and f2
    f_obj % constraints       = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
    f_obj % constraints_inner = .false. ! flag to indicate that constraints are to be applied between inner iterations
    f_obj % refinement        = .false. ! flag to indicate that refinement is to be applied following outer/classical iterations
@@ -259,6 +263,7 @@ contains
    if (f_obj % nested) then
     allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
+    if (f_obj % dynamic) allocate(f_obj % R_vec(1:n))                  ! relative residual vector
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))                        ! intermediate root estimates for classical iterations
    end if
