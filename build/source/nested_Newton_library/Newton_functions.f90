@@ -42,7 +42,8 @@ module Newton_functions
    logical      :: evaluate_B        ! flag to indicate if we are evaluating the RHS vector of the Newton iteration equations
    logical      :: dual              ! flag to indicate if dual method is used (.true. to switch selection of f1 and f2)
    logical      :: LAPACK_error      ! flag to indicate an LAPACK error (details given in solver warnings -- otherwise error will be silent)
-   logical      :: dynamic           ! flag to indicate if lmax is dynamically determined in nested algorithm
+   logical      :: dynamic           ! flag to indicate for dynamic selection of classical or nested iterations
+   logical      :: dynamic_classical ! flag to indicate if in classical phase of dynamic selection mode
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)

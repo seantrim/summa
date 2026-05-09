@@ -1071,7 +1071,7 @@ contains
   if (nested_Newton % nested) then ! nested iterations
 
    ! dynamic switching between classical and nested regimes?
-   nested_Newton % dynamic = .false.
+   nested_Newton % dynamic = .true.
 
    ! use dual method?
    nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
@@ -1091,7 +1091,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 19_i4b ! for state type decomposition
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"

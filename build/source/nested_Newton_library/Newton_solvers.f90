@@ -11,10 +11,23 @@ contains
 
  subroutine Newton_solve(f_obj)
   type(f_obj_type),intent(inout) :: f_obj 
+  integer(i4b) :: lmax                           ! max l index value
 
   if (f_obj % n .gt. 0_i4b) then
    if (f_obj % nested) then
-    call nested_Newton_vector(f_obj)   
+    ! for dynamic selection of classical or nested regimes
+    if (f_obj % dynamic) then ! start with classical regime and switch to nested regime if needed
+     lmax = 0_i4b
+     f_obj % dynamic_classical = .true.
+     call nested_Newton_vector(f_obj,lmax)
+     if (.not.f_obj % dynamic_classical) then
+      lmax = f_obj % lmax
+      call nested_Newton_vector(f_obj,lmax)
+     end if   
+    else ! use nested regime (original behaviour)
+     lmax = f_obj % lmax
+     call nested_Newton_vector(f_obj,lmax)   
+    end if
    else
     call Newton_vector(f_obj)
    end if
@@ -33,6 +46,7 @@ contains
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k                              ! iteration counter
   logical      :: exit_flag                      ! exit flag
+  logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
 
@@ -72,7 +86,7 @@ contains
     call f_obj % apply_nested_line_search('C')
    end if
 
-   call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag)
+   call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag,return_flag); if (return_flag) return
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
@@ -105,13 +119,17 @@ contains
 
  end subroutine Newton_vector
 
- subroutine nested_Newton_vector(f_obj)
-  ! Newton solver
+ subroutine nested_Newton_vector(f_obj,lmax)
+  ! *** Nested Newton solver for vector problems ***
+  ! arguments
   type(f_obj_type),intent(inout) :: f_obj 
+  integer(i4b),intent(in) :: lmax                           ! max l index value
+  ! Newton solver variables
   real(r8b)    :: final_mean                     ! mean value of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: l_total                        ! total number of inner iterations
   logical      :: exit_outer,exit_inner          ! exit flags for outer and inner loops
+  logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
   !real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
@@ -138,7 +156,8 @@ contains
 
    f_obj % inner=.true. ! inner iterations for next loop
    f_obj % l = 0_i4b ! intialize loop index
-   f_obj % lmax_loop = f_obj % lmax ! initialize lmax value used for inner loop
+   !f_obj % lmax_loop = f_obj % lmax ! initialize lmax value used for inner loop
+   f_obj % lmax_loop = lmax ! initialize lmax value used for inner loop -- use value from input argument
    inner: do while (f_obj % l <= f_obj % lmax_loop) ! inner iterations
 
     ! determine Newton step refinement option
@@ -197,7 +216,7 @@ contains
      call f_obj % apply_nested_line_search(f_obj % line_search_option)
     end if
 
-    call check_residual_vector(f_obj,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner)
+    call check_residual_vector(f_obj,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner,return_flag); if (return_flag) return
     ! print exact convergence error for iteration l
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",f_obj % l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
@@ -227,7 +246,7 @@ contains
 
    f_obj % inner=.false.
 
-   call check_residual_vector(f_obj,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer)
+   call check_residual_vector(f_obj,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer,return_flag); if (return_flag) return
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
@@ -274,13 +293,14 @@ contains
   end if
  end subroutine nested_Newton_vector
 
- subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag)
+ subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag,return_flag)
   ! *** Check residual vector for potential loop exit ***
   type(f_obj_type),intent(inout) :: f_obj 
   integer(i4b),intent(in)  :: iteration   ! interation count
   real(r8b),intent(in)     :: xkp1(1:f_obj % n)  ! current root estimate
   real(r8b),intent(in)     :: xk(1:f_obj % n)    ! previous root estimate
   logical,intent(inout)    :: exit_flag   ! exit flag
+  logical,intent(out)      :: return_flag ! return flag for early return from Newton solver call
   real(r8b),intent(out)    :: R_est       ! estimated R for current iteration (computed in the previous call)
   ! local variables
   real(r8b)                :: tol         ! tolerance
@@ -290,6 +310,8 @@ contains
   real(r8b)                :: b                  ! exponent used for convergence error estimation 
   character(:),allocatable :: convergence        ! convergence option string that adapts to inner and outer/classical iterations
   real(r8b)                :: power ! convergence rate for facilitating dynamic switching between classical and nested regimes
+
+  return_flag = .false. ! initialize return flag
 
   if (f_obj % inner) then ! inner iterations
    convergence = f_obj % convergence_inner
@@ -311,18 +333,24 @@ contains
    end if
 
    ! SJT: new dynamic lmax option for switching between classical and nested regimes
-   if (f_obj % dynamic) then
-    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
-     if (f_obj % lmax_loop == 0_i4b) then
-      call compute_relative_residual
-      if (f_obj % k == 0_i4b) then
-       f_obj % R_vec = R_vec(:)
-      else
-       power = minval(log(R_vec)/log(f_obj % R_vec)) ! minimum convergence rate detected
-       if (power < 1.5_r8b) then ! if convergence rate is not sufficiently high with classical go to nested
-        f_obj % lmax_loop = f_obj % lmax ! ------------ be sure to set lmax_loop to zero before nested loopds if dynamic option is used ------------------
-        ! ----------- do we want to restart with OG initial guess or use the current classical sln as initial guess and continue? --------------------
-       end if
+   if (f_obj % nested) then
+    if (f_obj % dynamic) then
+     if (f_obj % dynamic_classical) then
+      if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
+        call compute_relative_residual
+        if (f_obj % k == 0_i4b) then
+         f_obj % R_vec = R_vec(:)
+        else if (f_obj % k <= 1_i4b) then ! check convergence rate for second classical iteration
+         power = minval(log(R_vec)/log(f_obj % R_vec)) ! minimum convergence rate detected
+         print *, "SJT:",f_obj % R_vec(1),R_vec(1),power
+         if (power < 1.5_r8b) then ! if convergence rate is not sufficiently high with classical go to nested
+          !f_obj % lmax_loop = f_obj % lmax ! ------------ be sure to set lmax_loop to zero before nested loopds if dynamic option is used ------------------
+          ! ----------- do we want to restart with OG initial guess or use the current classical sln as initial guess and continue? --------------------
+          f_obj % dynamic_classical = .false.
+          return_flag = .true.
+          return 
+         end if
+        end if
       end if
      end if
     end if
