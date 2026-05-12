@@ -50,6 +50,7 @@ module Newton_functions
    integer(i4b) :: nrow_banded       ! # of matrix rows for banded storage
    integer(i4b) :: k,l               ! indices for classical/outer and inner iterations
    integer(i4b) :: kmax,lmax         ! max # of classical/outer and inner iterations
+   integer(i4b) :: kmax_classical    ! max # of classical iterations for dynamic mode
    integer(i4b) :: lmax_loop         ! variable max # of inner iterations (initially lmax but may change depending on observed solution convergence)
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
@@ -58,6 +59,7 @@ module Newton_functions
    real(r8b),allocatable    :: x0(:),x1(:)                ! initial and final root estimates for vector algorithms
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
    real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
+   real(r8b),allocatable    :: xk1(:),xk2(:) ! solutions used for computing convergence order for dynamic mode
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
@@ -65,8 +67,8 @@ module Newton_functions
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
-   real(r8b),allocatable    :: R_vec(:)      ! relative residual vector
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
+   real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
    character(:),allocatable :: convergence          ! string for convergence control option for outer/classical iterations
@@ -259,14 +261,16 @@ contains
 
   ! allocate solution and function arrays
   associate(n => f_obj % n)
-   allocate(f_obj % x0(1:n),f_obj % x1(1:n))          ! initial and final root estimates
-   allocate(f_obj % f_vec(1:n))                       ! total non-linear function vector
+   allocate(f_obj % x0(1:n),f_obj % x1(1:n))       ! initial and final root estimates
+   allocate(f_obj % f_vec(1:n))                    ! total non-linear function vector
    if (f_obj % nested) then
     allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
-    if (f_obj % dynamic) allocate(f_obj % R_vec(1:n))                  ! relative residual vector
+    if (f_obj % dynamic) then
+     allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
+    end if
    else
-    allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))                        ! intermediate root estimates for classical iterations
+    allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
    end if
   end associate
 

@@ -1092,6 +1092,8 @@ contains
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
    nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 19_i4b ! for state type decomposition
+   nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
+   nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamics mode
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
