@@ -349,6 +349,7 @@ subroutine varSubstep(&
                       diag_data,         & ! intent(inout): model diagnostic variables for a local HRU
                       flux_temp,         & ! intent(inout): model fluxes for a local HRU
                       bvar_data,         & ! intent(in):    model variables for the local basin
+                      conv_data,         & ! intent(inout) : convergence data for a local HRU
                       model_decisions,   & ! intent(in):    model decisions
                       stateVecInit,      & ! intent(in):    initial state vector
                       ! output: model control

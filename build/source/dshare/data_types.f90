@@ -302,11 +302,13 @@ MODULE data_types
  ! Define classes used to gather convergence statistics for Newton iterations
  ! ***********************************************************************************************************
  type, public :: convergence_stats_data
-  integer(i4b) ::  high_level_step_reductions 
-  integer(i4b) ::  low_level_step_reductions 
-  integer(i4b) ::  low_level_step_reductions_coupled 
-  integer(i4b) ::  splitting_failures 
-  integer(i4b) ::  splitting_failures_coupled 
+  integer(i4b) :: high_level_step_reductions 
+  integer(i4b) :: low_level_step_reductions 
+  integer(i4b) :: low_level_step_reductions_coupled 
+  integer(i4b) :: splitting_failures 
+  integer(i4b) :: splitting_failures_coupled
+  integer(i4b) :: classical_steps_coupled  
+  integer(i4b) :: nested_steps_coupled  
  end type convergence_stats_data
 
  type, public :: convergence_stats_hru

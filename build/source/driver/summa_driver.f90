@@ -169,6 +169,9 @@ contains
       convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled = 0_i4b
       convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures                = 0_i4b
       convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled        = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled        = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%classical_steps_coupled           = 0_i4b
+      convergence_stats%gru(iGRU)%hru(iHRU)%nested_steps_coupled              = 0_i4b
      end do
     end do
    end associate
@@ -191,6 +194,8 @@ contains
     integer(i4b) :: low_level_step_reductions_coupled_sum
     integer(i4b) :: splitting_failures_sum
     integer(i4b) :: splitting_failures_coupled_sum
+    integer(i4b) :: classical_steps_coupled_sum
+    integer(i4b) :: nested_steps_coupled_sum
       
     ! get number of GRUs (assumes n=1 for instantiations)
     nGRU = summa1_struc(n)%nGRU
@@ -208,6 +213,8 @@ contains
           print *, "monolithic substep reductions =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled
           print *, "splitting failures            =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures
           print *, "monolithic failures           =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled
+          print *, "monolithic classical steps    =", convergence_stats%gru(iGRU)%hru(iHRU)%classical_steps_coupled
+          print *, "monolithic nested steps       =", convergence_stats%gru(iGRU)%hru(iHRU)%nested_steps_coupled
         end do
       end do
     else              ! streamlined ouput per HRU
@@ -217,6 +224,8 @@ contains
           print *, "HRU=",iHRU
           print *, "monolithic substep reductions =", convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled
           print *, "monolithic failures           =", convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled
+          print *, "monolithic classical steps    =", convergence_stats%gru(iGRU)%hru(iHRU)%classical_steps_coupled
+          print *, "monolithic nested steps       =", convergence_stats%gru(iGRU)%hru(iHRU)%nested_steps_coupled
         end do
       end do
     end if
@@ -229,6 +238,8 @@ contains
     low_level_step_reductions_coupled_sum = 0_i4b 
     splitting_failures_sum                = 0_i4b
     splitting_failures_coupled_sum        = 0_i4b
+    classical_steps_coupled_sum           = 0_i4b 
+    nested_steps_coupled_sum              = 0_i4b
     do iGRU = 1,nGRU
       nHRU = gru_struc(iGRU)%hruCount; nHRU_sum = nHRU_sum + nHRU
       high_level_step_reductions_sum        = high_level_step_reductions_sum        + &
@@ -241,6 +252,10 @@ contains
                                             & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%splitting_failures)
       splitting_failures_coupled_sum        = splitting_failures_coupled_sum        + &
                                             & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%splitting_failures_coupled)
+      classical_steps_coupled_sum           = classical_steps_coupled_sum        + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%classical_steps_coupled)
+      nested_steps_coupled_sum              = nested_steps_coupled_sum        + &
+                                            & sum(convergence_stats%gru(iGRU)%hru(1:nHRU)%nested_steps_coupled)
     end do
 
     print *, "Convergence Statistics (Mean Per HRU):"
@@ -249,6 +264,8 @@ contains
     print *, "monolithic substep reductions =", real(low_level_step_reductions_coupled_sum,rkind)/real(nHRU_sum,rkind)
     print *, "splitting failures            =", real(splitting_failures_sum,rkind)/real(nHRU_sum,rkind)
     print *, "monolithic failures           =", real(splitting_failures_coupled_sum,rkind)/real(nHRU_sum,rkind) 
+    print *, "monolithic classical steps    =", real(classical_steps_coupled_sum,rkind)/real(nHRU_sum,rkind)
+    print *, "monolithic nested steps       =", real(nested_steps_coupled_sum,rkind)/real(nHRU_sum,rkind)
     print *, ""
   end subroutine finalize_convergence_stats
 

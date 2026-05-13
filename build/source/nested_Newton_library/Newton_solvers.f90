@@ -317,6 +317,8 @@ contains
   real(r8b)                :: xk3m2,xk2m1,xk1m0   ! absolute differences used in convergence order calculation for dynamic mode
   real(r8b)                :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
   real(r8b)                :: order               ! approximate convergence order
+  real(r8b),parameter      :: tol_inner_LS = 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
+  logical                  :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
 
   return_flag = .false. ! initialize return flag
 
@@ -334,9 +336,15 @@ contains
    ! if doing line search for inner iterations and inner iterate has not changed, ensure that one more inner iteration is performed using the outer line search scheme
    ! note: this eliminates unproductive inner iterations
    if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
-    if (all(xkp1 == xk)) then
+    ! look for precise agreement within a tight tolerance (faster)
+    call compute_relative_residual
+    if (all(R_vec < tol_inner_LS)) then
      f_obj % lmax_loop = f_obj % l + 1_i4b; return
     end if
+    ! look for exact agreement (slower)
+    !if (all(xkp1 == xk)) then
+    ! f_obj % lmax_loop = f_obj % l + 1_i4b; return
+    !end if
    end if
 
    ! SJT: new dynamic lmax option for switching between classical and nested regimes
@@ -351,6 +359,7 @@ contains
         else if (f_obj % k == 2_i4b) then ! check convergence rate for second classical iteration
 
          do i=1,f_obj % n
+           accept(i) = .true. ! initialize acceptance flag
           ! cases where classical iterations have converged to machine precision
           if (f_obj % xk1(i) == f_obj % x0(i)) cycle
           if (f_obj % xk2(i) == f_obj % xk1(i)) cycle
@@ -365,19 +374,22 @@ contains
           num_arg = abs(xk3m2/xk2m1) ! numerator argument (error ratio of k=3 and k=2)
           den_arg = abs(xk2m1/xk1m0) ! denominator argument (error ratio of k=2 and k=1)
           if ((num_arg == 1._r8b).or.(den_arg == 1._r8b)) then ! if errors did not improve over classical iterations, used nested
+           accept(i) = .false. ! do not accept solution for nested initial guess
            f_obj % dynamic_classical = .false.
-           return_flag = .true.
-           return 
           end if
 
           ! compute estimate of convergence order
           order = log( num_arg ) / log( den_arg )
           if (order < f_obj % order_min) then ! if convergence rate is not sufficiently high with classical go to nested
+           accept(i) = .false. ! do not accept solution for nested initial guess
            f_obj % dynamic_classical = .false.
-           return_flag = .true.
-           return 
           end if
          end do
+         if (.not.f_obj % dynamic_classical) then ! go to nested iterations if needed
+          f_obj % x0(:) = merge(f_obj % xkp1lp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
+          return_flag = .true.
+          return 
+         end if
         end if
       end if
      end if
@@ -394,15 +406,6 @@ contains
 
    ! compute current residual
    call compute_relative_residual
-   !do i=1,f_obj % n
-   ! if (xk(i).ne.0._r8b) then
-   !  R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
-   ! else if (xkp1(i).ne.0._r8b) then
-   !  R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
-   ! else
-   !  R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
-   ! end if
-   !end do
 
    ! store previous residuals
    if (iteration.gt.0) then

@@ -74,9 +74,10 @@ USE data_types,only:&
                     var_dlength,                  & ! data vector with variable length dimension (rkind)
                     zLookup,                      & ! lookup tables
                     model_options,                & ! defines the model decisions
-                    in_type_summaSolv4homegrown, & ! class for summaSolv4homegrown arguments
-                    io_type_summaSolv4homegrown, & ! class for summaSolv4homegrown arguments
-                    out_type_summaSolv4homegrown   ! class for summaSolv4homegrown arguments
+                    in_type_summaSolv4homegrown,  & ! class for summaSolv4homegrown arguments
+                    io_type_summaSolv4homegrown,  & ! class for summaSolv4homegrown arguments
+                    out_type_summaSolv4homegrown, & ! class for summaSolv4homegrown arguments
+                    convergence_stats_data          ! convergence stats
 
 ! look-up values for the choice of groundwater representation (local-column, or single-basin)
 USE mDecisions_module,only:&
@@ -135,6 +136,7 @@ subroutine systemSolv(&
                       diag_data,         & ! intent(inout): model diagnostic variables for a local HRU
                       flux_temp,         & ! intent(inout): model fluxes for a local HRU
                       bvar_data,         & ! intent(in):    model variables for the local basin
+                      conv_data,         & ! intent(inout) : convergence data for a local HRU
                       model_decisions,   & ! intent(in):    model decisions
                       stateVecInit,      & ! intent(in):    initial state vector
                       ! output
@@ -198,6 +200,7 @@ subroutine systemSolv(&
   type(var_dlength),intent(inout) :: diag_data                     ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout) :: flux_temp                     ! model fluxes for a local HRU
   type(var_dlength),intent(in)    :: bvar_data                     ! model variables for the local basin
+  type(convergence_stats_data),intent(inout) :: conv_data          ! convergence stats for a local HRU
   type(model_options),intent(in)  :: model_decisions(:)            ! model decisions
   real(rkind),intent(in)          :: stateVecInit(:)               ! initial state vector (mixed units)
   ! output
@@ -314,6 +317,9 @@ subroutine systemSolv(&
          !  err=-20; return_flag=.true.; return
          !end if
          !! end SJT
+         if (split_select % ixCoupling == fullyCoupled) then ! stats for Newton iteration type
+          conv_data % classical_steps_coupled = conv_data % classical_steps_coupled + 1_i4b
+         end if
          call Newton_iterations_homegrown; if (return_flag) return ! Newton iterations using homegrown solver -- return if error
         end if
     end select
@@ -1091,7 +1097,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 19_i4b ! for state type decomposition
+   nested_Newton % kmax = 39_i4b; nested_Newton % lmax = 19_i4b ! for state type decomposition
    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
    nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamics mode
 
@@ -1125,10 +1131,13 @@ contains
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
-   nested_Newton % kmax = 1999_i4b
+   nested_Newton % kmax = 199_i4b
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
+
+   ! Matrix-Vector products (for full matrix storage)
+   nested_Newton % matrix_vector        = "BLAS" 
 
    ! Newton step refinement
    ! note: classical and inner line search schemes have the same initial objective function value
@@ -1225,6 +1234,21 @@ contains
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
   !stop ! SJT: testing
 
+  ! stats for Newton iteration type
+  if (nested_Newton % nested) then
+   if (nested_Newton % dynamic) then
+    if (nested_Newton % dynamic_classical) then
+     conv_data % classical_steps_coupled = conv_data % classical_steps_coupled + 1_i4b
+    else
+     conv_data % nested_steps_coupled = conv_data % nested_steps_coupled + 1_i4b
+    end if
+   else
+    conv_data % nested_steps_coupled = conv_data % nested_steps_coupled + 1_i4b
+   end if
+  else
+   conv_data % classical_steps_coupled = conv_data % classical_steps_coupled + 1_i4b
+  end if
+
   ! check for LAPACK errors
   if (nested_Newton % LAPACK_error) then ! if LAPACK error
    message=trim(message)//'LAPACK error'
@@ -1271,7 +1295,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 
