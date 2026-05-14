@@ -13,16 +13,29 @@ contains
   type(f_obj_type),intent(inout) :: f_obj 
   integer(i4b) :: kmax                           ! max k index value
   integer(i4b) :: lmax                           ! max l index value
+  logical(i4b),parameter :: dynamic_strict = .true. ! strict initialization of f1, f2, J1, and J2 for nested portion of dynamic mode
 
   if (f_obj % n .gt. 0_i4b) then
    if (f_obj % nested) then
     ! for dynamic selection of classical or nested regimes
     if (f_obj % dynamic) then ! start with classical regime and switch to nested regime if needed
+     f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
+     f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
      kmax = f_obj % kmax_classical
      lmax = 0_i4b
      f_obj % dynamic_classical = .true.
      call nested_Newton_vector(f_obj,kmax,lmax) ! classical iterations
      if (.not.f_obj % dynamic_classical) then
+
+      ! revert to original initial condition if needed
+      if (f_obj % dynamic_revert) then
+       f_obj % f1_vec(:) = f_obj % f1_vec_save(:); f_obj % f2_vec(:) = f_obj % f2_vec_save(:)
+       f_obj % J1(:,:) = f_obj % J1_save(:,:); f_obj % J2(:,:) = f_obj % J2_save(:,:)
+      else if (dynamic_strict) then
+       ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
+       call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2
+       call f_obj % J1_J2_eval(f_obj % x0) ! get J1 and J2
+      end if
       kmax = f_obj % kmax
       lmax = f_obj % lmax
       call nested_Newton_vector(f_obj,kmax,lmax) ! nested iterations
@@ -300,6 +313,7 @@ contains
 
  subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag,return_flag)
   ! *** Check residual vector for potential loop exit ***
+  use,intrinsic :: ieee_arithmetic,only: ieee_is_finite
   type(f_obj_type),intent(inout) :: f_obj 
   integer(i4b),intent(in)  :: iteration   ! interation count
   real(r8b),intent(in)     :: xkp1(1:f_obj % n)  ! current root estimate
@@ -358,8 +372,18 @@ contains
          f_obj % xk2 = f_obj % xkp1lp1(:) ! x2
         else if (f_obj % k == 2_i4b) then ! check convergence rate for second classical iteration
 
+         f_obj % dynamic_revert = .false. ! initialize initial condition reversion flag
          do i=1,f_obj % n
-           accept(i) = .true. ! initialize acceptance flag
+
+          ! initialize acceptance flag
+          if (ieee_is_finite(f_obj % xkp1lp1(i))) then ! check for normal finite ieee value (e.g., not infinity or NaN)
+           accept(i) = .true.
+          else
+           accept(i) = .false.
+           f_obj % dynamic_classical = .false.
+           f_obj % dynamic_revert = .true. ! cannot use classical iteration solution as initial condition
+          end if
+
           ! cases where classical iterations have converged to machine precision
           if (f_obj % xk1(i) == f_obj % x0(i)) cycle
           if (f_obj % xk2(i) == f_obj % xk1(i)) cycle
@@ -384,12 +408,18 @@ contains
            accept(i) = .false. ! do not accept solution for nested initial guess
            f_obj % dynamic_classical = .false.
           end if
+
          end do
-         if (.not.f_obj % dynamic_classical) then ! go to nested iterations if needed
-          f_obj % x0(:) = merge(f_obj % xkp1lp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
+
+         ! go to nested iterations if needed 
+         if (.not.f_obj % dynamic_classical) then
+          if (.not.f_obj % dynamic_revert) then
+           f_obj % x0(:) = merge(f_obj % xkp1lp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
+          end if
           return_flag = .true.
           return 
          end if
+
         end if
       end if
      end if

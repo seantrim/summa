@@ -44,6 +44,7 @@ module Newton_functions
    logical      :: LAPACK_error      ! flag to indicate an LAPACK error (details given in solver warnings -- otherwise error will be silent)
    logical      :: dynamic           ! flag to indicate for dynamic selection of classical or nested iterations
    logical      :: dynamic_classical ! flag to indicate if in classical phase of dynamic selection mode
+   logical      :: dynamic_revert    ! flag to indicate if initial condition should revert to original vector for nested portion of dynamic mode
    integer(i4b) :: subdiag,superdiag ! # of subdiagonals and superdiagonals for banded Jacobians
    integer(i4b) :: n                 ! vector size
    integer(i4b) :: nrow              ! # of matrix rows (adapts to storage type)
@@ -63,10 +64,14 @@ module Newton_functions
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
+   real(r8b),allocatable    :: J1_save(:,:)  ! Jacobian 1 (save for dynamic mode)
+   real(r8b),allocatable    :: J2_save(:,:)  ! Jacobian 2 (save for dynamic mode)
    real(r8b),allocatable    :: Jdiff(:,:)    ! difference Jacobian
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
+   real(r8b),allocatable    :: f1_vec_save(:) ! non-linear function evaluation 1 (save for dynamic mode)
+   real(r8b),allocatable    :: f2_vec_save(:) ! non-linear function evaluation 2 (save for dynamic mode)
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
@@ -181,6 +186,7 @@ module Newton_functions
    !procedure :: f2_vec_eval => f2_zero_vec  ! solver -- trivial split
    procedure :: f1_vec_eval => f_mass_SUMMA_vec_full   ! solver
    procedure :: f2_vec_eval => f_energy_SUMMA_vec_full ! solver
+   procedure :: f1_f2_vec_eval => f_mass_energy_SUMMA_vec_full   ! solver
    procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
@@ -268,6 +274,7 @@ contains
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
     if (f_obj % dynamic) then
      allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
+     allocate(f_obj % f1_vec_save(1:n),f_obj % f2_vec_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
     end if
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
@@ -304,6 +311,9 @@ contains
   if (f_obj % nested) then
    allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
            &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
+   if (f_obj % dynamic) then
+    allocate(f_obj % J1_save(1:f_obj % nrow,1:f_obj % n),f_obj % J2_save(1:f_obj % nrow,1:f_obj % n))
+   end if
   end if
 
  end subroutine f_allocate_memory
@@ -1538,6 +1548,44 @@ contains
   call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
  end subroutine f_energy_SUMMA_vec_full
+
+ subroutine f_mass_energy_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute mass and energy non-linear functions --- use fully-coupled eval8summa call and filter results ***
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  ! local
+  real(qp)                        :: resVec(1:f_obj % n) ! residual vector for split
+  logical                         :: mass_flag,energy_flag ! flags to compute mass and energy terms
+
+  ! note: data structures and variables for f1 are initialized in systemSolv
+
+  mass_flag=.true.; energy_flag=.true. ! SJT: OG method -- using for now until work continues on overhead reduction for f1 and f2
+
+  ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
+  ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
+  !if (f_obj % dual) then ! dual method (f1 -> energy)
+  ! mass_flag = .false.
+  ! energy_flag = .true.
+  !else ! original method (f1 -> mass)
+  ! mass_flag = .true.
+  ! energy_flag = .false.
+  !end if
+
+  call f_obj % f_state_SUMMA_vec_full(&
+               &mass_flag,energy_flag,xvec,&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+               &f_obj % dBaseflow_dMatric,resVec)
+
+  ! store total non-linear function
+  f_obj % f_vec(:) = real(resVec(:),r8b)
+
+  ! assign non-zero function values based on logical mask
+  call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
+  call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
+
+ end subroutine f_mass_energy_SUMMA_vec_full   ! solver
 
  subroutine Jacobian_f_energy_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for energy non-linear function --- use fully-coupled computJacob call and filter results ***
