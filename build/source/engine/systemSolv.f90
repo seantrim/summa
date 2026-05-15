@@ -1097,7 +1097,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 39_i4b; nested_Newton % lmax = 19_i4b ! for state type decomposition
+   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 1_i4b ! for state type decomposition
    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
    nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamics mode
 
@@ -1295,7 +1295,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 

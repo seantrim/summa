@@ -67,6 +67,9 @@ contains
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
 
+  ! initialize error flag
+  f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
+
   ! initialize convergence flag
   f_obj % converged = .false.
 
@@ -83,7 +86,7 @@ contains
   f_obj % xk(:) = f_obj % x0(:) ! initialize
   do k=0,f_obj % kmax
    f_obj % k = k ! store index 
-   if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ! compute non-linear function vector (f_obj % f_vec)
+   if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ; if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
    ! obtain RHS vector
@@ -152,6 +155,9 @@ contains
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
   !real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
 
+  ! initialize error flag
+  f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
+
   ! initialize convergence flag
   f_obj % converged = .false.
 
@@ -166,7 +172,7 @@ contains
   f_obj % k = 0_i4b ! intialize loop index
   outer: do while (f_obj % k <= kmax)
 
-   if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0)
+   if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0); if (f_obj % f_error) return
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
    !f2mJ2xk0(:) = f_obj % f2_vec(:) - f_obj % matrix_vector_product(f_obj % J2,f_obj % xk0)
    exit_inner=.false.
@@ -190,7 +196,7 @@ contains
      end if
     end if
 
-    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l)
+    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l); if (f_obj % f_error) return
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
@@ -367,9 +373,9 @@ contains
      if (f_obj % dynamic_classical) then
       if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
         if (f_obj % k == 0_i4b) then
-         f_obj % xk1 = f_obj % xkp1lp1(:) ! x1
+         f_obj % xk1(:) = f_obj % xkp1lp1(:) ! x1
         else if (f_obj % k == 1_i4b) then
-         f_obj % xk2 = f_obj % xkp1lp1(:) ! x2
+         f_obj % xk2(:) = f_obj % xkp1lp1(:) ! x2
         else if (f_obj % k == 2_i4b) then ! check convergence rate for second classical iteration
 
          f_obj % dynamic_revert = .false. ! initialize initial condition reversion flag
@@ -382,6 +388,7 @@ contains
            accept(i) = .false.
            f_obj % dynamic_classical = .false.
            f_obj % dynamic_revert = .true. ! cannot use classical iteration solution as initial condition
+           exit ! no need to check remaining solution values because we are reverting to the original solution
           end if
 
           ! cases where classical iterations have converged to machine precision
@@ -415,6 +422,7 @@ contains
          if (.not.f_obj % dynamic_classical) then
           if (.not.f_obj % dynamic_revert) then
            f_obj % x0(:) = merge(f_obj % xkp1lp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
+           !print *, f_obj % x0(:)
           end if
           return_flag = .true.
           return 

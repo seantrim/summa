@@ -33,6 +33,7 @@ module Newton_functions
    logical      :: constraints_inner ! flag to indicate that constraints are to be applied between inner iterations
    logical      :: refinement        ! flag to indicate that refinement is to be applied following outer/classical iterations
    logical      :: scaling           ! flag to indicate that user-specified scaling is to be applied for linear systems
+   logical      :: f_error           ! flag to indicate an error in the evaluation of f, f1, or f2
    logical      :: f_eval_flag       ! flag to indicate that the total non-linear function vector is to be computed
    logical      :: f1_eval_flag      ! flag to indicate that the non-linear function 1 vector is to be computed
    logical      :: f2_eval_flag      ! flag to indicate that the non-linear function 2 vector is to be computed
@@ -1660,7 +1661,6 @@ contains
   real(rkind) :: fluxVec0(1:f_obj % n) ! flux vector
   real(rkind) :: fRHS(1:f_obj % n)     ! RHS function for ARKODE
   real(rkind) :: rAdd(1:f_obj % n)     ! additional (sink) terms on the RHS of the state equation
-  !logical,parameter :: mass_flag=.true.,energy_flag=.true.
 
   ! evaluate residual vector for mass split
   call eval8summa(&
@@ -1713,8 +1713,9 @@ contains
   ! finalize
   associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
    if (err /= 0) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error f_state_SUMMA_vec: eval8summa message="//trim(message); stop
+    f_obj % f_error = .true.
+    if (f_obj % out_warning) then
+     write(f_obj % unit,*) "Error f_state_SUMMA_vec_full: eval8summa message="//trim(message)
     end if
    end if
   end associate
