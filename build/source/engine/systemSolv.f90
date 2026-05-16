@@ -247,6 +247,7 @@ subroutine systemSolv(&
   real(qp)                        :: sMul(nState)    ! NOTE: qp    ! multiplier for state vector for the residual calculations
   real(rkind)                     :: fRHS(nState)                  ! RHS function for ARKODE
   real(rkind)                     :: rAdd(nState)                  ! additional terms in the residual vector
+  real(rkind)                     :: rVecScaled(nState)            ! scaled residual vector
   logical(lgt)                    :: feasible                      ! feasibility flag
   logical(lgt)                    :: sunSucceeds                   ! flag to indicate if SUNDIALS successfully solved the problem in current data step
   ! ida variables
@@ -514,6 +515,7 @@ contains
                     fRHS,                    & ! intent(out):   RHS function for ARKODE
                     rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     resVec,                  & ! intent(out):   residual vector
+                    rVecScaled,              & ! intent(out):   scaled residual vector
                     fOld,                    & ! intent(out):   function evaluation
                     err,cmessage)              ! intent(out):   error control
   end associate
@@ -1128,7 +1130,7 @@ contains
    ! set tolerance values
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',1.0e-6_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
-   nested_Newton % kmax = 199_i4b
+   nested_Newton % kmax_classical = 99_i4b
 
    ! Linear system solver choice
    nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -1158,18 +1160,23 @@ contains
    call nested_Newton % get_mass_energy_masks()
 
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
+   nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
+
    nested_Newton % f1_vec(:)=0._r8b
-   nested_Newton % f1_vec(:)=merge(real(resVec,r8b),nested_Newton % f1_vec,nested_Newton % stateMask1) ! -------- replace with new procedure?
+   !nested_Newton % f1_vec(:)=merge(real(resVec,r8b),nested_Newton % f1_vec,nested_Newton % stateMask1) ! -------- replace with new procedure?
+   nested_Newton % f1_vec(:)=merge(nested_Newton % f_vec,nested_Newton % f1_vec,nested_Newton % stateMask1) ! -------- replace with new procedure?
    nested_Newton % f1_eval_flag = .false. 
    nested_Newton % J1_eval_flag = .false. 
 
    nested_Newton % f2_vec(:)=0._r8b
-   nested_Newton % f2_vec(:)=merge(-real(resVec,r8b),nested_Newton % f2_vec,nested_Newton % stateMask2) ! sign change so that f=f1-f2
+   !nested_Newton % f2_vec(:)=merge(-real(resVec,r8b),nested_Newton % f2_vec,nested_Newton % stateMask2) ! sign change so that f=f1-f2
+   nested_Newton % f2_vec(:)=merge(-nested_Newton % f_vec,nested_Newton % f2_vec,nested_Newton % stateMask2) ! sign change so that f=f1-f2
    nested_Newton % f2_eval_flag = .false. 
    nested_Newton % J2_eval_flag = .false.
 
-   nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
-   nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
+   !nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
+   !nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
+   nested_Newton % rVecScaled(:) = rVecScaled(:) ! compute scaled residual --- note: from eval8summa
 
    ! get intial Jacobians
    call nested_Newton % J1_J2_eval(stateVecTrial) 
@@ -1180,7 +1187,8 @@ contains
    nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
    nested_Newton % J_eval_flag = .false.  ! no need to recalculate the Jacobian values (already computed in systemSolv and Newton step refinement) 
 
-   nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
+   !nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
+   nested_Newton % rVecScaled(:) = rVecScaled(:) ! compute scaled residual --- note: from eval8summa
 
    ! get intial Jacobian
    call nested_Newton % J_eval(stateVecTrial) 

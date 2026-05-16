@@ -20,6 +20,7 @@ contains
     ! for dynamic selection of classical or nested regimes
     if (f_obj % dynamic) then ! start with classical regime and switch to nested regime if needed
      f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
+     f_obj % L_save = f_obj % out_SS4HG % fNew; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
      f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
      kmax = f_obj % kmax_classical
      lmax = 0_i4b
@@ -30,10 +31,11 @@ contains
       ! revert to original initial condition if needed
       if (f_obj % dynamic_revert) then
        f_obj % f1_vec(:) = f_obj % f1_vec_save(:); f_obj % f2_vec(:) = f_obj % f2_vec_save(:)
+       f_obj % out_SS4HG % fNew = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
        f_obj % J1(:,:) = f_obj % J1_save(:,:); f_obj % J2(:,:) = f_obj % J2_save(:,:)
       else if (dynamic_strict) then
        ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
-       call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2
+       call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes line search objective function and scaled residual)
        call f_obj % J1_J2_eval(f_obj % x0) ! get J1 and J2
       end if
       kmax = f_obj % kmax
@@ -84,7 +86,7 @@ contains
   f_obj % inner = .false. ! classical iterations only
   exit_flag=.false.
   f_obj % xk(:) = f_obj % x0(:) ! initialize
-  do k=0,f_obj % kmax
+  do k=0,f_obj % kmax_classical
    f_obj % k = k ! store index 
    if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ; if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
@@ -127,7 +129,7 @@ contains
    f_obj % kcount=f_obj % k
   end if
 
-  if (f_obj % k.gt.f_obj % kmax) then
+  if (f_obj % k.gt.f_obj % kmax_classical) then
    if (f_obj % out_warning) then
     write(f_obj % unit,*) "Warning - classical Newton solver has reached the maximum number of iterations&
                           & - accuracy may not be sufficient."

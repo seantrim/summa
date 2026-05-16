@@ -73,6 +73,8 @@ module Newton_functions
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
    real(r8b),allocatable    :: f1_vec_save(:) ! non-linear function evaluation 1 (save for dynamic mode)
    real(r8b),allocatable    :: f2_vec_save(:) ! non-linear function evaluation 2 (save for dynamic mode)
+   real(r8b),allocatable    :: f_vec_scaled_save(:) ! scaled function value for line search (save for dynamic mode)
+   real(r8b)                :: L_save        ! line search objective function (save for dynamic mode)
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
@@ -139,7 +141,7 @@ module Newton_functions
    real(qp),allocatable    :: resVec(:)  ! NOTE: qp  ! residual vector 
 
    ! scaled arrays
-   real(rkind),allocatable :: rVecScaled(:)   ! scaled residual
+   real(rkind),allocatable :: rVecScaled(:) ! scaled residual
    real(rkind),allocatable :: aJacScaled(:,:) ! scaled Jacobian
 
    ! variables to handle state type non-linear function decompositions
@@ -271,6 +273,7 @@ contains
     if (f_obj % dynamic) then
      allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
      allocate(f_obj % f1_vec_save(1:n),f_obj % f2_vec_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
+     allocate(f_obj % f_vec_scaled_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
     end if
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
@@ -802,7 +805,6 @@ contains
    if (option == 'I') then
     call f_obj % line_search_objective(.false.,.false.,option,initial_solution,L0) ! can reuse f, J, and rVecScaled values
    else if (option == 'L') then
-   !else if ((option == 'L').or.(option == 'C')) then ! for tests with 'C' option on last inner iteration
     call f_obj % line_search_objective(.true.,.true.,option,initial_solution,L0) ! need to compute when switching to outer scheme
    end if
   else
@@ -1028,7 +1030,7 @@ contains
 
   if (option == 'C') then ! classical case
    if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
-   if (evaluate_rVecScaled) f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec
+   !if (evaluate_rVecScaled) f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec ! now obtained from f_vec_eval (e.g., eval8summa)
    L=f_obj % out_SS4HG % fNew ! scaled
   else if (option == 'I') then ! inner case
    if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1
@@ -1235,6 +1237,7 @@ contains
                     f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
                     f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     f_obj % resVec,                  & ! intent(out):   residual vector
+                    f_obj % rVecScaled,              & ! intent(out):   scaled residual vector
                     f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
                     f_obj % out_SS4HG % err,         & ! intent(out): error code
                     f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
@@ -1689,10 +1692,11 @@ contains
                    dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
                    ! output
                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
-                   f_obj % fluxVec0,                        & ! intent(out):   flux vector
-                   f_obj % fRHS,                            & ! intent(out):   RHS function for ARKODE
-                   f_obj % rAdd,                            & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                   f_obj % fluxVec0,                & ! intent(out):   flux vector
+                   f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
+                   f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                    resVec,                          & ! intent(out):   residual vector
+                   f_obj % rVecScaled,              & ! intent(out):   scaled residual vector
                    f_obj % out_SS4HG % fNew,        & ! intent(out):   function evaluation
                    f_obj % out_SS4HG % err,         & ! intent(out): error code
                    f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)

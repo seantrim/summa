@@ -130,6 +130,7 @@ subroutine eval8summa(&
                       fRHS,                    & ! intent(out):   RHS function for ARKODE
                       resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                       resVec,                  & ! intent(out):   residual vector
+                      rVecScaled,              & ! intent(out):   scaled residual vector
                       fEval,                   & ! intent(out):   function evaluation
                       err,message)               ! intent(out):   error control
   ! --------------------------------------------------------------------------------------------------------------------------------
@@ -188,6 +189,7 @@ subroutine eval8summa(&
   real(rkind),intent(out)             :: fRHS(:)                 ! RHS function for ARKODE
   real(rkind),intent(out)             :: resSink(:)              ! sink terms on the RHS of the flux equation
   real(qp),intent(out)                :: resVec(:) ! NOTE: qp    ! residual vector
+  real(rkind),intent(out)             :: rVecScaled(:)           ! scaled residual vector
   real(rkind),intent(out)             :: fEval                   ! function evaluation
   ! output: error control
   integer(i4b),intent(out)        :: err                         ! error code
@@ -217,7 +219,7 @@ subroutine eval8summa(&
   logical(lgt)                    :: checkLWBalance              ! flag to check longwave balance
   integer(i4b)                    :: ixLayerDesired(1)           ! layer desired (scalar solution)
   integer(i4b)                    :: ixTop,ixBot                 ! top and bottom defining desired layers
-  real(rkind),dimension(nState)   :: rVecScaled                  ! scaled residual vector
+  !real(rkind),dimension(nState)   :: rVecScaled                  ! scaled residual vector
   character(LEN=256)              :: cmessage                    ! error message of downwind routine
   logical(lgt)                    :: updateStateCp               ! flag to indicate if we update Cp at each step for LHS, set with nrgConserv choice and updateCp_closedForm flag
   logical(lgt)                    :: updateFluxCp                ! flag to indicate if we update Cp at each step for RHS, set with nrgConserv choice and updateCp_closedForm flag
@@ -685,6 +687,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
   real(rkind), pointer        :: rVec(:)     ! residual vector
   logical(lgt)                :: feasible    ! feasibility of state vector
   real(rkind),allocatable     :: fRHS(:)     ! RHS function for ARKODE (not used here)
+  real(rkind),allocatable     :: rVecScaled(:) ! scaled residual vector (not needed for KINSOL)
   real(rkind)                 :: fNew        ! function values, not needed here
   integer(i4b)                :: err         ! error in imposeConstraints
   character(len=256)          :: message     ! error message of downwind routine
@@ -693,8 +696,8 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
   ! get equations data from user-defined data
   call c_f_pointer(user_data, eqns_data)
 
-  ! allocate arrays needed for eval8summa call
-  allocate(fRHS(1:eqns_data%nState))
+  ! allocate arrays needed for eval8summa call --- may want to allocate elsewhere
+  allocate(fRHS(1:eqns_data%nState),rVecScaled(1:eqns_data%nState))
 
   ! get data arrays from SUNDIALS vectors
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
@@ -754,6 +757,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                 fRHS,                              & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 rVec,                              & ! intent(out):   residual vector
+                rVecScaled,                        & ! intent(out):   scaled residual vector
                 fNew,                              & ! intent(out):   new function evaluation
                 eqns_data%err,eqns_data%message)     ! intent(out):   error control
   if(eqns_data%err > 0)then; eqns_data%message=trim(eqns_data%message); ierr=-1; return; endif
@@ -797,6 +801,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   type(data4ida), pointer     :: eqns_data   ! equations data
   real(rkind)   , pointer     :: stateVec(:) ! solution vector
   real(rkind)   , pointer     :: f(:)        ! pointer for RHS function for ARKODE
+  real(rkind),allocatable     :: rVecScaled(:) ! scaled residual vector (not needed for ARKODE) --- may want to allocate elsewhere
   real(rkind)                 :: fNew        ! function values for line search, not needed here
   logical(lgt)                :: feasible    ! feasibility of state vector
   !integer(i4b)                :: err         ! error in imposeConstraints
@@ -806,6 +811,9 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
 
   ! get equations data from user-defined data
   call c_f_pointer(user_data, eqns_data)
+
+  ! allocate arrays needed for eval8summa call --- may want to allocate elsewhere
+  allocate(rVecScaled(1:eqns_data%nState))
 
   ! get data arrays from SUNDIALS vectors
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
@@ -866,6 +874,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                 f,                                 & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 eqns_data%resVec,                  & ! intent(out):   residual vector
+                rVecScaled,                        & ! intent(out):   scaled residual vector
                 fNew,                              & ! intent(out):   new function evaluation
                 eqns_data%err,eqns_data%message)     ! intent(out):   error control
 
