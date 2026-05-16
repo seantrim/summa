@@ -716,7 +716,6 @@ contains
    nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
   &)
    ! iterations and updates to trial state vector, fluxes, and derivatives are done inside ARKODE solver
-   !print *, sum(stateVecTrial),sum(fRHS) ! SJT --- take out ---
    call summaSolve4arkode(&
                       dt_cur,                  & ! intent(in):    current stepsize
                       dt,                      & ! intent(in):    data time step
@@ -763,7 +762,6 @@ contains
                       fRHS,                    & ! intent(out):   RHS function values for ARKODE
                       balance,                 & ! intent(inout): balance per state
                       err,cmessage)              ! intent(out):   error control
-   !print *, sum(stateVecNew),sum(fRHS) ! SJT --- take out ---
   end associate
 
   ! ** finalize operations **
@@ -1061,7 +1059,6 @@ contains
   ! data components that are not allocatable
   nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
   nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
-
   
   ! define maximum number of iterations
   maxiter = nint(mpar_data%var(iLookPARAM%maxiter)%dat(1))
@@ -1097,7 +1094,7 @@ contains
    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
    call nested_Newton % set_tolerance('strict',10._r8b*epsilon(1._r8b),localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
    !nested_Newton % kmax = 1_i4b; nested_Newton % lmax = localMaxIter ! for trivial decomposition with f2=0
-   nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 1_i4b ! for state type decomposition
+   nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 3_i4b ! for state type decomposition
    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
    nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamics mode
 
@@ -1157,28 +1154,6 @@ contains
   call nested_Newton % allocate_memory()
 
   if (nested_Newton % nested) then ! nested iterations
-!   ! initialize data structures (ensure that fully-coupled structures are not overwritten)
-!   ! SJT: ----------------- add inSS4HG_inner, ioSS4HG_inner, etc for Newton step refinement? --------------
-!   nested_Newton % indx_data1         = nested_Newton % indx_data 
-!   nested_Newton % diag_data1         = nested_Newton % diag_data    
-!   nested_Newton % flux_data1         = nested_Newton % flux_data
-!   nested_Newton % deriv_data1        = nested_Newton % deriv_data
-!   nested_Newton % dBaseflow_dMatric1 = nested_Newton % dBaseflow_dMatric ! allocate
-!   nested_Newton % sMul1              = nested_Newton % sMul              ! allocate
-!   nested_Newton % dMat1              = nested_Newton % dMat              ! allocate
-!
-!   nested_Newton % indx_data2         = nested_Newton % indx_data 
-!   nested_Newton % diag_data2         = nested_Newton % diag_data    
-!   nested_Newton % flux_data2         = nested_Newton % flux_data
-!   nested_Newton % deriv_data2        = nested_Newton % deriv_data
-!   nested_Newton % dBaseflow_dMatric2 = nested_Newton % dBaseflow_dMatric ! allocate
-!   nested_Newton % sMul2              = nested_Newton % sMul              ! allocate
-!   nested_Newton % dMat2              = nested_Newton % dMat              ! allocate
-!
-!   nested_Newton % in_SS4HG_inner     = nested_Newton % in_SS4HG  ! allocate
-!   nested_Newton % io_SS4HG_inner     = nested_Newton % io_SS4HG  ! allocate
-!   nested_Newton % out_SS4HG_inner    = nested_Newton % out_SS4HG ! allocate
-   
    
    call nested_Newton % get_mass_energy_masks()
 
@@ -1193,26 +1168,11 @@ contains
    nested_Newton % f2_eval_flag = .false. 
    nested_Newton % J2_eval_flag = .false.
 
-   nested_Newton % f_vec(:) = real(nested_Newton % resVec,r8b)
+   nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
    nested_Newton % rVecScaled(:) = (nested_Newton % f_vec) * nested_Newton % fScale(:) ! compute scaled residual --- note: it may be possible to extract this from eval8summa
 
    ! get intial Jacobians
    call nested_Newton % J1_J2_eval(stateVecTrial) 
-
-   !!!!!! SJT: testing
-   !print *, "systemSolv A:"
-   !print *, "f =",nested_Newton % f_vec(:)
-   !print *, "f1=",nested_Newton % f1_vec(:)
-   !print *, "f2=",nested_Newton % f2_vec(:)
-   !print *, ""
-   !print *, "banded=",nested_Newton % banded
-   !call nested_Newton % J_eval(stateVecTrial)
-   !print *, "sum(J)=",sum(nested_Newton % J) 
-   !print *, "sum(J1-J2)=",sum(nested_Newton % J1 - nested_Newton % J2)
-   !print *, "J =",nested_Newton % J 
-   !print *, "J1=",nested_Newton % J1 
-   !print *, "J2=",nested_Newton % J2 
-   !!!!!! SJT: end testing
 
   else ! classical iterations
    ! store initial non-linear function values based on the initial call to eval8summa
@@ -1266,16 +1226,15 @@ contains
   diag_data  = nested_Newton % diag_data 
   flux_temp  = nested_Newton % flux_data 
   deriv_data = nested_Newton % deriv_data
-  dBaseflow_dMatric = nested_Newton % dBaseflow_dMatric(:,:) 
-  fluxVec = nested_Newton % fluxVec0
-  resSink = nested_Newton % rAdd
+  dBaseflow_dMatric(:,:) = nested_Newton % dBaseflow_dMatric(:,:) 
+  fluxVec(:) = nested_Newton % fluxVec0(:)
+  resSink(:) = nested_Newton % rAdd(:)
 
   ! save the computed functions, residuals, and solution
-  fOld          = fNew   ! may be from previous Newton iteration ------ may not be necessary (recalculated at start of next systemSolv call)
-  resVec        = nested_Newton % resVec ! may be from previous Newton iteration
-  stateVecTrial = nested_Newton % x1
-  !stateVecPrime = stateVecTrial  !prime values not used here, dummy
-  nSteps = 1 ! number of time steps taken in solver
+  fOld             = fNew   ! may be from previous Newton iteration ------ may not be necessary (recalculated at start of next systemSolv call)
+  resVec(:)        = nested_Newton % resVec(:) ! may be from previous Newton iteration
+  stateVecTrial(:) = nested_Newton % x1(:)
+  nSteps = 1_i4b ! number of time steps taken in solver
   niter  = nested_Newton % kcount + 1_i4b ! set iteration count according to classical/outer iterations (add one to match HG solver)  
 
   ! check for convergence
