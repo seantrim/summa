@@ -52,6 +52,11 @@ USE globalData,only:iname_soil      ! named variables for soil
 ! global metadata
 USE globalData,only:flux_meta       ! metadata on the model fluxes
 
+! matrix structure
+USE globalData,only: nBands         ! length of the leading dimension of the band diagonal matrix
+USE globalData,only: ku             ! number of super-diagonal bands
+USE globalData,only: kl             ! number of sub-diagonal bands
+
 ! provide access to indices that define elements of the data structures
 USE var_lookup,only:iLookFLUX       ! named variables for structure elements
 USE var_lookup,only:iLookPROG       ! named variables for structure elements
@@ -127,6 +132,8 @@ subroutine varSubstep(&
   USE systemSolv_module,only:systemSolv                 ! solve the system of equations for one time step
   ! identify name of variable type (for error message)
   USE get_ixName_module,only:get_varTypeName           ! to access type strings for error messages
+  ! nested Newton --------- testing SJT
+  USE Newton_functions,only: f_obj_type                ! type for nested Newton solver objects 
   implicit none
   ! ---------------------------------------------------------------------------------------
   ! * dummy variables
@@ -205,6 +212,9 @@ subroutine varSubstep(&
   logical(lgt)                       :: computeEnthTemp                        ! flag to compute enthalpy regardless of the model decision
   logical(lgt)                       :: enthalpyStateVec                       ! flag if enthalpy is a state variable (ida)
   logical(lgt)                       :: use_lookup                             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
+  ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! flag indicating if nested Newton solver is used (to be replaced with model decision)
+  type(f_obj_type)       :: nested_Newton             ! nested Newton solver object
 
   ! ---------------------------------------------------------------------------------------
   ! initialize error control
@@ -294,6 +304,43 @@ subroutine varSubstep(&
     dtSum     = 0._rkind  ! keep track of the portion of the time step that is completed
     nSubsteps = 0
 
+    ! initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
+    if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
+  
+      ! initialize solver options
+      ! note: options set beyond this point will overwrite the defaults
+      call nested_Newton % set_defaults()
+
+      ! * interface Jacobian array structure info *
+      ! matrix structure
+      !if (local_ixGroundwater==qbaseTopmodel .or. scalarSolution .or. forceFullMatrix .or. computeVegFlux) then
+      if (computeVegFlux) then  ! ************* MAY NEED TO TAKE GROUNDWATER DECISIONS INTO ACCOUNT (AS ABOVE LINE) FOR GENERAL CASE ***************
+        nested_Newton % banded    = .false.
+        nested_Newton % nLeadDim  = nState ! SUMMA LAPACK lead dimension
+      else
+        nested_Newton % banded    = .true.
+        nested_Newton % subdiag   = kl
+        nested_Newton % superdiag = ku
+        nested_Newton % nLeadDim  = nBands ! SUMMA LAPACK lead dimension
+      end if
+
+      ! # of columns of full matrix
+      nested_Newton % n = nState
+
+      ! allocate scaled arrays
+      allocate(nested_Newton % rVecScaled(1:nested_Newton % n))
+      allocate(nested_Newton % aJacScaled(1:nested_Newton % nLeadDim,1:nested_Newton % n))
+
+
+      ! * Solver Options * ------------- maybe move up?
+      ! Newton iteration type
+      nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+
+      ! allocate certain components of the nested_Newton object
+      call nested_Newton % allocate_memory()
+
+    end if
+    ! end initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
 
     ! loop through substeps
     ! NOTE: continuous do statement with exit clause
@@ -338,6 +385,7 @@ subroutine varSubstep(&
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
                       ! input/output: data structures
+                      nested_Newton,     & ! intent(inout): nested Newton splitting object
                       split_select,      & ! intent(in):    operator splitting object
                       lookup_data,       & ! intent(in):    lookup tables
                       type_data,         & ! intent(in):    type of vegetation and soil

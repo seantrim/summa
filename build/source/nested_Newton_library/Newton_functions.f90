@@ -144,8 +144,11 @@ module Newton_functions
    real(rkind),allocatable :: rVecScaled(:) ! scaled residual
    real(rkind),allocatable :: aJacScaled(:,:) ! scaled Jacobian
 
+   ! scalars
+   integer(i4b)             :: nLeadDim ! lead dimension of SUMMA LAPACK arrays
+
    ! variables to handle state type non-linear function decompositions
-   integer(i4b)             :: nLeadDim1,nLeadDim2
+   !integer(i4b)             :: nLeadDim1,nLeadDim2
    integer(i4b)             :: nSubset1,nSubset2
    logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
 

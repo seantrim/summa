@@ -125,6 +125,7 @@ subroutine systemSolv(&
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
                       ! input/output: data structures
+                      nested_Newton,     & ! intent(inout): nested Newton object
                       split_select,      & ! intent(in):    operator splitting object
                       lookup_data,       & ! intent(in):    lookup tables
                       type_data,         & ! intent(in):    type of vegetation and soil
@@ -171,6 +172,8 @@ subroutine systemSolv(&
 #endif
   USE eval8summa_module,only:eval8summa                     ! get the fluxes and residuals
   USE summaSolv4homegrown_module,only:summaSolv4homegrown   ! solve DAE using homegrown solver
+  ! nested Newton
+  USE Newton_functions,only:f_obj_type                      ! type for nested Newton solver objects 
 
   implicit none
   ! ---------------------------------------------------------------------------------------
@@ -282,6 +285,7 @@ subroutine systemSolv(&
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  type(f_obj_type),intent(inout) :: nested_Newton     ! nested Newton solver object
   logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
@@ -989,14 +993,14 @@ contains
   ! SJT: testing in progress
   use kind_params,                   only: r8b                 ! kind parameters from nested Newton library
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
-  use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
-  type(f_obj_type) :: nested_Newton                            ! nested Newton solver object
+  !use Newton_functions,              only: f_obj_type          ! type for nested Newton solver objects 
+  !type(f_obj_type) :: nested_Newton                            ! nested Newton solver object
 
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
 
-  ! initialize solver options
-  ! note: options set beyond this point will overwrite the defaults
-  call nested_Newton % set_defaults()
+!!!  ! initialize solver options
+!!!  ! note: options set beyond this point will overwrite the defaults
+!!!  call nested_Newton % set_defaults()
 
   ! initialize SS4HG components within nested Newton object
   associate(&
@@ -1010,25 +1014,25 @@ contains
                     & % initialize(firstFluxCall,xMin,xMax,ixSaturation)
   end associate
 
-  ! * interface Jacobian array structure info *
-  ! matrix structure
-  if (ixMatrix == ixBandMatrix) then
-   nested_Newton % banded = .true.
-   nested_Newton % subdiag   = kl
-   nested_Newton % superdiag = ku
-  else if (ixMatrix == ixFullMatrix) then
-   nested_Newton % banded = .false.
-  else
-   err=20; message=trim(message)//'ixMatrix value for Jacobian structure not supported';
-   return_flag=.true.; return
-  end if
-  ! # of columns of full matrix
-  nested_Newton % n = nState
+!!!  ! * interface Jacobian array structure info *
+!!!  ! matrix structure
+!!!  if (ixMatrix == ixBandMatrix) then
+!!!   nested_Newton % banded = .true.
+!!!   nested_Newton % subdiag   = kl
+!!!   nested_Newton % superdiag = ku
+!!!  else if (ixMatrix == ixFullMatrix) then
+!!!   nested_Newton % banded = .false.
+!!!  else
+!!!   err=20; message=trim(message)//'ixMatrix value for Jacobian structure not supported';
+!!!   return_flag=.true.; return
+!!!  end if
+!!!  ! # of columns of full matrix
+!!!  nested_Newton % n = nState
 
   ! * interface SUMMA data *
-  ! allocate scaled arrays
-  allocate(nested_Newton % rVecScaled(1:nested_Newton % in_SS4HG % nState))
-  allocate(nested_Newton % aJacScaled(1:nested_Newton % in_SS4HG % nLeadDim,1:nested_Newton % in_SS4HG % nState))
+!!!  ! allocate scaled arrays
+!!!  allocate(nested_Newton % rVecScaled(1:nested_Newton % in_SS4HG % nState))
+!!!  allocate(nested_Newton % aJacScaled(1:nested_Newton % in_SS4HG % nLeadDim,1:nested_Newton % in_SS4HG % nState))
 
   ! allocatable data components that require allocation on assignment
   nested_Newton % model_decisions   = model_decisions   ! model decisions
@@ -1070,13 +1074,13 @@ contains
 
   ! * Nested Newton solver options *
 
-  ! Newton iteration type
-  nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
+!!!  ! Newton iteration type
+!!!  nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
 
   if (nested_Newton % nested) then ! nested iterations
 
    ! dynamic switching between classical and nested regimes?
-   nested_Newton % dynamic = .true.
+   nested_Newton % dynamic = .false.
 
    ! use dual method?
    nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
@@ -1152,8 +1156,8 @@ contains
 
   ! * Solver Operations *
 
-  ! allocate certain components of the nested_Newton object
-  call nested_Newton % allocate_memory()
+!!!  ! allocate certain components of the nested_Newton object
+!!!  call nested_Newton % allocate_memory()
 
   if (nested_Newton % nested) then ! nested iterations
    
@@ -1200,6 +1204,17 @@ contains
 
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
+
+  ! potential new call to reduce allocations and copies for data structures based on HG call
+
+  ! OG HG call for reference
+  !call summaSolv4homegrown(in_SS4HG,&                                                                                ! input: model control
+  !                         &stateVecTrial,fScale,xScale,resVec,sMul,dMat,&                                            ! input: state vectors
+  !                         &model_decisions,lookup_data,type_data,attr_data,mpar_data,forc_data,bvar_data,prog_data,& ! input: data structures
+  !                         &indx_data,diag_data,flux_temp,deriv_data,&                                                ! input-output: data structures
+  !                         &dBaseflow_dMatric,io_SS4HG,&                                                              ! input-output: baseflow
+  !                         &stateVecNew,fluxVec,resSink,resVecNew,tooMuchMelt,out_SS4HG)                              ! output
+
   !stop ! SJT: testing
 
   ! stats for Newton iteration type
@@ -1229,7 +1244,7 @@ contains
   call nested_Newton % out_SS4HG &
                    & % finalize(fNew,converged,err,cmessage)          ! converged not used (nested Newton object used instead)
 
-  ! interface additional output that summaSolve4homegrown provides
+  ! interface additional output that summaSolve4homegrown provides ******************** eliminate these *******************
   indx_data  = nested_Newton % indx_data 
   diag_data  = nested_Newton % diag_data 
   flux_temp  = nested_Newton % flux_data 
