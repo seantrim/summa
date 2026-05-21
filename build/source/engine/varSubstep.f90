@@ -306,39 +306,60 @@ subroutine varSubstep(&
 
     ! initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
     if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
+      call initialize_nested_Newton
   
-      ! initialize solver options
-      ! note: options set beyond this point will overwrite the defaults
-      call nested_Newton % set_defaults()
-
-      ! * interface Jacobian array structure info *
-      ! matrix structure
-      !if (local_ixGroundwater==qbaseTopmodel .or. scalarSolution .or. forceFullMatrix .or. computeVegFlux) then
-      if (computeVegFlux) then  ! ************* MAY NEED TO TAKE GROUNDWATER DECISIONS INTO ACCOUNT (AS ABOVE LINE) FOR GENERAL CASE ***************
-        nested_Newton % banded    = .false.
-        nested_Newton % nLeadDim  = nState ! SUMMA LAPACK lead dimension
-      else
-        nested_Newton % banded    = .true.
-        nested_Newton % subdiag   = kl
-        nested_Newton % superdiag = ku
-        nested_Newton % nLeadDim  = nBands ! SUMMA LAPACK lead dimension
-      end if
-
-      ! # of columns of full matrix
-      nested_Newton % n = nState
-
-      ! allocate scaled arrays
-      allocate(nested_Newton % rVecScaled(1:nested_Newton % n))
-      allocate(nested_Newton % aJacScaled(1:nested_Newton % nLeadDim,1:nested_Newton % n))
-
-
-      ! * Solver Options * ------------- maybe move up?
-      ! Newton iteration type
-      nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
-
-      ! allocate certain components of the nested_Newton object
-      call nested_Newton % allocate_memory()
-
+!      ! initialize solver options defaults
+!      ! note: options set beyond this point will overwrite the defaults
+!      call nested_Newton % set_defaults()
+! 
+!      ! * Solver Options * ------------- maybe move up?
+!      ! Newton iteration type
+!      nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
+!
+!      ! * interface Jacobian array structure info *
+!      ! matrix structure
+!      !if (local_ixGroundwater==qbaseTopmodel .or. scalarSolution .or. forceFullMatrix .or. computeVegFlux) then
+!      if (computeVegFlux) then  ! ************* MAY NEED TO TAKE GROUNDWATER DECISIONS INTO ACCOUNT (AS ABOVE LINE) FOR GENERAL CASE ***************
+!        nested_Newton % banded    = .false.
+!        nested_Newton % nLeadDim  = nState ! SUMMA LAPACK lead dimension
+!      else
+!        nested_Newton % banded    = .true.
+!        nested_Newton % subdiag   = kl
+!        nested_Newton % superdiag = ku
+!        nested_Newton % nLeadDim  = nBands ! SUMMA LAPACK lead dimension
+!      end if
+!
+!      ! # of columns of full matrix
+!      nested_Newton % n = nState
+!
+!      ! allocate arrays that depend on nState
+!      allocate(nested_Newton % rVecScaled(1:nested_Newton % n))
+!      allocate(nested_Newton % aJacScaled(1:nested_Newton % nLeadDim,1:nested_Newton % n))
+!      allocate(nested_Newton % fScale(1:nested_Newton % n))
+!      allocate(nested_Newton % xScale(1:nested_Newton % n))
+!      allocate(nested_Newton % sMul(1:nested_Newton % n))
+!      allocate(nested_Newton % dMat(1:nested_Newton % n))
+!
+!      allocate(nested_Newton % resVec(1:nested_Newton % n))
+!      allocate(nested_Newton % fRHS(1:nested_Newton % n))
+!      allocate(nested_Newton % rAdd(1:nested_Newton % n))
+!      allocate(nested_Newton % fluxVec0(1:nested_Newton % n))
+!
+!      ! allocate certain components of the nested_Newton object (e.g., f and J arrays)
+!      call nested_Newton % allocate_memory()
+!
+!      ! initialize/allocate structures not modified at the start of systemSolv (avoid variables that change during systemSolv call)
+!      nested_Newton % model_decisions   = model_decisions   ! model decisions
+!
+!      nested_Newton % lookup_data = lookup_data  ! lookup tables
+!      nested_Newton % type_data   = type_data    ! type of vegetation and soil
+!      nested_Newton % attr_data   = attr_data    ! spatial attributes
+!      nested_Newton % forc_data   = forc_data    ! model forcing data
+!      nested_Newton % mpar_data   = mpar_data    ! model parameters
+!      nested_Newton % bvar_data   = bvar_data    ! model variables for the local basin
+!
+!      ! ***************** the operations below need to be confirmed **********************
+!
     end if
     ! end initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
 
@@ -705,6 +726,127 @@ subroutine varSubstep(&
     end if
 
   end associate globalVars ! end global associate block
+
+contains
+
+  subroutine initialize_nested_Newton
+    ! initialize nested Newton solver (if needed)
+    use kind_params,only: r8b                 ! kind parameters from nested Newton library
+  
+    ! initialize solver options defaults
+    ! note: options set beyond this point will overwrite the defaults
+    call nested_Newton % set_defaults()
+ 
+    ! * Solver Options *
+
+    ! Newton iteration type
+    nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+
+    ! set method for computing relative convergence error (classical and outer iterations)
+     ! 'strict' uses two consecutive iterations and is extremely conservative
+     !     |--> (actually computes the convergence error of the previous iteration)
+     ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
+    nested_Newton % convergence = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+
+    ! solver output
+    call nested_Newton % solver_output('silent') ! standard output used by default 
+
+    ! set tolerance values (also sets max iteration counts) --------- not required because we are using HG convergence criterion
+    ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
+    !call nested_Newton % set_tolerance('strict',1.e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
+
+    ! set max # of classical iterations (for classical and dynamic modes)
+    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
+
+    ! Linear system solver choice
+    nested_Newton % linear_system_solver = "LAPACK_standard"
+
+    ! Matrix-Vector products (for full matrix storage)
+    nested_Newton % matrix_vector        = "BLAS" 
+
+    ! Newton step refinement
+    nested_Newton % refinement           = .true.  ! apply Newton step refinement following inner iterations
+
+    ! constraints 
+    nested_Newton % constraints          = .false. ! apply imposeConstraints between outer/classical iterations
+
+    ! scaling
+    nested_Newton % scaling              = .true.  ! apply xScale and fScale scaling factors for LAPACK   
+
+    if (nested_Newton % nested) then ! nested iteration options
+
+      ! dynamic switching between classical and nested regimes?
+      nested_Newton % dynamic   = .false.
+      nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamic mode
+
+      ! use dual method?
+      nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
+
+      ! convergence criterion for inner iterations
+      nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
+
+      ! max # of iterations for outer and inner iteration loops
+      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b 
+
+      ! constraints for inner iterations 
+      nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
+
+    end if
+
+
+    ! * interface Jacobian array structure info *
+    associate(nState         => in_varSubstep % nSubset, &      ! intent(in): total number of state variables
+              computeVegFlux => in_varSubstep % computeVegFlux) ! intent(in): flag to indicate if computing fluxes over vegetation (.false. means veg is buried with snow)
+      ! matrix structure
+      !if (local_ixGroundwater==qbaseTopmodel .or. scalarSolution .or. forceFullMatrix .or. computeVegFlux) then
+      if (computeVegFlux) then  ! ************* MAY NEED TO TAKE GROUNDWATER DECISIONS INTO ACCOUNT (AS ABOVE LINE) FOR GENERAL CASE ***************
+        nested_Newton % banded    = .false.
+        nested_Newton % nLeadDim  = nState ! SUMMA LAPACK lead dimension
+      else
+        nested_Newton % banded    = .true.
+        nested_Newton % subdiag   = kl
+        nested_Newton % superdiag = ku
+        nested_Newton % nLeadDim  = nBands ! SUMMA LAPACK lead dimension
+      end if
+
+      ! # of columns of full matrix
+      nested_Newton % n = nState
+    end associate
+
+    ! allocate arrays that depend on nState
+    allocate(nested_Newton % rVecScaled(1:nested_Newton % n))
+    allocate(nested_Newton % aJacScaled(1:nested_Newton % nLeadDim,1:nested_Newton % n))
+    allocate(nested_Newton % fScale(1:nested_Newton % n))
+    allocate(nested_Newton % xScale(1:nested_Newton % n))
+    allocate(nested_Newton % sMul(1:nested_Newton % n))
+    allocate(nested_Newton % dMat(1:nested_Newton % n))
+
+    allocate(nested_Newton % resVec(1:nested_Newton % n))
+    allocate(nested_Newton % fRHS(1:nested_Newton % n))
+    allocate(nested_Newton % rAdd(1:nested_Newton % n))
+    allocate(nested_Newton % fluxVec0(1:nested_Newton % n))
+
+    ! allocate certain components of the nested_Newton object (e.g., f and J arrays)
+    call nested_Newton % allocate_memory()
+
+    ! initialize/allocate structures not modified at the start of systemSolv (avoid variables that change during systemSolv call)
+    nested_Newton % model_decisions   = model_decisions   ! model decisions
+
+    nested_Newton % lookup_data = lookup_data  ! lookup tables
+    nested_Newton % type_data   = type_data    ! type of vegetation and soil
+    nested_Newton % attr_data   = attr_data    ! spatial attributes
+    nested_Newton % forc_data   = forc_data    ! model forcing data
+    nested_Newton % mpar_data   = mpar_data    ! model parameters
+    nested_Newton % bvar_data   = bvar_data    ! model variables for the local basin
+
+    ! ***************** the operations below need to be confirmed **********************
+
+    if (nested_Newton % nested) then
+      nested_Newton % indx_data  =  indx_data  ! indices defining model states and layers
+      call nested_Newton % get_mass_energy_masks()
+    end if
+  end subroutine initialize_nested_Newton
+
 end subroutine varSubstep
 
 

@@ -1331,7 +1331,8 @@ contains
 
   ! * initialize operations for split_select object *
 
-  associate(nstate => f_obj % in_SS4HG % nState)
+  !associate(nstate => f_obj % in_SS4HG % nState)
+  associate(nstate => f_obj % n)
    ! initialize total # of state variables
    split_select % nState = nState 
 
