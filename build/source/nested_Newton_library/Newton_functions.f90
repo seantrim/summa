@@ -107,7 +107,7 @@ module Newton_functions
    type(model_options),allocatable :: model_decisions(:) ! model decisions
 
    type(zLookup)     :: lookup_data                  ! lookup tables
-   type(var_dlength) :: flux_init                    ! model fluxes at the start of the time step
+   !type(var_dlength) :: flux_init                    ! model fluxes at the start of the time step
    type(var_i)       :: type_data                    ! type of vegetation and soil
    type(var_d)       :: attr_data                    ! spatial attributes
    type(var_d)       :: forc_data                    ! model forcing data

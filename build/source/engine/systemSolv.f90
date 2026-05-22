@@ -442,9 +442,16 @@ contains
   if (.not.feasible) then; message=trim(message)//'state vector not feasible'; err=20; return_flag=.true.; return; end if
 
   ! copy over the initial flux structure since some model fluxes are not computed in the iterations
-  do concurrent ( iVar=1:size(flux_meta) )
-    flux_temp%var(iVar)%dat(:) = flux_init%var(iVar)%dat(:)
-  end do
+  if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
+    ! note: we do not need flux_temp because flux_init is used for initial eval8summa call
+    do concurrent ( iVar=1:size(flux_meta) )
+      nested_Newton % flux_data%var(iVar)%dat(:) = flux_init%var(iVar)%dat(:)
+    end do
+  else ! all other solvers
+    do concurrent ( iVar=1:size(flux_meta) )
+      flux_temp%var(iVar)%dat(:) = flux_init%var(iVar)%dat(:)
+    end do
+  end if
 
   ! check the need to merge snow layers
   associate(&
@@ -1025,7 +1032,7 @@ contains
 
   ! * interface SUMMA data *
 
-  ! allocatable data components that require allocation on assignment
+  ! data components that are already allocated but need assignment
   nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
   nested_Newton % dMat(:)           = dMat(:)              ! diagonal matrix (excludes flux derivatives)
 
@@ -1038,12 +1045,9 @@ contains
   nested_Newton % rAdd(:)           = rAdd(:)              ! additional terms in the residual vector
   nested_Newton % resVec(:)         = resVec(:)            ! residual vector    
 
-  nested_Newton % flux_init   = flux_init    ! model fluxes at the start of the time step
-
-  nested_Newton % indx_data  =  indx_data  ! indices defining model states and layers
-  nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU
+  ! allocatable data components that require allocation on assignment
+  nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU (assignment needed due to initial eval8summa call)
   nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
-  nested_Newton % flux_data  =  flux_temp  ! flux variables for a local HRU (flux_temp used for summaSolve4homegrown so used here)
   nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
 
   ! data components that are not allocatable
@@ -1059,20 +1063,15 @@ contains
 
   ! * Solver Operations *
 
+  ! apply output from initial eval8summa call
   if (nested_Newton % nested) then ! nested iterations
-   
-!!!   call nested_Newton % get_mass_energy_masks()
 
    ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
 
    nested_Newton % f1_vec(:)=merge(nested_Newton % f_vec,0._r8b,nested_Newton % stateMask1) 
-   nested_Newton % f1_eval_flag = .false. 
-   nested_Newton % J1_eval_flag = .false. 
 
    nested_Newton % f2_vec(:)=merge(-nested_Newton % f_vec,0._r8b,nested_Newton % stateMask2) ! sign change so that f=f1-f2
-   nested_Newton % f2_eval_flag = .false. 
-   nested_Newton % J2_eval_flag = .false.
 
    nested_Newton % rVecScaled(:) = rVecScaled(:) ! scaled residual (from eval8summa)
    ! note: classical and inner line search schemes have the same initial objective function value
@@ -1084,8 +1083,6 @@ contains
   else ! classical iterations
    ! store initial non-linear function values based on the initial call to eval8summa
    nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
-   nested_Newton % f_eval_flag = .false. ! no need to recalculate the function values (already computed in systemSolv and Newton step refinement) 
-   nested_Newton % J_eval_flag = .false. ! no need to recalculate the Jacobian values (already computed in systemSolv and Newton step refinement) 
 
    nested_Newton % rVecScaled(:) = rVecScaled(:) ! scaled residual (from eval8summa)
    nested_Newton % L0            = fOld          ! initial line search objective function value (from eval8summa)
@@ -1100,8 +1097,6 @@ contains
 
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
-
-  !stop ! SJT: testing
 
   ! stats for Newton iteration type
   if (nested_Newton % nested) then
@@ -1128,19 +1123,26 @@ contains
   call nested_Newton % io_SS4HG &
                    & % finalize(firstFluxCall,xMin,xMax,ixSaturation) ! xMin and xMax not used
   call nested_Newton % out_SS4HG &
-                   & % finalize(fNew,converged,err,cmessage)          ! converged not used (nested Newton object used instead)
+                   & % finalize(fOld,converged,err,cmessage)          ! converged not used (nested Newton object used instead)
 
-  ! interface additional output that summaSolve4homegrown provides
-  indx_data  = nested_Newton % indx_data 
-  diag_data  = nested_Newton % diag_data 
-  flux_temp  = nested_Newton % flux_data 
-  deriv_data = nested_Newton % deriv_data
+  ! * interface additional output that summaSolve4homegrown provides * 
+
+  ! indx_data only needs to update one data component (the number of flux calls per time step)
+  indx_data % var(iLookINDEX%numberFluxCalc) % dat(1) = nested_Newton % indx_data % var(iLookINDEX%numberFluxCalc)%dat(1)
+
+  ! data structures changed by computFlux
+  diag_data  = nested_Newton % diag_data ! note: may not need to allocate 
+  do concurrent ( iVar=1:size(flux_temp % var) )
+    flux_temp%var(iVar)%dat(:) = nested_Newton % flux_data%var(iVar)%dat(:)
+  end do
+  deriv_data = nested_Newton % deriv_data ! note: may not need to allocate
   dBaseflow_dMatric(:,:) = nested_Newton % dBaseflow_dMatric(:,:) 
   fluxVec(:) = nested_Newton % fluxVec0(:)
+
+  ! eval8summa changes the source/sink terms
   resSink(:) = nested_Newton % rAdd(:)
 
-  ! save the computed functions, residuals, and solution
-  fOld             = fNew   ! may be from previous Newton iteration ------ may not be necessary (recalculated at start of next systemSolv call)
+  ! * save the computed functions, residuals, and solution *
   resVec(:)        = nested_Newton % resVec(:) ! may be from previous Newton iteration
   stateVecTrial(:) = nested_Newton % x1(:)
   nSteps = 1_i4b ! number of time steps taken in solver
@@ -1152,7 +1154,6 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
-  !stop
  end subroutine nested_Newton_iterations
 
  subroutine Newton_iterations_homegrown
