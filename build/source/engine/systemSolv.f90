@@ -1033,7 +1033,6 @@ contains
   ! * interface SUMMA data *
 
   ! data components that are already allocated but need assignment
-  nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
   nested_Newton % dMat(:)           = dMat(:)              ! diagonal matrix (excludes flux derivatives)
 
   nested_Newton % fScale(:)         = fScale(:)            ! characteristic scale of the function evaluations (mixed units)
@@ -1046,6 +1045,7 @@ contains
   nested_Newton % resVec(:)         = resVec(:)            ! residual vector    
 
   ! allocatable data components that require allocation on assignment
+  nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
   nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU (assignment needed due to initial eval8summa call)
   nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
   nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables

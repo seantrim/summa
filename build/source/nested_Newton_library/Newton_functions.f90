@@ -277,6 +277,7 @@ contains
      allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
      allocate(f_obj % f1_vec_save(1:n),f_obj % f2_vec_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
      allocate(f_obj % f_vec_scaled_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
+     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
     end if
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations

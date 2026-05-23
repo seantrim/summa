@@ -17,10 +17,11 @@ contains
 
   if (f_obj % n .gt. 0_i4b) then
    if (f_obj % nested) then
-    ! for dynamic selection of classical or nested regimes
-    if (f_obj % dynamic) then ! start with classical regime and switch to nested regime if needed
+    if (f_obj % dynamic) then ! for dynamic selection of classical or nested regimes
+     ! note: start with classical regime and switch to nested regime if needed 
      f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
-     f_obj % L_save = f_obj % out_SS4HG % fNew; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
+     !f_obj % L_save = f_obj % out_SS4HG % fNew; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
+     f_obj % L_save = f_obj % L0; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
      f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
      kmax = f_obj % kmax_classical
      lmax = 0_i4b
@@ -31,7 +32,8 @@ contains
       ! revert to original initial condition if needed
       if (f_obj % dynamic_revert) then
        f_obj % f1_vec(:) = f_obj % f1_vec_save(:); f_obj % f2_vec(:) = f_obj % f2_vec_save(:)
-       f_obj % out_SS4HG % fNew = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
+       !f_obj % out_SS4HG % fNew = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
+       f_obj % L0 = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
        f_obj % J1(:,:) = f_obj % J1_save(:,:); f_obj % J2(:,:) = f_obj % J2_save(:,:)
       else if (dynamic_strict) then
        ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
@@ -42,12 +44,12 @@ contains
       lmax = f_obj % lmax
       call nested_Newton_vector(f_obj,kmax,lmax) ! nested iterations
      end if   
-    else ! use nested regime (original behaviour)
+    else ! use nested regime only (original behaviour)
      kmax = f_obj % kmax
      lmax = f_obj % lmax
      call nested_Newton_vector(f_obj,kmax,lmax)   
     end if
-   else
+   else ! classical iterations only
     call Newton_vector(f_obj)
    end if
   else
@@ -100,7 +102,7 @@ contains
 
    ! solve for Newton step
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
-   if (f_obj % LAPACK_error) return ! check for LAPACK errors to all recovery (if supported by the external driver)
+   if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
    ! Newton step refinement
@@ -108,7 +110,8 @@ contains
     call f_obj % apply_nested_line_search('C')
    end if
 
-   call check_residual_vector(f_obj,k,f_obj % xkp1,f_obj % xk,R_est,exit_flag,return_flag); if (return_flag) return
+   call check_residual_vector(f_obj,f_obj % convergence,k,f_obj % xkp1,f_obj % xk,&
+                             &R_est,exit_flag,return_flag); if (return_flag) return
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
@@ -212,7 +215,6 @@ contains
     ! SJT: solve for inner step using LAPACK ------- testing ----------------
     ! do we need to evaluate RHS vector?
     if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
-    !if ((f_obj % refinement).and.(f_obj % line_search_option == 'C').and.(f_obj % lmax == 0_i4b)) then ! for testing 'C' scheme on last inner iteration
      f_obj % evaluate_B = .false.
     else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
      if ((f_obj % k == 0_i4b).and.(f_obj % l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
@@ -234,7 +236,7 @@ contains
     end if
 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
-    if (f_obj % LAPACK_error) return ! check for LAPACK errors to all recovery (if supported by the external driver)
+    if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
     f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
     ! apply Newton step refinement
@@ -242,7 +244,8 @@ contains
      call f_obj % apply_nested_line_search(f_obj % line_search_option)
     end if
 
-    call check_residual_vector(f_obj,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,R_est,exit_inner,return_flag); if (return_flag) return
+    call check_residual_vector(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&
+                              &R_est,exit_inner,return_flag); if (return_flag) return
     ! print exact convergence error for iteration l
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",f_obj % l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
@@ -272,7 +275,8 @@ contains
 
    f_obj % inner=.false.
 
-   call check_residual_vector(f_obj,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,R_est,exit_outer,return_flag); if (return_flag) return
+   call check_residual_vector(f_obj,f_obj % convergence,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,&
+                             &R_est,exit_outer,return_flag); if (return_flag) return
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
@@ -319,36 +323,26 @@ contains
   end if
  end subroutine nested_Newton_vector
 
- subroutine check_residual_vector(f_obj,iteration,xkp1,xk,R_est,exit_flag,return_flag)
+ subroutine check_residual_vector(f_obj,convergence,iteration,xkp1,xk,R_est,exit_flag,return_flag)
   ! *** Check residual vector for potential loop exit ***
   use,intrinsic :: ieee_arithmetic,only: ieee_is_finite
   type(f_obj_type),intent(inout) :: f_obj 
-  integer(i4b),intent(in)  :: iteration   ! interation count
-  real(r8b),intent(in)     :: xkp1(1:f_obj % n)  ! current root estimate
-  real(r8b),intent(in)     :: xk(1:f_obj % n)    ! previous root estimate
-  logical,intent(inout)    :: exit_flag   ! exit flag
-  logical,intent(out)      :: return_flag ! return flag for early return from Newton solver call
-  real(r8b),intent(out)    :: R_est       ! estimated R for current iteration (computed in the previous call)
+  character(*),intent(in)  :: convergence         ! convergence option string that adapts to inner and outer/classical iterations
+  integer(i4b),intent(in)  :: iteration           ! interation count
+  real(r8b),intent(in)     :: xkp1(1:f_obj % n)   ! current root estimate
+  real(r8b),intent(in)     :: xk(1:f_obj % n)     ! previous root estimate
+  logical,intent(inout)    :: exit_flag           ! exit flag
+  logical,intent(out)      :: return_flag         ! return flag for early return from Newton solver call
+  real(r8b),intent(out)    :: R_est               ! estimated R for current iteration (computed in the previous call)
   ! local variables
-  real(r8b)                :: tol         ! tolerance
-  real(r8b)                :: R(-1:1)     ! maximum residual array (two previous exact values and prediction for next iteration)
+  real(r8b)                :: tol                 ! tolerance
+  real(r8b)                :: R(-1:1)             ! maximum residual array (two previous exact values and prediction for next iteration)
   integer(i4b)             :: i                   ! index for residual vector
   real(r8b)                :: R_vec(1:f_obj % n)  ! residual vector
   real(r8b)                :: b                   ! exponent used for convergence error estimation 
-  character(:),allocatable :: convergence         ! convergence option string that adapts to inner and outer/classical iterations
-  real(r8b)                :: xk3m2,xk2m1,xk1m0   ! absolute differences used in convergence order calculation for dynamic mode
-  real(r8b)                :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
-  real(r8b)                :: order               ! approximate convergence order
   real(r8b),parameter      :: tol_inner_LS = 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
-  logical                  :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
 
   return_flag = .false. ! initialize return flag
-
-  if (f_obj % inner) then ! inner iterations
-   convergence = f_obj % convergence_inner
-  else                    ! outer iterations
-   convergence = f_obj % convergence
-  end if
 
   if (convergence.eq.'custom') then ! use custom convergence criterion
 
@@ -363,75 +357,14 @@ contains
     if (all(R_vec < tol_inner_LS)) then
      f_obj % lmax_loop = f_obj % l + 1_i4b; return
     end if
-    ! look for exact agreement (slower)
-    !if (all(xkp1 == xk)) then
-    ! f_obj % lmax_loop = f_obj % l + 1_i4b; return
-    !end if
    end if
 
    ! SJT: new dynamic lmax option for switching between classical and nested regimes
    if (f_obj % nested) then
     if (f_obj % dynamic) then
      if (f_obj % dynamic_classical) then
-      if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
-        if (f_obj % k == 0_i4b) then
-         f_obj % xk1(:) = f_obj % xkp1lp1(:) ! x1
-        else if (f_obj % k == 1_i4b) then
-         f_obj % xk2(:) = f_obj % xkp1lp1(:) ! x2
-        else if (f_obj % k == 2_i4b) then ! check convergence rate for second classical iteration
-
-         f_obj % dynamic_revert = .false. ! initialize initial condition reversion flag
-         do i=1,f_obj % n
-
-          ! initialize acceptance flag
-          if (ieee_is_finite(f_obj % xkp1lp1(i))) then ! check for normal finite ieee value (e.g., not infinity or NaN)
-           accept(i) = .true.
-          else
-           accept(i) = .false.
-           f_obj % dynamic_classical = .false.
-           f_obj % dynamic_revert = .true. ! cannot use classical iteration solution as initial condition
-           exit ! no need to check remaining solution values because we are reverting to the original solution
-          end if
-
-          ! cases where classical iterations have converged to machine precision
-          if (f_obj % xk1(i) == f_obj % x0(i)) cycle
-          if (f_obj % xk2(i) == f_obj % xk1(i)) cycle
-          if (f_obj % xkp1lp1(i) == f_obj % xk2(i)) cycle
-
-          ! compute absolute differences
-          xk1m0 = f_obj % xk1(i) - f_obj % x0(i)
-          xk2m1 = f_obj % xk2(i) - f_obj % xk1(i)
-          xk3m2 = f_obj % xkp1lp1(i) - f_obj % xk2(i)
-
-          ! compute arguments for comvergence order formula
-          num_arg = abs(xk3m2/xk2m1) ! numerator argument (error ratio of k=3 and k=2)
-          den_arg = abs(xk2m1/xk1m0) ! denominator argument (error ratio of k=2 and k=1)
-          if ((num_arg == 1._r8b).or.(den_arg == 1._r8b)) then ! if errors did not improve over classical iterations, used nested
-           accept(i) = .false. ! do not accept solution for nested initial guess
-           f_obj % dynamic_classical = .false.
-          end if
-
-          ! compute estimate of convergence order
-          order = log( num_arg ) / log( den_arg )
-          if (order < f_obj % order_min) then ! if convergence rate is not sufficiently high with classical go to nested
-           accept(i) = .false. ! do not accept solution for nested initial guess
-           f_obj % dynamic_classical = .false.
-          end if
-
-         end do
-
-         ! go to nested iterations if needed 
-         if (.not.f_obj % dynamic_classical) then
-          if (.not.f_obj % dynamic_revert) then
-           f_obj % x0(:) = merge(f_obj % xkp1lp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
-           !print *, f_obj % x0(:)
-          end if
-          return_flag = .true.
-          return 
-         end if
-
-        end if
-      end if
+      call check_dynamic_mode(f_obj % xkp1lp1) ! nested algorithm used with lmax=0
+      !call check_dynamic_mode(f_obj % xkp1) ! classical algorithm used
      end if
     end if
    end if
@@ -514,6 +447,74 @@ contains
      end if
     end do
    end subroutine compute_relative_residual
+
+   subroutine check_dynamic_mode(xkp1)
+    ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
+    real(r8b),intent(in) :: xkp1(:)             ! current classical iteration guess
+    real(r8b)            :: xk3m2,xk2m1,xk1m0   ! absolute differences used in convergence order calculation for dynamic mode
+    real(r8b)            :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
+    real(r8b)            :: order               ! approximate convergence order
+    logical              :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
+    
+    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
+     if (f_obj % k == 0_i4b) then
+      f_obj % xk1(:) = xkp1(:) ! x1
+     else if (f_obj % k == 1_i4b) then
+      f_obj % xk2(:) = xkp1(:) ! x2
+     else if (f_obj % k == 2_i4b) then ! check convergence rate for second classical iteration
+
+      f_obj % dynamic_revert = .false. ! initialize initial condition reversion flag
+      do i=1,f_obj % n
+
+       ! initialize acceptance flag
+       if (ieee_is_finite(xkp1(i))) then ! check for normal finite ieee value (e.g., not infinity or NaN)
+        accept(i) = .true.
+       else
+        accept(i) = .false.
+        f_obj % dynamic_classical = .false.
+        f_obj % dynamic_revert = .true. ! cannot use classical iteration solution as initial condition
+        exit ! no need to check remaining solution values because we are reverting to the original solution
+       end if
+
+       ! cases where classical iterations have converged to machine precision
+       if (f_obj % xk1(i) == f_obj % x0(i)) cycle
+       if (f_obj % xk2(i) == f_obj % xk1(i)) cycle
+       if (xkp1(i) == f_obj % xk2(i)) cycle
+
+       ! compute absolute differences
+       xk1m0 = f_obj % xk1(i) - f_obj % x0(i)
+       xk2m1 = f_obj % xk2(i) - f_obj % xk1(i)
+       xk3m2 = xkp1(i) - f_obj % xk2(i)
+
+       ! compute arguments for comvergence order formula
+       num_arg = abs(xk3m2/xk2m1) ! numerator argument (error ratio of k=3 and k=2)
+       den_arg = abs(xk2m1/xk1m0) ! denominator argument (error ratio of k=2 and k=1)
+       if ((num_arg == 1._r8b).or.(den_arg == 1._r8b)) then ! if errors did not improve over classical iterations, used nested
+        accept(i) = .false. ! do not accept solution for nested initial guess
+        f_obj % dynamic_classical = .false.
+       end if
+
+       ! compute estimate of convergence order
+       order = log( num_arg ) / log( den_arg )
+       if (order < f_obj % order_min) then ! if convergence rate is not sufficiently high with classical go to nested
+        accept(i) = .false. ! do not accept solution for nested initial guess
+        f_obj % dynamic_classical = .false.
+       end if
+
+      end do
+
+      ! go to nested iterations if needed 
+      if (.not.f_obj % dynamic_classical) then
+       if (.not.f_obj % dynamic_revert) then
+        f_obj % x0(:) = merge(xkp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
+       end if
+       return_flag = .true.
+       return 
+      end if
+
+     end if
+    end if
+   end subroutine check_dynamic_mode
 
  end subroutine check_residual_vector
 

@@ -687,7 +687,7 @@ contains
     ! * Solver Options *
 
     ! Newton iteration type
-    nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+    nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
     ! set method for computing relative convergence error (classical and outer iterations)
      ! 'strict' uses two consecutive iterations and is extremely conservative
@@ -727,7 +727,7 @@ contains
     if (nested_Newton % nested) then ! nested iteration options
 
       ! dynamic switching between classical and nested regimes?
-      nested_Newton % dynamic   = .false.
+      nested_Newton % dynamic   = .true.
       nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamic mode
 
       ! use dual method?
@@ -737,7 +737,7 @@ contains
       nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 0_i4b 
+      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 3_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
