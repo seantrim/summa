@@ -20,13 +20,14 @@ contains
     if (f_obj % dynamic) then ! for dynamic selection of classical or nested regimes
      ! note: start with classical regime and switch to nested regime if needed 
      f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
-     !f_obj % L_save = f_obj % out_SS4HG % fNew; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
      f_obj % L_save = f_obj % L0; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
      f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
      kmax = f_obj % kmax_classical
      lmax = 0_i4b
      f_obj % dynamic_classical = .true.
-     call nested_Newton_vector(f_obj,kmax,lmax) ! classical iterations
+     print *, "A: dynamic_classical=",f_obj % dynamic_classical ! SJT: testing --------------------- take out
+     !call nested_Newton_vector(f_obj,kmax,lmax) ! classical iterations -- this works
+     call Newton_vector(f_obj) ! ----------------------------------------- this doesn't work
      if (.not.f_obj % dynamic_classical) then
 
       ! revert to original initial condition if needed
@@ -42,6 +43,7 @@ contains
       end if
       kmax = f_obj % kmax
       lmax = f_obj % lmax
+      print *, "B: dynamic_classical=",f_obj % dynamic_classical ! SJT: testing --------------------- take out
       call nested_Newton_vector(f_obj,kmax,lmax) ! nested iterations
      end if   
     else ! use nested regime only (original behaviour)
@@ -90,7 +92,9 @@ contains
   f_obj % xk(:) = f_obj % x0(:) ! initialize
   do k=0,f_obj % kmax_classical
    f_obj % k = k ! store index 
-   if (f_obj % f_eval_flag) call f_obj % f_vec_eval(f_obj % xk) ; if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
+   if (f_obj % f_eval_flag) then
+    call f_obj % f_vec_eval(f_obj % xk) ; if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
+   end if
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
    ! obtain RHS vector
@@ -107,7 +111,7 @@ contains
 
    ! Newton step refinement
    if (f_obj % refinement) then
-    call f_obj % apply_nested_line_search('C')
+    call f_obj % apply_nested_line_search('C',.false.)
    end if
 
    call check_residual_vector(f_obj,f_obj % convergence,k,f_obj % xkp1,f_obj % xk,&
@@ -158,7 +162,6 @@ contains
   logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
   real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
-  !real(r8b)    :: f2mJ2xk0(1:f_obj % n)          ! right-hand side / solution vector
 
   ! initialize error flag
   f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
@@ -177,9 +180,10 @@ contains
   f_obj % k = 0_i4b ! intialize loop index
   outer: do while (f_obj % k <= kmax)
 
-   if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(f_obj % xk0); if (f_obj % f_error) return
+   if (f_obj % f2_eval_flag) then
+    call f_obj % f2_vec_eval(f_obj % xk0); if (f_obj % f_error) return
+   end if
    if (f_obj % J2_eval_flag) call f_obj % J2_eval(f_obj % xk0) ! compute Jacobian
-   !f2mJ2xk0(:) = f_obj % f2_vec(:) - f_obj % matrix_vector_product(f_obj % J2,f_obj % xk0)
    exit_inner=.false.
    f_obj % xkp1l(:) = f_obj % xk0(:) !initial guess for inner iterations
 
@@ -189,39 +193,57 @@ contains
    f_obj % lmax_loop = lmax ! initialize lmax value used for inner loop -- use value from input argument
    inner: do while (f_obj % l <= f_obj % lmax_loop) ! inner iterations
 
-    ! determine Newton step refinement option
-    if (f_obj % refinement) then
-     if (f_obj % lmax == 0_i4b) then ! classical regime
-      f_obj % line_search_option = 'C'
-     else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
-      f_obj % line_search_option = 'I'
-     else ! last inner iteration
-      f_obj % line_search_option = 'L'
-      !f_obj % line_search_option = 'C' ! testing 'C' scheme on last inner iteration
-     end if
+    if (f_obj % f1_eval_flag) then
+     call f_obj % f1_vec_eval(f_obj % xkp1l); if (f_obj % f_error) return
     end if
-
-    if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(f_obj % xkp1l); if (f_obj % f_error) return
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
-    ! begin LAPACK operations
-    ! initialize right-side vector used by LAPACK ---------- OG method (solve for updated inner iteration solution directly)
-    !B(:,1) = f2mJ2xk0(:) - f_obj % f1_vec(:) + f_obj % matrix_vector_product(f_obj % J1,f_obj % xkp1l) 
-    !call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x=B -- x stored in B on output
-    !if (f_obj % LAPACK_error) return ! check for LAPACK errors to all recovery (if supported by the external driver)
-    !f_obj % xkp1lp1(:)=B(:,1) ! update guess
+    ! SJT: solve for inner step using LAPACK 
+    !! determine Newton step refinement option
+    !if (f_obj % refinement) then
+    ! if (f_obj % lmax == 0_i4b) then ! classical regime
+    !  f_obj % line_search_option = 'C'
+    ! else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
+    !  f_obj % line_search_option = 'I'
+    ! else ! last inner iteration
+    !  f_obj % line_search_option = 'L'
+    ! end if
+    !end if
 
-    ! SJT: solve for inner step using LAPACK ------- testing ----------------
-    ! do we need to evaluate RHS vector?
-    if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
-     f_obj % evaluate_B = .false.
-    else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
-     if ((f_obj % k == 0_i4b).and.(f_obj % l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
+    ! OG
+    !! do we need to evaluate RHS vector?
+    !if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
+    ! f_obj % evaluate_B = .false.
+    !else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
+    ! if ((f_obj % k == 0_i4b).and.(f_obj % l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
+    !  f_obj % evaluate_B = .false.
+    ! else if (f_obj % l > 0_i4b) then
+    !  f_obj % evaluate_B = .false.
+    ! else
+    !  f_obj % evaluate_B = .true.
+    ! end if
+    !else
+    ! f_obj % evaluate_B = .true.
+    !end if
+
+    ! refactored for efficiency
+    ! determine line search scheme and whether we need to evaluate RHS vector
+    if (f_obj % refinement) then
+     if (f_obj % lmax == 0_i4b) then ! classical regime -- why doesn't (f_obj % lmax_loop == 0_i4b) work here?
+      f_obj % line_search_option = 'C'
       f_obj % evaluate_B = .false.
-     else if (f_obj % l > 0_i4b) then
-      f_obj % evaluate_B = .false.
-     else
+     else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
+      f_obj % line_search_option = 'I'
+      if (f_obj % k == 0_i4b) then ! first inner scheme iteration -- reuse initial value from systemSolv 
+       if (f_obj % l == 0_i4b) f_obj % evaluate_B = .false.
+      else if (f_obj % l > 0_i4b) then
+       f_obj % evaluate_B = .false.
+      else
+       f_obj % evaluate_B = .true.
+      end if
+     else ! last inner iteration
+      f_obj % line_search_option = 'L'
       f_obj % evaluate_B = .true.
      end if
     else
@@ -241,7 +263,7 @@ contains
 
     ! apply Newton step refinement
     if (f_obj % refinement) then
-     call f_obj % apply_nested_line_search(f_obj % line_search_option)
+     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.)
     end if
 
     call check_residual_vector(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&
@@ -363,8 +385,8 @@ contains
    if (f_obj % nested) then
     if (f_obj % dynamic) then
      if (f_obj % dynamic_classical) then
-      call check_dynamic_mode(f_obj % xkp1lp1) ! nested algorithm used with lmax=0
-      !call check_dynamic_mode(f_obj % xkp1) ! classical algorithm used
+      !call check_dynamic_mode(f_obj % xkp1lp1) ! nested algorithm used with lmax=0
+      call check_dynamic_mode(f_obj % xkp1) ! classical algorithm used
      end if
     end if
    end if

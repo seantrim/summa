@@ -234,6 +234,7 @@ contains
    f_obj % banded            = .false. ! flag for banded Jacobians
    f_obj % nested            = .false. ! flag for nested algorithm
    f_obj % dynamic           = .false. ! flag for dynamic switching between classical and nested regimes
+   f_obj % dynamic_classical = .false. ! flag for dynamic switching between classical and nested regimes (classical iteration portion)
    f_obj % dual              = .false. ! flag to use dual method for selecting f1 and f2
    f_obj % constraints       = .false. ! flag to indicate that constraints are to be applied between outer/classical iterations
    f_obj % constraints_inner = .false. ! flag to indicate that constraints are to be applied between inner iterations
@@ -420,7 +421,7 @@ contains
 
   ! Note: avoid unintentional reallocation of object components (use array slices for assignment statements)
   if (method.eq.'previous') then 
-   f_obj % x0 = f_obj % x1 ! initial guess -- solution from previous time step
+   f_obj % x0(:) = f_obj % x1(:) ! initial guess -- solution from previous time step
   else
    if (f_obj % out_error) then
     write(f_obj % unit,'(a66)') "Error in f_initial_guess: method argument not currently supported."
@@ -758,11 +759,12 @@ contains
 
  end subroutine SUMMA_get_scaled_Jacobian
 
- subroutine SUMMA_nested_line_search(f_obj,option)
+ subroutine SUMMA_nested_line_search(f_obj,option,nested_algorithm)
   ! ** nested Newton line search **
   ! arguments
-  class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
-  character(1)     ,intent(in)    :: option
+  class(f_obj_type),intent(inout) :: f_obj            ! nested Newton object
+  character(1)     ,intent(in)    :: option           ! line search scheme option
+  logical          ,intent(in)    :: nested_algorithm ! flag for nested algorithm (takes dynamic Newton iteration type selection mode into account)
 
   ! local
   real(r8b) :: L0,L1 ! objective function values
@@ -794,7 +796,8 @@ contains
   if (option == 'I') then ! inner case
    initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
   else if ((option == 'L').or.(option == 'C')) then ! last inner iteration (L) or classical (C)
-   if (f_obj % nested) then
+   !if (f_obj % nested) then
+   if (nested_algorithm) then
     initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
    else
     initial_solution(:) = f_obj % xk(:)   ! previous outer iteration
@@ -823,7 +826,8 @@ contains
   if (option == 'I') then ! nested or inner cases or first inner iteration (F)
    p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
   else if ((option == 'L').or.(option == 'C')) then
-   if (f_obj % nested) then
+   !if (f_obj % nested) then
+   if (nested_algorithm) then
     p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
    else
     p(:)=f_obj % xkp1 - f_obj % xk       ! classical Newton step
@@ -962,7 +966,8 @@ contains
    logical :: evaluate_J1 ! flag for only evaluating J1 on every other inner iteration
 
    ! update solution in nested Newton algorithm
-   if (f_obj % nested) then
+   !if (f_obj % nested) then
+   if (nested_algorithm) then
     f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    else
     f_obj % xkp1(:)    = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
@@ -974,7 +979,8 @@ contains
     if (option == 'C') then
 
      if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
-      if (f_obj % nested) then
+      !if (f_obj % nested) then
+      if (nested_algorithm) then
        ! have f -- need f1, J1, f2, and J2
        call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
        call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
