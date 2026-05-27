@@ -1252,12 +1252,13 @@ contains
                     f_obj % out_SS4HG % err,         & ! intent(out): error code
                     f_obj % out_SS4HG % message)       ! intent(out): error message (note: eval8summa uses "cmessage" instead)
   end associate
-
+  
   ! finalize
   associate(err => f_obj % out_SS4HG % err, message => f_obj % out_SS4HG % message) 
    if (err /= 0) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in SUMMA_eval8summa: eval8summa message="//trim(message); stop
+    f_obj % f_error = .true.
+    if (f_obj % out_warning) then
+     write(f_obj % unit,*) "Error SUMMA_eval8summa: eval8summa message="//trim(message)
     end if
    end if
   end associate

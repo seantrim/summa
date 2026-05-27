@@ -22,12 +22,11 @@ contains
      f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
      f_obj % L_save = f_obj % L0; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
      f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
-     kmax = f_obj % kmax_classical
-     lmax = 0_i4b
+     !kmax = f_obj % kmax_classical
+     !lmax = 0_i4b
      f_obj % dynamic_classical = .true.
-     print *, "A: dynamic_classical=",f_obj % dynamic_classical ! SJT: testing --------------------- take out
-     !call nested_Newton_vector(f_obj,kmax,lmax) ! classical iterations -- this works
-     call Newton_vector(f_obj) ! ----------------------------------------- this doesn't work
+     !call nested_Newton_vector(f_obj,kmax,lmax) ! classical iterations using nested algorithm
+     call Newton_vector(f_obj) ! classical iterations using classical algorithm
      if (.not.f_obj % dynamic_classical) then
 
       ! revert to original initial condition if needed
@@ -39,11 +38,12 @@ contains
       else if (dynamic_strict) then
        ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
        call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes line search objective function and scaled residual)
+       f_obj % L0 = f_obj % out_SS4HG % fNew
        call f_obj % J1_J2_eval(f_obj % x0) ! get J1 and J2
       end if
       kmax = f_obj % kmax
       lmax = f_obj % lmax
-      print *, "B: dynamic_classical=",f_obj % dynamic_classical ! SJT: testing --------------------- take out
+      !print *, "B: dynamic_classical=",f_obj % dynamic_classical ! SJT: testing --------------------- take out
       call nested_Newton_vector(f_obj,kmax,lmax) ! nested iterations
      end if   
     else ! use nested regime only (original behaviour)
