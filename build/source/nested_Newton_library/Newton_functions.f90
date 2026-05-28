@@ -978,18 +978,36 @@ contains
     ! obtain remaining function and Jacobian variables needed for next Newton iteration
     if (option == 'C') then
 
-     if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
-      !if (f_obj % nested) then
-      if (nested_algorithm) then
+     ! OG --- did not take difference between kmax and kmax_classical into account
+     !if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
+     ! !if (f_obj % nested) then
+     ! if (nested_algorithm) then
+     !  ! have f -- need f1, J1, f2, and J2
+     !  call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
+     !  call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
+     !  call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
+     ! else
+     !  ! have f -- need J
+     !  call f_obj % J_eval(updated_solution)
+     ! end if 
+     ! f_obj % L0 = L1 ! store previous objective function value
+     !end if
+
+     !if (f_obj % nested) then
+     if (nested_algorithm) then
+      if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
        ! have f -- need f1, J1, f2, and J2
        call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
        call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
        call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
-      else
+       f_obj % L0 = L1 ! store previous objective function value
+      end if
+     else
+      if (f_obj % k < f_obj % kmax_classical) then ! not required for last outer iteration
        ! have f -- need J
        call f_obj % J_eval(updated_solution)
+       f_obj % L0 = L1 ! store previous objective function value
       end if 
-      f_obj % L0 = L1 ! store previous objective function value
      end if
 
     else if (option == 'I') then

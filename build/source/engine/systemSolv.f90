@@ -1119,6 +1119,12 @@ contains
    err=-20; return_flag=.true.; return ! recoverable error
   end if
 
+  ! check for function evaluation errors
+  if (nested_Newton % f_error) then ! if LAPACK error
+   message=trim(message)//'function error'
+   err=-20; return_flag=.true.; return ! recoverable error
+  end if
+
   ! finalize operations for SS4HG objects (not all variables are used)
   call nested_Newton % io_SS4HG &
                    & % finalize(firstFluxCall,xMin,xMax,ixSaturation) ! xMin and xMax not used

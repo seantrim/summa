@@ -32,18 +32,17 @@ contains
       ! revert to original initial condition if needed
       if (f_obj % dynamic_revert) then
        f_obj % f1_vec(:) = f_obj % f1_vec_save(:); f_obj % f2_vec(:) = f_obj % f2_vec_save(:)
-       !f_obj % out_SS4HG % fNew = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
        f_obj % L0 = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
        f_obj % J1(:,:) = f_obj % J1_save(:,:); f_obj % J2(:,:) = f_obj % J2_save(:,:)
       else if (dynamic_strict) then
        ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
-       call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes line search objective function and scaled residual)
-       f_obj % L0 = f_obj % out_SS4HG % fNew
-       call f_obj % J1_J2_eval(f_obj % x0) ! get J1 and J2
+       call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes scaled residual and computes line search objective function)
+       if (f_obj % f_error) return             ! check for function evaluation errors
+       f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
+       call f_obj % J1_J2_eval(f_obj % x0)     ! get J1 and J2
       end if
       kmax = f_obj % kmax
       lmax = f_obj % lmax
-      !print *, "B: dynamic_classical=",f_obj % dynamic_classical ! SJT: testing --------------------- take out
       call nested_Newton_vector(f_obj,kmax,lmax) ! nested iterations
      end if   
     else ! use nested regime only (original behaviour)
@@ -78,6 +77,9 @@ contains
 
   ! initialize convergence flag
   f_obj % converged = .false.
+  
+  ! initialize residual values
+  f_obj % R(:)      = 0._r8b ! use default residual value used as solver output for early exit
 
   ! determine Newton step refinement option and whether we need to evaluate the RHS B vector (can be reused from the line search)
   if (f_obj % refinement) then
@@ -93,7 +95,7 @@ contains
   do k=0,f_obj % kmax_classical
    f_obj % k = k ! store index 
    if (f_obj % f_eval_flag) then
-    call f_obj % f_vec_eval(f_obj % xk) ; if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
+    call f_obj % f_vec_eval(f_obj % xk); if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
    end if
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
@@ -111,7 +113,7 @@ contains
 
    ! Newton step refinement
    if (f_obj % refinement) then
-    call f_obj % apply_nested_line_search('C',.false.)
+    call f_obj % apply_nested_line_search('C',.false.); if (f_obj % f_error) return
    end if
 
    call check_residual_vector(f_obj,f_obj % convergence,k,f_obj % xkp1,f_obj % xk,&
@@ -263,7 +265,7 @@ contains
 
     ! apply Newton step refinement
     if (f_obj % refinement) then
-     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.)
+     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.); if (f_obj % f_error) return
     end if
 
     call check_residual_vector(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&
@@ -371,13 +373,18 @@ contains
    exit_flag = f_obj % custom_convergence()
    if (exit_flag) return  ! set exit flag if criterion is satisfied
 
-   ! if doing line search for inner iterations and inner iterate has not changed, ensure that one more inner iteration is performed using the outer line search scheme
+   ! if doing line search for inner iterations and inner iterate has not changed much, ensure that one more inner iteration is performed using the outer line search scheme
    ! note: this eliminates unproductive inner iterations
-   if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
-    ! look for precise agreement within a tight tolerance (faster)
-    call compute_relative_residual
-    if (all(R_vec < tol_inner_LS)) then
-     f_obj % lmax_loop = f_obj % l + 1_i4b; return
+   !if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
+   if (f_obj % refinement) then
+    if (f_obj % inner) then
+     if (f_obj % l < f_obj % lmax_loop) then
+      ! look for precise agreement within a tight tolerance
+      call compute_relative_residual
+      if (all(R_vec < tol_inner_LS)) then
+       f_obj % lmax_loop = f_obj % l + 1_i4b; return
+      end if
+     end if
     end if
    end if
 
@@ -387,6 +394,7 @@ contains
      if (f_obj % dynamic_classical) then
       !call check_dynamic_mode(f_obj % xkp1lp1) ! nested algorithm used with lmax=0
       call check_dynamic_mode(f_obj % xkp1) ! classical algorithm used
+      if (return_flag) return  ! return if switching from classical to nested iterations
      end if
     end if
    end if
