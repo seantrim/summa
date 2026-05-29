@@ -1046,7 +1046,9 @@ contains
    !if (evaluate_rVecScaled) f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec ! now obtained from f_vec_eval (e.g., eval8summa)
    L=f_obj % out_SS4HG % fNew ! scaled
   else if (option == 'I') then ! inner case
-   if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1
+   !if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1
+   if (evaluate_f) call f_obj % f1_vec_only_eval(solution) ! update f1 ------------------------------ testing ------------------------------
+   f_obj % f_vec(:) = f_obj % f1_vec(:) - f_obj % f2_vec(:) ! ---------- testing ------------- created logical flag to control need of total f? 
    if (evaluate_rVecScaled) then 
     f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
                         & - ( f_obj % f2_vec(:) + f_obj % matrix_vector_product(f_obj % J2,solution - f_obj % xk0) )&
