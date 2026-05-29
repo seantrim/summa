@@ -151,6 +151,8 @@ module Newton_functions
    !integer(i4b)             :: nLeadDim1,nLeadDim2
    integer(i4b)             :: nSubset1,nSubset2
    logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
+   logical :: f1_mass_flag,f1_energy_flag
+   logical :: f2_mass_flag,f2_energy_flag
 
   contains
    ! ** routines that point to external sources ** !
@@ -181,22 +183,24 @@ module Newton_functions
   contains
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
-   procedure :: f_vec_eval  => f_SUMMA_vec  ! solver
+   procedure :: f_vec_eval  => f_SUMMA_vec  ! solver -- f
    !procedure :: f_vec_eval => f_diff_vec   ! solver (note: f_diff_vec requires nested iterations to be activated)
    !procedure :: f1_vec_eval => f1_SUMMA_vec ! solver -- trivial split
    !procedure :: f2_vec_eval => f2_zero_vec  ! solver -- trivial split
-   procedure :: f1_vec_eval => f_mass_SUMMA_vec_full   ! solver
-   procedure :: f2_vec_eval => f_energy_SUMMA_vec_full ! solver
-   procedure :: f1_f2_vec_eval => f_mass_energy_SUMMA_vec_full   ! solver
+   procedure :: f1_vec_eval => f_f1_SUMMA_vec_full   ! solver -- f and f1
+   procedure :: f2_vec_eval => f_f2_SUMMA_vec_full   ! solver -- f and f2
+   procedure :: f1_vec_only_eval => f1_SUMMA_vec_full   ! solver --- f1 only
+   procedure :: f2_vec_only_eval => f2_SUMMA_vec_full   ! solver --- f2 only
+   procedure :: f1_f2_vec_eval => f_f1_f2_SUMMA_vec_full   ! solver -- f, f1, and f2
    procedure :: dfdx_vec  => dfdx_diff_vec 
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
    procedure :: J_eval  => Jacobian_f_SUMMA_vec  ! solver
    !procedure :: J1_eval => Jacobian_f1_SUMMA_vec ! solver -- trivial split
    !procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver -- trivial split
-   procedure :: J1_eval => Jacobian_f_mass_SUMMA_vec_full   ! solver
-   procedure :: J2_eval => Jacobian_f_energy_SUMMA_vec_full ! solver
-   procedure :: J1_J2_eval => Jacobian_f_mass_energy_SUMMA_vec_full ! solver
+   procedure :: J1_eval => J_J1_SUMMA_vec_full   ! solver -- J and J1
+   procedure :: J2_eval => J_J2_SUMMA_vec_full ! solver -- J and J2
+   procedure :: J1_J2_eval => J_J1_J2_SUMMA_vec_full ! solver J, J1, and J2
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_nested_line_search => SUMMA_nested_line_search
    procedure :: line_search_objective => SUMMA_line_search_objective
@@ -208,10 +212,6 @@ module Newton_functions
    procedure :: Jacobian_f_SUMMA_vec_numerical  ! SJT: testing ----- take out -----
    procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
    procedure :: f_state_SUMMA_vec_full
-   procedure :: f_mass_SUMMA_vec_full
-   procedure :: f_energy_SUMMA_vec_full
-   procedure :: Jacobian_f_mass_SUMMA_vec_full
-   procedure :: Jacobian_f_energy_SUMMA_vec_full
 
    ! scalar routines
    procedure :: f     => f_diff 
@@ -978,21 +978,6 @@ contains
     ! obtain remaining function and Jacobian variables needed for next Newton iteration
     if (option == 'C') then
 
-     ! OG --- did not take difference between kmax and kmax_classical into account
-     !if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
-     ! !if (f_obj % nested) then
-     ! if (nested_algorithm) then
-     !  ! have f -- need f1, J1, f2, and J2
-     !  call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f
-     !  call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f
-     !  call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
-     ! else
-     !  ! have f -- need J
-     !  call f_obj % J_eval(updated_solution)
-     ! end if 
-     ! f_obj % L0 = L1 ! store previous objective function value
-     !end if
-
      !if (f_obj % nested) then
      if (nested_algorithm) then
       if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
@@ -1355,6 +1340,15 @@ contains
   logical(lgt)                    :: return_flag
   !logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
 
+  ! determine logical flags for mass and energy terms
+  if (f_obj % dual) then ! assign masks for f1 (energy) and f2 (mass)
+   f_obj % f1_mass_flag = .false.; f_obj % f1_energy_flag = .true.
+   f_obj % f2_mass_flag = .true.; f_obj % f2_energy_flag = .false.
+  else ! assign masks for f1 (mass) and f2 (energy)
+   f_obj % f1_mass_flag = .true.; f_obj % f1_energy_flag = .false.
+   f_obj % f2_mass_flag = .false.; f_obj % f2_energy_flag = .true.
+  end if
+
   ! * initialize operations for split_select object *
 
   !associate(nstate => f_obj % in_SS4HG % nState)
@@ -1482,18 +1476,17 @@ contains
   end if
  end subroutine filter_SUMMA_Jacobian
 
- subroutine f_mass_SUMMA_vec_full(f_obj,xvec)
+ subroutine f_f1_SUMMA_vec_full(f_obj,xvec) ! actually evaluates f1 depending on stateMask1 (not necessarily mass)
   ! *** Compute mass non-linear function --- use fully-coupled eval8summa call and filter results ***
+  ! evaluate f anf f1 based on stateMask1
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   ! local
-  logical                         :: mass_flag,energy_flag ! flags to compute mass and energy terms
+  logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
 
   ! note: data structures and variables for f1 are initialized in systemSolv
-
-  mass_flag=.true.; energy_flag=.true. ! SJT: OG method -- using for now until work continues on overhead reduction for f1 and f2
 
   ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
   ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
@@ -1516,10 +1509,11 @@ contains
   ! assign non-zero function values based on logical mask
   call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
 
- end subroutine f_mass_SUMMA_vec_full
+ end subroutine f_f1_SUMMA_vec_full
 
- subroutine Jacobian_f_mass_SUMMA_vec_full(f_obj,xvec)
+ subroutine J_J1_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for mass non-linear function --- use fully-coupled computJacob call and filter results ***
+  ! evaluate J1 and J using stateMask1
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
@@ -1538,20 +1532,19 @@ contains
   ! get nested Newton solver Jacobian J1
   call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
 
- end subroutine Jacobian_f_mass_SUMMA_vec_full
+ end subroutine J_J1_SUMMA_vec_full
 
- subroutine f_energy_SUMMA_vec_full(f_obj,xvec)
+ subroutine f_f2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute energy non-linear function --- use fully-coupled eval8summa call and filter results ***
+  ! evaluates f2 and f using stateMask2
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   ! local
-  logical                         :: mass_flag,energy_flag ! flags to compute mass and energy terms
+  logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
 
   ! note: data structures and variables for f1 are initialized in systemSolv
-
-  mass_flag=.true.; energy_flag=.true. ! SJT: OG method -- using for now until work continues on overhead reduction for f1 and f2
 
   ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
   ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
@@ -1574,20 +1567,52 @@ contains
   ! assign non-zero function values based on logical mask
   call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
- end subroutine f_energy_SUMMA_vec_full
+ end subroutine f_f2_SUMMA_vec_full
 
- subroutine f_mass_energy_SUMMA_vec_full(f_obj,xvec)
+ subroutine f1_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute f1 non-linear function --- use fully-coupled eval8summa call with mass and energy logical flags ***
+  ! evaluates f1 using f1_mass_flasg and f1_energy_flag
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  call f_obj % f_state_SUMMA_vec_full(&
+               &f_obj % f1_mass_flag,f_obj % f1_energy_flag,xvec,&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+
+  ! store total non-linear function
+  f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b)
+
+ end subroutine f1_SUMMA_vec_full
+
+ subroutine f2_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute f2 non-linear function --- use fully-coupled eval8summa call with mass and energy logical flags ***
+  ! evaluates f2 using f2_mass_flasg and f2_energy_flag
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
+
+  call f_obj % f_state_SUMMA_vec_full(&
+               &f_obj % f2_mass_flag,f_obj % f2_energy_flag,xvec,&
+               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+
+  ! store total non-linear function
+  f_obj % f2_vec(:) = -real(f_obj % resVec(:),r8b) ! negative sign so that f = f1 - f2
+
+ end subroutine f2_SUMMA_vec_full
+
+ subroutine f_f1_f2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute mass and energy non-linear functions --- use fully-coupled eval8summa call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   ! local
-  logical                         :: mass_flag,energy_flag ! flags to compute mass and energy terms
+  logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
 
   ! note: data structures and variables for f1 are initialized in systemSolv
-
-  mass_flag=.true.; energy_flag=.true. ! SJT: OG method -- using for now until work continues on overhead reduction for f1 and f2
 
   ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
   ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
@@ -1611,10 +1636,11 @@ contains
   call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
   call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
- end subroutine f_mass_energy_SUMMA_vec_full   ! solver
+ end subroutine f_f1_f2_SUMMA_vec_full   ! solver
 
- subroutine Jacobian_f_energy_SUMMA_vec_full(f_obj,xvec)
+ subroutine J_J2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for energy non-linear function --- use fully-coupled computJacob call and filter results ***
+  ! evaluate J2 and J using stateMask2
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
@@ -1633,9 +1659,9 @@ contains
   ! get nested Newton solver Jacobian J2
   call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
 
- end subroutine Jacobian_f_energy_SUMMA_vec_full
+ end subroutine J_J2_SUMMA_vec_full
 
- subroutine Jacobian_f_mass_energy_SUMMA_vec_full(f_obj,xvec)
+ subroutine J_J1_J2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for mass and energy non-linear functions --- use fully-coupled computJacob call and filter results ***
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
@@ -1661,7 +1687,7 @@ contains
   ! get nested Newton solver Jacobian J2
   call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac2,f_obj % J,f_obj % J2) ! negative sign applied
 
- end subroutine Jacobian_f_mass_energy_SUMMA_vec_full
+ end subroutine J_J1_J2_SUMMA_vec_full
 
  subroutine f_state_SUMMA_vec_full(f_obj,mass_flag,energy_flag,xvec,&
                                   &indx_data,diag_data,flux_data,deriv_data,sMul,&
