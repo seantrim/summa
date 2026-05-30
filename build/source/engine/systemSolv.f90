@@ -124,6 +124,7 @@ subroutine systemSolv(&
                       scalarSolution,    & ! intent(in):    flag to denote if implementing the scalar solution
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
+                      nested_Newton_flag,& ! intent(in):    for branching into the nested Newton solver -- to be replaced by a model decision after testing
                       ! input/output: data structures
                       nested_Newton,     & ! intent(inout): nested Newton object
                       split_select,      & ! intent(in):    operator splitting object
@@ -286,7 +287,7 @@ subroutine systemSolv(&
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
   type(f_obj_type),intent(inout) :: nested_Newton     ! nested Newton solver object
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
+  logical(lgt),intent(in)        :: nested_Newton_flag ! for branching into the nested Newton solver -- to be replaced by a model decision after testing
   logical(lgt),parameter :: ARKODE_flag=.false.        ! for branching into the ARKODE solver -- to be replaced by a model decision after testing
   ! -----------------------------------------------------------------------------------------------------------
 

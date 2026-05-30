@@ -875,8 +875,12 @@ contains
    !end if
 
    ! get convergence flag
-   converged = SUMMA_checkConv(f_obj,p,updated_solution)
-   
+   !if (option == 'I') then
+   ! converged = .false.
+   !else
+    converged = SUMMA_checkConv(f_obj,p,updated_solution)
+   !end if   
+
    if (debug_output) then
     print *, "i=",i
     print *, "alpha=",alpha
@@ -1046,9 +1050,8 @@ contains
    !if (evaluate_rVecScaled) f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec ! now obtained from f_vec_eval (e.g., eval8summa)
    L=f_obj % out_SS4HG % fNew ! scaled
   else if (option == 'I') then ! inner case
-   !if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1
-   if (evaluate_f) call f_obj % f1_vec_only_eval(solution) ! update f1 ------------------------------ testing ------------------------------
-   f_obj % f_vec(:) = f_obj % f1_vec(:) - f_obj % f2_vec(:) ! ---------- testing ------------- created logical flag to control need of total f? 
+   if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1 (and f)
+   !if (evaluate_f) call f_obj % f1_vec_only_eval(solution) ! update f1 only ------------------------------ testing ------------------------------
    if (evaluate_rVecScaled) then 
     f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
                         & - ( f_obj % f2_vec(:) + f_obj % matrix_vector_product(f_obj % J2,solution - f_obj % xk0) )&
@@ -1056,7 +1059,7 @@ contains
    end if
    L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
   else if (option == 'L') then ! last inner iteration case
-   if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2
+   if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2 (and f which is used for checkConv)
    if (evaluate_rVecScaled) then 
     f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
                         & + f_obj % matrix_vector_product(f_obj % J1,solution - f_obj % xkp1l) - f_obj % f2_vec(:)&

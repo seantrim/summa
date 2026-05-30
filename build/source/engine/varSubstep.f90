@@ -352,6 +352,7 @@ subroutine varSubstep(&
                       scalarSolution,    & ! intent(in):    flag to denote if implementing the scalar solution
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
+                      nested_Newton_flag,& ! intent(in):    for branching into the nested Newton solver -- to be replaced by a model decision after testing
                       ! input/output: data structures
                       nested_Newton,     & ! intent(inout): nested Newton splitting object
                       split_select,      & ! intent(in):    operator splitting object

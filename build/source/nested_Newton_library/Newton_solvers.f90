@@ -364,7 +364,7 @@ contains
   integer(i4b)             :: i                   ! index for residual vector
   real(r8b)                :: R_vec(1:f_obj % n)  ! residual vector
   real(r8b)                :: b                   ! exponent used for convergence error estimation 
-  real(r8b),parameter      :: tol_inner_LS = 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
+  real(r8b),parameter      :: tol_inner_LS = 1.e-4_r8b ! 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
 
   return_flag = .false. ! initialize return flag
 
