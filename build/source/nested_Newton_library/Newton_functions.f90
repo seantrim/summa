@@ -1228,6 +1228,7 @@ contains
                     f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                     mass_flag,                         & ! intent(in):    flag to compute mass terms
                     energy_flag,                       & ! intent(in):    flag to compute energy terms
+                    .true.,.false.,.false.,            & ! intent(in):    flag to compute f, f1, and f2 for nested Newton (classical iterations assumed)
                     ! input: state vectors
                     stateVecTrial,                   & ! intent(in):    model state vector
                     f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1252,6 +1253,9 @@ contains
                     ! output
                     f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                     f_obj % fluxVec0,                & ! intent(out):   flux vector
+                    f_obj % f_vec,                   & ! intent(inout): f vector
+                    f_obj % f1_vec,                  & ! intent(inout): f1 vector
+                    f_obj % f2_vec,                  & ! intent(inout): f2 vector
                     f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
                     f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     f_obj % resVec,                  & ! intent(out):   residual vector
@@ -1730,6 +1734,7 @@ contains
                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                    mass_flag,                         & ! intent(in):    flag to compute mass terms
                    energy_flag,                       & ! intent(in):    flag to compute energy terms
+                   .true.,.true.,.true.,              & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
                    ! input: state vectors
                    xvec,                            & ! intent(in):    model state vector
                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1754,6 +1759,9 @@ contains
                    ! output
                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                    f_obj % fluxVec0,                & ! intent(out):   flux vector
+                   f_obj % f_vec,                   & ! intent(inout): f vector
+                   f_obj % f1_vec,                  & ! intent(inout): f1 vector
+                   f_obj % f2_vec,                  & ! intent(inout): f2 vector
                    f_obj % fRHS,                    & ! intent(out):   RHS function for ARKODE
                    f_obj % rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                    resVec,                          & ! intent(out):   residual vector

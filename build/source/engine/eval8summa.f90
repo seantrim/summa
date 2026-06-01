@@ -103,6 +103,7 @@ subroutine eval8summa(&
                       scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                       mass_flag,               & ! intent(in):    flag to compute mass terms
                       energy_flag,             & ! intent(in):    flag to compute energy terms
+                      f_flag,f1_flag,f2_flag,  & ! intent(in):    flags to compute f, f1, and f2 for nested Newton
                       ! input: state vectors
                       stateVec,                & ! intent(in):    model state vector
                       fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -127,6 +128,7 @@ subroutine eval8summa(&
                       ! output: flux and residual vectors
                       feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                       fluxVec,                 & ! intent(out):   flux vector
+                      f,f1,f2,                 & ! intent(inout): f, f1, and f2 vectors for nested Newton objects
                       fRHS,                    & ! intent(out):   RHS function for ARKODE
                       resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                       resVec,                  & ! intent(out):   residual vector
@@ -162,6 +164,7 @@ subroutine eval8summa(&
   logical(lgt),intent(in)         :: computeVegFlux              ! flag to indicate if computing fluxes over vegetation
   logical(lgt),intent(in)         :: scalarSolution              ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)         :: mass_flag,energy_flag       ! flags to compute mass and energy terms
+  logical(lgt),intent(in)         :: f_flag,f1_flag,f2_flag      ! flags to compute f, f1, and f2 for nested Newton
   ! input: state vectors
   real(rkind),intent(in)          :: stateVec(:)                 ! model state vector
   real(rkind),intent(in)          :: fScale(:)                   ! characteristic scale of the function evaluations
@@ -186,6 +189,9 @@ subroutine eval8summa(&
   ! output: flux and residual vectors
   logical(lgt),intent(out)            :: feasible                ! flag to denote the feasibility of the solution
   real(rkind),intent(out)             :: fluxVec(:)              ! flux vector
+  real(rkind),intent(inout)           :: f(:)                    ! f value for nested Newton objects
+  real(rkind),intent(inout)           :: f1(:)                   ! f1 value for nested Newton objects
+  real(rkind),intent(inout)           :: f2(:)                   ! f2 value for nested Newton objects
   real(rkind),intent(out)             :: fRHS(:)                 ! RHS function for ARKODE
   real(rkind),intent(out)             :: resSink(:)              ! sink terms on the RHS of the flux equation
   real(qp),intent(out)                :: resVec(:) ! NOTE: qp    ! residual vector
@@ -612,6 +618,7 @@ subroutine eval8summa(&
                       ixNrgConserv.ne.closedForm, & ! intent(in):  flag to use enthalpy form of residual
                       mass_flag,                  & ! intent(in):  flag to compute mass terms 
                       energy_flag,                & ! intent(in):  flag to compute energy terms 
+                      f_flag,f1_flag,f2_flag,     & ! intent(in):  flags to compute f, f1, and f2 for nested Newton
                       ! input: flux vectors
                       sMul,                       & ! intent(in):  state vector multiplier (used in the residual calculations)
                       fluxVec,                    & ! intent(in):  flux vector
@@ -640,6 +647,7 @@ subroutine eval8summa(&
                       indx_data,                  & ! intent(in):  index data
                       deriv_data,                 & ! intent(in):  derivative data
                       ! output
+                      f,f1,f2,                    & ! intent(inout): f, f1, and f2 vectors for nested Newton objects
                       fRHS,                       & ! intent(out): RHS function for ARKODE
                       resSink,                    & ! intent(out): additional (sink) terms on the RHS of the state equation
                       resVec,                     & ! intent(out): residual vector
@@ -688,6 +696,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
   logical(lgt)                :: feasible    ! feasibility of state vector
   real(rkind),allocatable     :: fRHS(:)     ! RHS function for ARKODE (not used here)
   real(rkind),allocatable     :: rVecScaled(:) ! scaled residual vector (not needed for KINSOL)
+  real(rkind)                 :: f(0),f1(0),f2(0) ! f, f1, and f2 for nested Newton (not used here)
   real(rkind)                 :: fNew        ! function values, not needed here
   integer(i4b)                :: err         ! error in imposeConstraints
   character(len=256)          :: message     ! error message of downwind routine
@@ -730,6 +739,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                 eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                 .true.,                            & ! intent(in):    flag to compute mass terms
                 .true.,                            & ! intent(in):    flag to compute energy terms
+                .false.,.false.,.false.,           & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
                 ! input: state vectors
                 stateVec,                          & ! intent(in):    model state vector
                 eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -754,6 +764,7 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                  ! output: flux and residual vectors
                 feasible,                          & ! intent(out):   flag to denote the feasibility of the solution always true inside SUNDIALS
                 eqns_data%fluxVec,                 & ! intent(out):   flux vector
+                f,f1,f2,                           & ! intent(inout): f, f1, and f2 vectors for nested Newton objects (not used here)
                 fRHS,                              & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 rVec,                              & ! intent(out):   residual vector
@@ -800,8 +811,9 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   ! pointers to data in SUNDIALS vectors
   type(data4ida), pointer     :: eqns_data   ! equations data
   real(rkind)   , pointer     :: stateVec(:) ! solution vector
-  real(rkind)   , pointer     :: f(:)        ! pointer for RHS function for ARKODE
+  real(rkind)   , pointer     :: fRHS(:)       ! pointer for RHS function for ARKODE
   real(rkind),allocatable     :: rVecScaled(:) ! scaled residual vector (not needed for ARKODE) --- may want to allocate elsewhere
+  real(rkind)                 :: f(0),f1(0),f2(0) ! f, f1, and f2 for nested Newton (not used here)
   real(rkind)                 :: fNew        ! function values for line search, not needed here
   logical(lgt)                :: feasible    ! feasibility of state vector
   !integer(i4b)                :: err         ! error in imposeConstraints
@@ -817,7 +829,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
 
   ! get data arrays from SUNDIALS vectors
   stateVec(1:eqns_data%nState)  => FN_VGetArrayPointer(sunvec_y)
-  f(1:eqns_data%nState)         => FN_VGetArrayPointer(sunvec_f)
+  fRHS(1:eqns_data%nState)      => FN_VGetArrayPointer(sunvec_f)
 
 ! note: KINSOL uses imposeConstraints, but not used for ARKODE (not designed for corrections over an entire data window)
 !  ! increment the proposed iteration for simple error control if needed
@@ -847,6 +859,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                 eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                 .true.,                            & ! intent(in):    flag to compute mass terms
                 .true.,                            & ! intent(in):    flag to compute energy terms
+                .false.,.false.,.false.,           & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
                 ! input: state vectors
                 stateVec,                          & ! intent(in):    model state vector
                 eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -871,7 +884,8 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                  ! output: flux and residual vectors
                 feasible,                          & ! intent(out):   flag to denote the feasibility of the solution always true inside SUNDIALS
                 eqns_data%fluxVec,                 & ! intent(out):   flux vector
-                f,                                 & ! intent(out):   RHS function for ARKODE
+                f,f1,f2,                           & ! intent(inout): f, f1, and f2 vectors for nested Newton objects (not used here)
+                fRHS,                              & ! intent(out):   RHS function for ARKODE
                 eqns_data%resSink,                 & ! intent(out):   additional (sink) terms on the RHS of the state equation
                 eqns_data%resVec,                  & ! intent(out):   residual vector
                 rVecScaled,                        & ! intent(out):   scaled residual vector
@@ -883,7 +897,7 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
   if (eqns_data%err < 0) then; eqns_data%message=trim(eqns_data%message); ierr=1; return; end if
 
   ! save RHS values
-  eqns_data%fRHS(1:eqns_data%nState) = f 
+  eqns_data%fRHS(1:eqns_data%nState) = fRHS 
 
   ! return success
   ierr = 0

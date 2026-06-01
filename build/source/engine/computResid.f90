@@ -84,6 +84,7 @@ subroutine computResid(&
                       mixdformNrg,               & ! intent(in):  flag to use enthalpy formulation
                       mass_flag,                 & ! intent(in):  flag to compute mass terms
                       energy_flag,               & ! intent(in):  flag to compute energy terms
+                      f_flag,f1_flag,f2_flag,    & ! flags to compute f, f1, and f2 for nested Newton
                       ! input: flux vectors
                       sMul,                      & ! intent(in):  state vector multiplier (used in the residual calculations)
                       fVec,                      & ! intent(in):  flux vector
@@ -112,6 +113,7 @@ subroutine computResid(&
                       indx_data,                 & ! intent(in):  index data
                       deriv_data,                & ! intent(in):  derivatives in model fluxes w.r.t. relevant state variables
                       ! output
+                      f,f1,f2,                   & ! intent(out): f, f1, and f2 vectors for nested Newton objects
                       fRHS,                      & ! intent(out): right-hand-side function for ARKODE
                       rAdd,                      & ! intent(out): additional (sink) terms on the RHS of the state equation
                       rVec,                      & ! intent(out): residual vector
@@ -125,6 +127,7 @@ subroutine computResid(&
   integer(i4b),intent(in)            :: nLayers                   ! total number of layers in the snow+soil domain
   logical(lgt),intent(in)            :: mixdformNrg               ! flag to use enthalpy formulation
   logical(lgt),intent(in)            :: mass_flag,energy_flag     ! flags to compute mass and energy terms
+  logical(lgt),intent(in)            :: f_flag,f1_flag,f2_flag    ! flags to compute f, f1, and f2 for nested Newton
   ! input: flux vectors
   real(qp),intent(in)                :: sMul(:)   ! NOTE: qp      ! state vector multiplier (used in the residual calculations)
   real(rkind),intent(in)             :: fVec(:)                   ! flux vector
@@ -153,6 +156,7 @@ subroutine computResid(&
   type(var_ilength),intent(in)       :: indx_data                 ! indices defining model states and layers
   type(var_dlength),intent(in)       :: deriv_data                ! derivatives in model fluxes w.r.t. relevant state variables
   ! output
+  real(rkind),intent(inout)          :: f(:),f1(:),f2(:)          ! f, f1, and f2 vectors for nested Newton objects
   real(rkind),intent(out)            :: fRHS(:)                   ! right-hand-side function for ARKODE
   real(rkind),intent(out)            :: rAdd(:)                   ! additional (sink) terms on the RHS of the state equation
   real(qp),intent(out)               :: rVec(:)   ! NOTE: qp      ! residual vector
