@@ -109,11 +109,13 @@ contains
    ! solve for Newton step
    call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
    if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
-   f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
+   !f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
-   ! Newton step refinement
+   ! Newton step refinement and update guess
    if (f_obj % refinement) then
-    call f_obj % apply_nested_line_search('C',.false.); if (f_obj % f_error) return
+    call f_obj % apply_nested_line_search('C',.false.,B(:,1)); if (f_obj % f_error) return
+   else
+    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
    end if
 
    call check_residual_vector(f_obj,f_obj % convergence,k,f_obj % xkp1,f_obj % xk,&
@@ -201,34 +203,6 @@ contains
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
     f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
 
-    ! SJT: solve for inner step using LAPACK 
-    !! determine Newton step refinement option
-    !if (f_obj % refinement) then
-    ! if (f_obj % lmax == 0_i4b) then ! classical regime
-    !  f_obj % line_search_option = 'C'
-    ! else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
-    !  f_obj % line_search_option = 'I'
-    ! else ! last inner iteration
-    !  f_obj % line_search_option = 'L'
-    ! end if
-    !end if
-
-    ! OG
-    !! do we need to evaluate RHS vector?
-    !if ((f_obj % refinement).and.(f_obj % line_search_option == 'C')) then
-    ! f_obj % evaluate_B = .false.
-    !else if ((f_obj % refinement).and.(f_obj % line_search_option == 'I')) then
-    ! if ((f_obj % k == 0_i4b).and.(f_obj % l == 0_i4b)) then ! first inner scheme iteration -- reuse initial value from systemSolv 
-    !  f_obj % evaluate_B = .false.
-    ! else if (f_obj % l > 0_i4b) then
-    !  f_obj % evaluate_B = .false.
-    ! else
-    !  f_obj % evaluate_B = .true.
-    ! end if
-    !else
-    ! f_obj % evaluate_B = .true.
-    !end if
-
     ! refactored for efficiency
     ! determine line search scheme and whether we need to evaluate RHS vector
     if (f_obj % refinement) then
@@ -246,7 +220,7 @@ contains
       end if
      else ! last inner iteration
       f_obj % line_search_option = 'L'
-      f_obj % evaluate_B = .true.
+      f_obj % evaluate_B = .false. ! RHS computed in previous inner LS scheme
      end if
     else
      f_obj % evaluate_B = .true.
@@ -261,11 +235,17 @@ contains
 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
     if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
-    f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
+    !f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
-    ! apply Newton step refinement
+    ! apply Newton step refinement and update guess
     if (f_obj % refinement) then
-     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.); if (f_obj % f_error) return
+     if (f_obj % line_search_option == 'L') then
+      call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
+     else
+      call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
+     end if
+    else
+     f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess if no refinement
     end if
 
     call check_residual_vector(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&

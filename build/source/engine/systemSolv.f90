@@ -536,8 +536,8 @@ contains
                     fRHS,                    & ! intent(out):   RHS function for ARKODE
                     rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
                     resVec,                  & ! intent(out):   residual vector
-                    rVecScaled,              & ! intent(out):   scaled residual vector
-                    fOld,                    & ! intent(out):   function evaluation
+                    nested_Newton % rVecScaled, & ! intent(out):   scaled residual vector
+                    nested_Newton % L0,       & ! intent(out):   function evaluation
                     err,cmessage)              ! intent(out):   error control
    else
     call eval8summa(&
@@ -1128,29 +1128,14 @@ contains
   ! apply output from initial eval8summa call
   if (nested_Newton % nested) then ! nested iterations
 
-   ! store initial non-linear function values based on the initial call to eval8summa (use logical masks)
-   nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
-
-   nested_Newton % f1_vec(:)=merge(nested_Newton % f_vec,0._r8b,nested_Newton % stateMask1) 
-
-   nested_Newton % f2_vec(:)=merge(-nested_Newton % f_vec,0._r8b,nested_Newton % stateMask2) ! sign change so that f=f1-f2
-
-   nested_Newton % rVecScaled(:) = rVecScaled(:) ! scaled residual (from eval8summa)
-   ! note: classical and inner line search schemes have the same initial objective function value
-   nested_Newton % L0            = fOld          ! initial line search objective function value (from eval8summa)
-
    ! get intial Jacobians
    call nested_Newton % J1_J2_eval(stateVecTrial) 
 
   else ! classical iterations
-   ! store initial non-linear function values based on the initial call to eval8summa
-   nested_Newton % f_vec(:) = real(nested_Newton % resVec(:),r8b)
-
-   nested_Newton % rVecScaled(:) = rVecScaled(:) ! scaled residual (from eval8summa)
-   nested_Newton % L0            = fOld          ! initial line search objective function value (from eval8summa)
 
    ! get intial Jacobian
    call nested_Newton % J_eval(stateVecTrial) 
+
   end if
 
   ! set up initial guess
