@@ -213,7 +213,8 @@ subroutine varSubstep(&
   logical(lgt)                       :: enthalpyStateVec                       ! flag if enthalpy is a state variable (ida)
   logical(lgt)                       :: use_lookup                             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! flag indicating if nested Newton solver is used (to be replaced with model decision)
+  logical(lgt),parameter :: nested_Newton_flag=.true. ! flag indicating if nested Newton solver is used for fully coupled (to be replaced with model decision)
+  logical(lgt)           :: use_nested_Newton         ! flag indicating if nested Newton solver is used (false for operator splitting)
   type(f_obj_type)       :: nested_Newton             ! nested Newton solver object
 
   ! ---------------------------------------------------------------------------------------
@@ -305,7 +306,8 @@ subroutine varSubstep(&
     nSubsteps = 0
 
     ! initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
-    if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
+    use_nested_Newton = (nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)
+    if (use_nested_Newton) then ! replace with model decision in future update -- fully-coupled split only
       call initialize_nested_Newton
     end if
     ! end initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
@@ -352,7 +354,7 @@ subroutine varSubstep(&
                       scalarSolution,    & ! intent(in):    flag to denote if implementing the scalar solution
                       computMassBalance, & ! intent(in):    flag to compute mass balance
                       computNrgBalance,  & ! intent(in):    flag to compute energy balance
-                      nested_Newton_flag,& ! intent(in):    for branching into the nested Newton solver -- to be replaced by a model decision after testing
+                      use_nested_Newton, & ! intent(in):    for branching into the nested Newton solver
                       ! input/output: data structures
                       nested_Newton,     & ! intent(inout): nested Newton splitting object
                       split_select,      & ! intent(in):    operator splitting object
@@ -704,7 +706,7 @@ contains
     !call nested_Newton % set_tolerance('strict',1.e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
     ! set max # of classical iterations (for classical and dynamic modes)
-    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
+    nested_Newton % kmax_classical = 49_i4b ! for classical iterations in dynamic mode
 
     ! Linear system solver choice
     nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -728,7 +730,7 @@ contains
     if (nested_Newton % nested) then ! nested iteration options
 
       ! dynamic switching between classical and nested regimes?
-      nested_Newton % dynamic   = .true.
+      nested_Newton % dynamic   = .false.
       nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamic mode
 
       ! use dual method?
@@ -798,6 +800,8 @@ contains
 
     nested_Newton % indx_data  =  indx_data    ! indices defining model states and layers
     nested_Newton % flux_data  =  flux_temp    ! flux variables for a local HRU (allocate -- initial values set in systemSolv)
+
+    call nested_Newton % get_f1_f2_flags()
 
     if (nested_Newton % nested) then
       call nested_Newton % get_mass_energy_masks()

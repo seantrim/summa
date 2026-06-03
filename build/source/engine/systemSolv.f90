@@ -480,13 +480,12 @@ contains
  subroutine initial_flux_and_residual_vectors
   ! ** Compute initial flux and residual vectors ** 
   ! Note: prime initial values are 0 so it's fine to run the regular eval8summa with every solver choice
-  logical(lgt) :: nested_Newton_f1_f2_flag
-  nested_Newton_f1_f2_flag = nested_Newton_flag .and. nested_Newton % nested ! get f1 and f2 if nested iteration are used (includes dynamic mode)
   associate(&
    nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers
    nSoil => indx_data%var(iLookINDEX%nSoil)%dat(1) & ! intent(in): [i4b] number of soil layers
    &)
-   call eval8summa(&
+   if (nested_Newton_flag) then
+    call eval8summa(&
                     ! input: model control
                     dt_cur,                  & ! intent(in):    current stepsize
                     dt,                      & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
@@ -502,9 +501,11 @@ contains
                     scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                     .true.,                  & ! intent(in):    flag to compute mass terms
                     .true.,                  & ! intent(in):    flag to compute energy terms
-                    nested_Newton_flag,      & ! intent(in):    flag to compute f vector for nested Newton
-                    nested_Newton_f1_f2_flag,& ! intent(in):    flag to compute f1 vector for nested Newton
-                    nested_Newton_f1_f2_flag,& ! intent(in):    flag to compute f2 vector for nested Newton
+                    .true.,                         & ! intent(in):    flag to compute f vector for nested Newton
+                    nested_Newton % f1_mass_flag,   & ! intent(in):    flag to compute f1 vector for nested Newton
+                    nested_Newton % f1_energy_flag, & ! intent(in):    flag to compute f1 vector for nested Newton
+                    nested_Newton % f2_mass_flag,   & ! intent(in):    flag to compute f2 vector for nested Newton
+                    nested_Newton % f2_energy_flag, & ! intent(in):    flag to compute f2 vector for nested Newton
                     ! input: state vectors
                     stateVecTrial,           & ! intent(in):    model state vector
                     fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -538,6 +539,58 @@ contains
                     rVecScaled,              & ! intent(out):   scaled residual vector
                     fOld,                    & ! intent(out):   function evaluation
                     err,cmessage)              ! intent(out):   error control
+   else
+    call eval8summa(&
+                    ! input: model control
+                    dt_cur,                  & ! intent(in):    current stepsize
+                    dt,                      & ! intent(in):    length of the entire time step (seconds) for drainage pond rate
+                    nSnow,                   & ! intent(in):    number of snow layers
+                    nSoil,                   & ! intent(in):    number of soil layers
+                    nLayers,                 & ! intent(in):    number of layers
+                    nState,                  & ! intent(in):    number of state variables in the current subset
+                    .false.,                 & ! intent(in):    not inside Sundials solver
+                    firstSubStep,            & ! intent(in):    flag to indicate if we are processing the first sub-step
+                    firstFluxCall,           & ! intent(inout): flag to indicate if we are processing the first flux call
+                    firstSplitOper,          & ! intent(in):    flag to indicate if we are processing the first flux call in a splitting operation
+                    computeVegFlux,          & ! intent(in):    flag to indicate if we need to compute fluxes over vegetation
+                    scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
+                    .true.,                  & ! intent(in):    flag to compute mass terms
+                    .true.,                  & ! intent(in):    flag to compute energy terms
+                    .false.,.false.,.false.,.false.,.false., & ! intent(in):    flags to compute f, f1, and f2 for nested Newton
+                    ! input: state vectors
+                    stateVecTrial,           & ! intent(in):    model state vector
+                    fScale,                  & ! intent(in):    characteristic scale of the function evaluations
+                    sMul,                    & ! intent(inout): state vector multiplier (used in the residual calculations)
+                    ! input: data structures
+                    model_decisions,         & ! intent(in):    model decisions
+                    lookup_data,             & ! intent(in):    lookup tables
+                    type_data,               & ! intent(in):    type of vegetation and soil
+                    attr_data,               & ! intent(in):    spatial attributes
+                    mpar_data,               & ! intent(in):    model parameters
+                    forc_data,               & ! intent(in):    model forcing data
+                    bvar_data,               & ! intent(in):    average model variables for the entire basin
+                    prog_data,               & ! intent(in):    model prognostic variables for a local HRU
+                    ! input-output: data structures
+                    indx_data,               & ! intent(inout): index data
+                    diag_data,               & ! intent(inout): model diagnostic variables for a local HRU
+                    flux_init,               & ! intent(inout): model fluxes for a local HRU (initial flux structure)
+                    deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
+                    ! input-output: baseflow
+                    ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
+                    dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    ! output
+                    feasible,                & ! intent(out):   flag to denote the feasibility of the solution
+                    fluxVec0,                & ! intent(out):   flux vector
+                    nested_Newton % f_vec,   & ! intent(inout): f vector
+                    nested_Newton % f1_vec,  & ! intent(inout): f1 vector
+                    nested_Newton % f2_vec,  & ! intent(inout): f2 vector
+                    fRHS,                    & ! intent(out):   RHS function for ARKODE
+                    rAdd,                    & ! intent(out):   additional (sink) terms on the RHS of the state equation
+                    resVec,                  & ! intent(out):   residual vector
+                    rVecScaled,              & ! intent(out):   scaled residual vector
+                    fOld,                    & ! intent(out):   function evaluation
+                    err,cmessage)              ! intent(out):   error control
+   end if
   end associate
   if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! check for errors
  end subroutine initial_flux_and_residual_vectors

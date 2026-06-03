@@ -1083,7 +1083,7 @@ contains
                    scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                    .true.,                  & ! intent(in):    flag to compute mass terms
                    .true.,                  & ! intent(in):    flag to compute energy terms
-                   .false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
+                   .false.,.false.,.false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
                    ! input: state vectors
                    stateVecNew,             & ! intent(in):    updated model state vector
                    fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1108,7 +1108,7 @@ contains
                    ! output
                    feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                    fluxVecNew,              & ! intent(out):   new flux vector
-                   f,f1,f2,                 & ! intent(out): f, f1, and f2 vectors for nested Newton objects
+                   f,f1,f2,                 & ! intent(out):   f, f1, and f2 vectors for nested Newton objects (not used here)
                    fRHS,                    & ! intent(out):   RHS function for ARKODE
                    resSinkNew,              & ! intent(out):   additional (sink) terms on the RHS of the state equation
                    resVecNew,               & ! intent(out):   new residual vector

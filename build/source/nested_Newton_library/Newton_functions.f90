@@ -211,6 +211,7 @@ module Newton_functions
    procedure :: Jacobian_f2_SUMMA_vec_numerical ! SJT: testing ----- take out -----
    procedure :: Jacobian_f_SUMMA_vec_numerical  ! SJT: testing ----- take out -----
    procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
+   procedure :: get_f1_f2_flags => get_SUMMA_f1_f2_flags
    procedure :: f_state_SUMMA_vec_full
 
    ! scalar routines
@@ -773,9 +774,9 @@ contains
   real(r8b) :: updated_solution(1:f_obj % n) ! updated solution vector
   real(r8b) :: p(1:f_obj % n) ! search direction
   real(r8b) :: grad_L(1:f_obj % n) ! gradient of objective function L
-  !real(rkind) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
+  real(r8b)            :: c_m ! c times m
   !real(r8b), parameter :: tao=0.5e0_r8b ! step reduction control parameter
   !real(r8b), parameter :: m_tol=0.1_r8b !100._r8b*epsilon(1._r8b)
   real(r8b)            :: alpha      ! step size
@@ -836,6 +837,7 @@ contains
 
   ! compute local slope (use scaled values)
   m = dot_product(grad_L,p(:)/f_obj % xScale(:)) ! confirmed against homegrown line search
+  c_m = c*m ! control parameter times local slope
 
   ! check that local slope is negative (needed to reduce the line search objective function)
   if (m < 0._rkind) then
@@ -901,7 +903,8 @@ contains
    end if
 
    ! check if the objective function is accepted using the Armijo-Goldstein Criterion
-   if (L1 <= L0 + alpha*c*m) then
+   !if (L1 <= L0 + alpha*c*m) then
+   if (L1 <= L0 + alpha*c_m) then
     call f_and_J_values ! obtain f1, f2, J1, and J2 values needed for next nested Newton iteration
     return
    end if
@@ -1228,7 +1231,7 @@ contains
                     f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                     mass_flag,                         & ! intent(in):    flag to compute mass terms
                     energy_flag,                       & ! intent(in):    flag to compute energy terms
-                    .true.,.false.,.false.,            & ! intent(in):    flag to compute f, f1, and f2 for nested Newton (classical iterations assumed)
+                    .true.,.false.,.false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton (classical iterations assumed)
                     ! input: state vectors
                     stateVecTrial,                   & ! intent(in):    model state vector
                     f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1330,6 +1333,27 @@ contains
 
  end subroutine SUMMA_computJacob
 
+ subroutine get_SUMMA_f1_f2_flags(f_obj)
+  ! *** Compute flags for f1 and f2 evaluations for mass and energy state variables in SUMMA ***
+  ! arguments
+  class(f_obj_type),intent(inout) :: f_obj
+
+  ! determine logical flags for mass and energy terms
+  if (f_obj % nested) then ! nested iterations
+   if (f_obj % dual) then ! assign masks for f1 (energy) and f2 (mass)
+    f_obj % f1_mass_flag = .false.; f_obj % f1_energy_flag = .true.
+    f_obj % f2_mass_flag = .true.; f_obj % f2_energy_flag = .false.
+   else ! assign masks for f1 (mass) and f2 (energy)
+    f_obj % f1_mass_flag = .true.; f_obj % f1_energy_flag = .false.
+    f_obj % f2_mass_flag = .false.; f_obj % f2_energy_flag = .true.
+   end if
+  else ! classical iterations
+    f_obj % f1_mass_flag = .false.; f_obj % f1_energy_flag = .false.
+    f_obj % f2_mass_flag = .false.; f_obj % f2_energy_flag = .false.
+  end if
+
+ end subroutine get_SUMMA_f1_f2_flags
+
  subroutine get_SUMMA_mass_energy_masks(f_obj)
   ! *** Compute masks for mass and energy state variables for SUMMA ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
@@ -1348,15 +1372,6 @@ contains
   integer(i4b)                    :: err               ! error code of downwind routine
   logical(lgt)                    :: return_flag
   !logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
-
-  ! determine logical flags for mass and energy terms
-  if (f_obj % dual) then ! assign masks for f1 (energy) and f2 (mass)
-   f_obj % f1_mass_flag = .false.; f_obj % f1_energy_flag = .true.
-   f_obj % f2_mass_flag = .true.; f_obj % f2_energy_flag = .false.
-  else ! assign masks for f1 (mass) and f2 (energy)
-   f_obj % f1_mass_flag = .true.; f_obj % f1_energy_flag = .false.
-   f_obj % f2_mass_flag = .false.; f_obj % f2_energy_flag = .true.
-  end if
 
   ! * initialize operations for split_select object *
 
@@ -1497,26 +1512,17 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
-  ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
-  !if (f_obj % dual) then ! dual method (f1 -> energy)
-  ! mass_flag = .false.
-  ! energy_flag = .true.
-  !else ! original method (f1 -> mass)
-  ! mass_flag = .true.
-  ! energy_flag = .false.
-  !end if
-
   call f_obj % f_state_SUMMA_vec_full(&
-               &mass_flag,energy_flag,xvec,&
+               &mass_flag,energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,f_obj % resVec)
 
-  ! store total non-linear function
-  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+  ! note: now obtained from computResid
+  !! store total non-linear function
+  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
 
-  ! assign non-zero function values based on logical mask
-  call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
+  !! assign non-zero function values based on logical mask
+  !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
 
  end subroutine f_f1_SUMMA_vec_full
 
@@ -1555,60 +1561,53 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
-  ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
-  !if (f_obj % dual) then ! dual method (f2 -> mass)
-  ! mass_flag = .true.
-  ! energy_flag = .false.
-  !else ! original method (f2 -> energy)
-  ! mass_flag = .false.
-  ! energy_flag = .true.
-  !end if
-
   call f_obj % f_state_SUMMA_vec_full(&
-               &mass_flag,energy_flag,xvec,&
+               &mass_flag,energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,f_obj % resVec)
 
-  ! store total non-linear function
-  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+  ! note: now obtained from computResid
+  !! store total non-linear function
+  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
 
-  ! assign non-zero function values based on logical mask
-  call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
+  !! assign non-zero function values based on logical mask
+  !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
  end subroutine f_f2_SUMMA_vec_full
 
  subroutine f1_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute f1 non-linear function --- use fully-coupled eval8summa call with mass and energy logical flags ***
-  ! evaluates f1 using f1_mass_flasg and f1_energy_flag
+  ! evaluates f1 using f1_mass_flag and f1_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   call f_obj % f_state_SUMMA_vec_full(&
-               &f_obj % f1_mass_flag,f_obj % f1_energy_flag,xvec,&
+               &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,f_obj % resVec)
 
-  ! store total non-linear function
-  f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b)
+  ! note: now obtained from computResid
+  !! store total non-linear function
+  !f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b)
 
  end subroutine f1_SUMMA_vec_full
 
  subroutine f2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute f2 non-linear function --- use fully-coupled eval8summa call with mass and energy logical flags ***
-  ! evaluates f2 using f2_mass_flasg and f2_energy_flag
+  ! evaluates f2 using f2_mass_flag and f2_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   call f_obj % f_state_SUMMA_vec_full(&
-               &f_obj % f2_mass_flag,f_obj % f2_energy_flag,xvec,&
+               &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,f_obj % resVec)
 
-  ! store total non-linear function
-  f_obj % f2_vec(:) = -real(f_obj % resVec(:),r8b) ! negative sign so that f = f1 - f2
+  ! note: now obtained from computResid
+  !! store total non-linear function
+  !f_obj % f2_vec(:) = -real(f_obj % resVec(:),r8b) ! negative sign so that f = f1 - f2
 
  end subroutine f2_SUMMA_vec_full
 
@@ -1623,27 +1622,18 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  ! SJT: to use these flags, additional function evaluations must be included in certain spots (e.g., line search) because we would no longer have access to the total f
-  ! SJT: also, if using these flags, storing f_vec and filter_SUMMA_f would not be required below
-  !if (f_obj % dual) then ! dual method (f1 -> energy)
-  ! mass_flag = .false.
-  ! energy_flag = .true.
-  !else ! original method (f1 -> mass)
-  ! mass_flag = .true.
-  ! energy_flag = .false.
-  !end if
-
   call f_obj % f_state_SUMMA_vec_full(&
-               &mass_flag,energy_flag,xvec,&
+               &mass_flag,energy_flag,.true.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dMatric,f_obj % resVec)
 
-  ! store total non-linear function
-  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+  ! note: now obtained from computResid
+  !! store total non-linear function
+  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
 
-  ! assign non-zero function values based on logical mask
-  call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
-  call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
+  !! assign non-zero function values based on logical mask
+  !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
+  !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
  end subroutine f_f1_f2_SUMMA_vec_full   ! solver
 
@@ -1698,7 +1688,7 @@ contains
 
  end subroutine J_J1_J2_SUMMA_vec_full
 
- subroutine f_state_SUMMA_vec_full(f_obj,mass_flag,energy_flag,xvec,&
+ subroutine f_state_SUMMA_vec_full(f_obj,mass_flag,energy_flag,f1_flag,f2_flag,xvec,&
                                   &indx_data,diag_data,flux_data,deriv_data,sMul,&
                                   &dBaseflow_dMatric,resVec)
   ! *** Compute SUMMA's vector non-linear function for mass or energy state variables -- uses fully-coupled eval8summa call ***
@@ -1707,6 +1697,7 @@ contains
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   logical,intent(in)              :: mass_flag,energy_flag ! flags to compute mass and energy terms 
+  logical,intent(in)              :: f1_flag,f2_flag ! flags to f1 and f2 
   real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
 
   type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
@@ -1734,7 +1725,9 @@ contains
                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                    mass_flag,                         & ! intent(in):    flag to compute mass terms
                    energy_flag,                       & ! intent(in):    flag to compute energy terms
-                   .true.,.true.,.true.,              & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
+                   .true., &
+                   f_obj % f1_mass_flag.and.f1_flag,f_obj % f1_energy_flag.and.f1_flag, &
+                   f_obj % f2_mass_flag.and.f2_flag,f_obj % f2_energy_flag.and.f2_flag, & ! intent(in): flag to compute f, f1, and f2 for nested Newton
                    ! input: state vectors
                    xvec,                            & ! intent(in):    model state vector
                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1792,7 +1785,7 @@ contains
   !       - perhaps introducing logical flags in eval8summa to isolate the required operations would boost efficiency 
   call f_obj % SUMMA_eval8summa(xvec)
 
-  f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
+  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b) ! now directly obtained from computResid
   
  end subroutine f_SUMMA_vec
 

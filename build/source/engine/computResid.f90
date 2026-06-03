@@ -84,7 +84,7 @@ subroutine computResid(&
                       mixdformNrg,               & ! intent(in):  flag to use enthalpy formulation
                       mass_flag,                 & ! intent(in):  flag to compute mass terms
                       energy_flag,               & ! intent(in):  flag to compute energy terms
-                      f_flag,f1_flag,f2_flag,    & ! flags to compute f, f1, and f2 for nested Newton
+                      f_flag,f1_mass,f1_energy,f2_mass,f2_energy, & ! flags to compute f, f1, and f2 for nested Newton
                       ! input: flux vectors
                       sMul,                      & ! intent(in):  state vector multiplier (used in the residual calculations)
                       fVec,                      & ! intent(in):  flux vector
@@ -127,7 +127,7 @@ subroutine computResid(&
   integer(i4b),intent(in)            :: nLayers                   ! total number of layers in the snow+soil domain
   logical(lgt),intent(in)            :: mixdformNrg               ! flag to use enthalpy formulation
   logical(lgt),intent(in)            :: mass_flag,energy_flag     ! flags to compute mass and energy terms
-  logical(lgt),intent(in)            :: f_flag,f1_flag,f2_flag    ! flags to compute f, f1, and f2 for nested Newton
+  logical(lgt),intent(in)            :: f_flag,f1_mass,f1_energy,f2_mass,f2_energy ! flags to compute f, f1, and f2 for nested Newton
   ! input: flux vectors
   real(qp),intent(in)                :: sMul(:)   ! NOTE: qp      ! state vector multiplier (used in the residual calculations)
   real(rkind),intent(in)             :: fVec(:)                   ! flux vector
@@ -224,6 +224,9 @@ subroutine computResid(&
 
     ! initialize rVec
     rVec(:) = 0._qp
+    if (f_flag) f(:) = 0._rkind
+    if (f1_mass.or.f1_energy) f1(:) = 0._rkind
+    if (f2_mass.or.f2_energy) f2(:) = 0._rkind
 
     ! ---
     ! * compute sink terms...
@@ -278,23 +281,35 @@ subroutine computResid(&
           fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )
           rVec(ixCasNrg) = ( scalarCanairEnthalpyTrial - scalarCanairEnthalpy )&
                        & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
+          if (f_flag) f(ixCasNrg) = real(rVec(ixCasNrg),rkind) ! nested Newton solver
+          if (f1_energy) f1(ixCasNrg) = f(ixCasNrg) ! nested Newton solver
+          if (f2_energy) f2(ixCasNrg) = -f(ixCasNrg) ! nested Newton solver
         end if
         if (ixVegNrg/=integerMissing) then
           fRHS(ixVegNrg) = ( fVec(ixVegNrg) + rAdd(ixVegNrg)/dt )
           rVec(ixVegNrg) = ( scalarCanopyEnthTempTrial - scalarCanopyEnthTemp )&
                          & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+          if (f_flag) f(ixVegNrg) = real(rVec(ixVegNrg),rkind) ! nested Newton solver
+          if (f1_energy) f1(ixVegNrg) = f(ixVegNrg) ! nested Newton solver
+          if (f2_energy) f2(ixVegNrg) = -f(ixVegNrg) ! nested Newton solver
         end if
       else
         if (ixCasNrg/=integerMissing) then
           fRHS(ixCasNrg) = ( fVec(ixCasNrg) + rAdd(ixCasNrg)/dt )/real(sMul(ixCasNrg),rkind)
           rVec(ixCasNrg) = sMul(ixCasNrg)*( scalarCanairTempTrial - scalarCanairTemp )&
                        & - ( fVec(ixCasNrg)*dt + rAdd(ixCasNrg) )
+          if (f_flag) f(ixCasNrg) = real(rVec(ixCasNrg),rkind) ! nested Newton solver
+          if (f1_energy) f1(ixCasNrg) = f(ixCasNrg) ! nested Newton solver
+          if (f2_energy) f2(ixCasNrg) = -f(ixCasNrg) ! nested Newton solver
         end if
         if (ixVegNrg/=integerMissing) then
           fRHS(ixVegNrg) = 0._rkind ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives 
           rVec(ixVegNrg) = sMul(ixVegNrg)*( scalarCanopyTempTrial - scalarCanopyTemp )&
                        & + scalarCanopyCmTrial*( scalarCanopyWatTrial - scalarCanopyWat )/canopyDepth &
                        & - ( fVec(ixVegNrg)*dt + rAdd(ixVegNrg) )
+          if (f_flag) f(ixVegNrg) = real(rVec(ixVegNrg),rkind) ! nested Newton solver
+          if (f1_energy) f1(ixVegNrg) = f(ixVegNrg) ! nested Newton solver
+          if (f2_energy) f2(ixVegNrg) = -f(ixVegNrg) ! nested Newton solver
         end if
       end if
     end if
@@ -307,6 +322,9 @@ subroutine computResid(&
         rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - ( sMul(ixVegHyd)*scalarCanopyHyd + fVec(ixVegHyd)*dt + rAdd(ixVegHyd) )
         !rVec(ixVegHyd) = sMul(ixVegHyd)*scalarCanopyHydTrial - sMul(ixVegHyd)*scalarCanopyHyd&
         !             & - real(fVec(ixVegHyd)*dt + rAdd(ixVegHyd),qp) ! may need all terms to be qp before doing the sum to match original 
+        if (f_flag) f(ixVegHyd) = real(rVec(ixVegHyd),rkind) ! nested Newton solver
+        if (f1_mass) f1(ixVegHyd) = f(ixVegHyd) ! nested Newton solver
+        if (f2_mass) f2(ixVegHyd) = -f(ixVegHyd) ! nested Newton solver
       end if
     end if
 
@@ -319,6 +337,9 @@ subroutine computResid(&
             fRHS( ixSnowSoilNrg(iLayer) ) = ( fVec( ixSnowSoilNrg(iLayer) ) + rAdd( ixSnowSoilNrg(iLayer) )/dt )
             rVec( ixSnowSoilNrg(iLayer) ) = ( mLayerEnthTempTrial(iLayer) - mLayerEnthTemp(iLayer) )&
                                         & - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
+            if (f_flag) f(ixSnowSoilNrg(iLayer)) = real(rVec(ixSnowSoilNrg(iLayer)),rkind) ! nested Newton solver
+            if (f1_energy) f1(ixSnowSoilNrg(iLayer)) = f(ixSnowSoilNrg(iLayer)) ! nested Newton solver
+            if (f2_energy) f2(ixSnowSoilNrg(iLayer)) = -f(ixSnowSoilNrg(iLayer)) ! nested Newton solver
           else
             ! not clear how to isolate the RHS function for ARKODE due to multiple time derivatives
             ! so temperature formulation will not be used for ARKODE
@@ -326,6 +347,9 @@ subroutine computResid(&
             rVec( ixSnowSoilNrg(iLayer) ) = sMul( ixSnowSoilNrg(iLayer) )*( mLayerTempTrial(iLayer) - mLayerTemp(iLayer) )&
                                         & + mLayerCmTrial(iLayer)*( mLayerVolFracWatTrial(iLayer) - mLayerVolFracWat(iLayer) )&
                                           - ( fVec( ixSnowSoilNrg(iLayer) )*dt + rAdd( ixSnowSoilNrg(iLayer) ) )
+            if (f_flag) f(ixSnowSoilNrg(iLayer)) = real(rVec(ixSnowSoilNrg(iLayer)),rkind) ! nested Newton solver
+            if (f1_energy) f1(ixSnowSoilNrg(iLayer)) = f(ixSnowSoilNrg(iLayer)) ! nested Newton solver
+            if (f2_energy) f2(ixSnowSoilNrg(iLayer)) = -f(ixSnowSoilNrg(iLayer)) ! nested Newton solver
           end if
         end do 
       end if
@@ -342,21 +366,12 @@ subroutine computResid(&
                                         & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
           mLayerVolFracHyd(iLayer)      = merge(mLayerVolFracWat(iLayer),      mLayerVolFracLiq(iLayer),&
                                         & (ixHydType(iLayer)==iname_watLayer .or. ixHydType(iLayer)==iname_matLayer) )
-          ! note: the following operations for fRHS assume that rAdd is from soil only -- SJT: confirm indexing for all cases
-          ! compute the residual
-          !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) ) + rAdd( ixSnowSoilHyd(iLayer) )/dt
-          ! expand rAdd/dt: 
-          !fRHS( ixSnowSoilHyd(iLayer) ) = fVec( ixSnowSoilHyd(iLayer) )&
-          !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow)&
-          !                            & - mLayerCompress(iLayer)
-          ! note: mLayerCompress = fRHS * mLayerdPsi_dTheta* dCompress_dPsi
-          ! isolating fRHS: --------- SJT: FIX THIS for fRHS (indexing problem) ----------------------------------------- 
-          !fRHS( ixSnowSoilHyd(iLayer) ) = ( fVec( ixSnowSoilHyd(iLayer) )&
-          !                            & + ( mLayerTranspire(iLayer) - mLayerBaseflow(iLayer) )/mLayerDepth(iLayer+nSnow) )&
-          !                            & / (1._rkind + mLayerdPsi_dTheta(iLayer) * dCompress_dPsi(iLayer))
           fRHS( ixSnowSoilHyd(iLayer) ) = 0._rkind !! SJT: temporary value that needs to be fixed
           rVec( ixSnowSoilHyd(iLayer) ) = ( mLayerVolFracHydTrial(iLayer) -  mLayerVolFracHyd(iLayer) )&
                                       & - ( fVec( ixSnowSoilHyd(iLayer) )*dt + rAdd( ixSnowSoilHyd(iLayer) ) )
+          if (f_flag) f(ixSnowSoilHyd(iLayer)) = real(rVec(ixSnowSoilHyd(iLayer)),rkind) ! nested Newton solver
+          if (f1_mass) f1(ixSnowSoilHyd(iLayer)) = f(ixSnowSoilHyd(iLayer)) ! nested Newton solver
+          if (f2_mass) f2(ixSnowSoilHyd(iLayer)) = -f(ixSnowSoilHyd(iLayer)) ! nested Newton solver
         end do 
       end if
     end if
@@ -367,6 +382,9 @@ subroutine computResid(&
         fRHS(ixAqWat) = ( fVec(ixAqWat) + rAdd(ixAqWat)/dt )
         rVec(ixAqWat) = sMul(ixAqWat)*( scalarAquiferStorageTrial - scalarAquiferStorage )&
                     & - ( fVec(ixAqWat)*dt + rAdd(ixAqWat) )
+        if (f_flag) f(ixAqWat) = real(rVec(ixAqWat),rkind) ! nested Newton solver
+        if (f1_mass) f1(ixAqWat) = f(ixAqWat) ! nested Newton solver
+        if (f2_mass) f2(ixAqWat) = -f(ixAqWat) ! nested Newton solver
       end if
     end if
 
