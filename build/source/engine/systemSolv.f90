@@ -200,21 +200,21 @@ subroutine systemSolv(&
   type(var_d),intent(in)          :: forc_data                     ! model forcing data
   type(var_dlength),intent(in)    :: mpar_data                     ! model parameters
   type(var_ilength),intent(inout) :: indx_data                     ! indices for a local HRU
-  type(var_dlength),intent(inout) :: prog_data                     ! prognostic variables for a local HRU
-  type(var_dlength),intent(inout) :: diag_data                     ! diagnostic variables for a local HRU
+  type(var_dlength),target,intent(inout) :: prog_data              ! prognostic variables for a local HRU
+  type(var_dlength),target,intent(inout) :: diag_data              ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout) :: flux_temp                     ! model fluxes for a local HRU
   type(var_dlength),intent(in)    :: bvar_data                     ! model variables for the local basin
   type(convergence_stats_data),intent(inout) :: conv_data          ! convergence stats for a local HRU
   type(model_options),intent(in)  :: model_decisions(:)            ! model decisions
   real(rkind),intent(in)          :: stateVecInit(:)               ! initial state vector (mixed units)
   ! output
-  type(var_dlength),intent(inout) :: deriv_data                    ! derivatives in model fluxes w.r.t. relevant state variables
+  type(var_dlength),target,intent(inout) :: deriv_data             ! derivatives in model fluxes w.r.t. relevant state variables
   integer(i4b),intent(inout)      :: ixSaturation                  ! index of the lowest saturated layer (NOTE: only computed on the first iteration)
   real(rkind),intent(out)         :: stateVecTrial(:)              ! trial state vector (mixed units)
   real(rkind),intent(out)         :: stateVecPrime(:)              ! trial state vector (mixed units)
-  real(rkind),intent(out)         :: fluxVec(nState)               ! flux vector (mixed units)
-  real(rkind),intent(out)         :: resSink(nState)               ! additional terms in the residual vector homegrown solver
-  real(qp),intent(out)            :: resVec(nState)    ! NOTE: qp  ! residual vector
+  real(rkind),target,intent(out)  :: fluxVec(nState)               ! flux vector (mixed units)
+  real(rkind),target,intent(out)  :: resSink(nState)               ! additional terms in the residual vector homegrown solver
+  real(qp),target,intent(out)     :: resVec(nState)    ! NOTE: qp  ! residual vector
   real(rkind),intent(out)         :: untappedMelt(:)               ! un-tapped melt energy (J m-3 s-1)
   ! output: balances (only computed at this level for ida)
   real(rkind),intent(out)         :: balance(nState)               ! balance per state
@@ -247,9 +247,9 @@ subroutine systemSolv(&
   real(rkind),allocatable         :: dBaseflow_dMatric(:,:)        ! derivative in baseflow w.r.t. matric head (s-1)  ! NOTE: allocatable, since not always needed
   real(rkind)                     :: stateVecNew(nState)           ! new state vector (mixed units)
   real(rkind)                     :: fluxVec0(nState)              ! flux vector (mixed units)
-  real(rkind)                     :: dMat(nState)                  ! diagonal matrix (excludes flux derivatives)
-  real(qp)                        :: sMul(nState)    ! NOTE: qp    ! multiplier for state vector for the residual calculations
-  real(rkind)                     :: fRHS(nState)                  ! RHS function for ARKODE
+  real(rkind),target              :: dMat(nState)                  ! diagonal matrix (excludes flux derivatives)
+  real(qp),target                 :: sMul(nState)    ! NOTE: qp    ! multiplier for state vector for the residual calculations
+  real(rkind),target              :: fRHS(nState)                  ! RHS function for ARKODE
   real(rkind)                     :: rAdd(nState)                  ! additional terms in the residual vector
   real(rkind)                     :: rVecScaled(nState)            ! scaled residual vector
   logical(lgt)                    :: feasible                      ! feasibility flag
@@ -267,8 +267,8 @@ subroutine systemSolv(&
   real(rkind), allocatable        :: mLayerMatricHeadPrime(:)      ! prime vector of matric head of each snow and soil layer (m s-1)
   real(rkind)                     :: mLayerVolFracWatPrime(nLayers)! prime vector of volumetric total water content of each snow and soil layer (s-1)
   ! kinsol and homegrown solver variables
-  real(rkind)                     :: fScale(nState)                ! characteristic scale of the function evaluations (mixed units)
-  real(rkind)                     :: xScale(nState)                ! characteristic scale of the state vector (mixed units)
+  real(rkind),target              :: fScale(nState)                ! characteristic scale of the function evaluations (mixed units)
+  real(rkind),target              :: xScale(nState)                ! characteristic scale of the state vector (mixed units)
   real(qp)                        :: resVecNew(nState)  ! NOTE: qp ! new residual vector homegrown solver
   ! homegrown solver variables
   real(rkind)                     :: fOld,fNew                     ! function values (-); NOTE: dimensionless because scaled homegrown solver
@@ -443,16 +443,9 @@ contains
   if (.not.feasible) then; message=trim(message)//'state vector not feasible'; err=20; return_flag=.true.; return; end if
 
   ! copy over the initial flux structure since some model fluxes are not computed in the iterations
-  if ((nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)) then ! replace with model decision in future update -- fully-coupled split only
-    ! note: we do not need flux_temp because flux_init is used for initial eval8summa call
-    do concurrent ( iVar=1:size(flux_meta) )
-      nested_Newton % flux_data%var(iVar)%dat(:) = flux_init%var(iVar)%dat(:)
-    end do
-  else ! all other solvers
-    do concurrent ( iVar=1:size(flux_meta) )
-      flux_temp%var(iVar)%dat(:) = flux_init%var(iVar)%dat(:)
-    end do
-  end if
+  do concurrent ( iVar=1:size(flux_meta) )
+    flux_temp%var(iVar)%dat(:) = flux_init%var(iVar)%dat(:)
+  end do
 
   ! check the need to merge snow layers
   associate(&
@@ -1094,25 +1087,24 @@ contains
 
   ! * interface SUMMA data *
 
-  ! data components that are already allocated but need assignment
-  nested_Newton % dMat(:)           = dMat(:)              ! diagonal matrix (excludes flux derivatives)
+  ! point to array data components
+  nested_Newton % dMat           => dMat             ! diagonal matrix (excludes flux derivatives)
 
-  nested_Newton % fScale(:)         = fScale(:)            ! characteristic scale of the function evaluations (mixed units)
-  nested_Newton % xScale(:)         = xScale(:)            ! characteristic scale of the state vector (mixed units)
-  nested_Newton % sMul(:)           = sMul(:)              ! multiplier for state vector for the residual calculation 
+  nested_Newton % fScale         => fScale           ! characteristic scale of the function evaluations (mixed units)
+  nested_Newton % xScale         => xScale           ! characteristic scale of the state vector (mixed units)
+  nested_Newton % sMul           => sMul             ! multiplier for state vector for the residual calculation 
 
-  nested_Newton % fluxVec0(:)       = fluxVec0(:)          ! flux vector (mixed units)
-  nested_Newton % fRHS(:)           = fRHS(:)              ! ARKODE function values
-  nested_Newton % rAdd(:)           = rAdd(:)              ! additional terms in the residual vector
-  nested_Newton % resVec(:)         = resVec(:)            ! residual vector    
+  nested_Newton % fluxVec0       => fluxVec          ! flux vector (mixed units)
+  nested_Newton % fRHS           => fRHS             ! ARKODE function values
+  nested_Newton % rAdd           => resSink          ! additional terms in the residual vector
+  nested_Newton % resVec         => resVec           ! residual vector    
 
-  ! allocatable data components that require allocation on assignment
-  nested_Newton % dBaseflow_dMatric = dBaseflow_dMatric ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
-  nested_Newton % prog_data  =  prog_data  ! prognostic variables for a local HRU (assignment needed due to initial eval8summa call)
-  nested_Newton % diag_data  =  diag_data  ! diagnostic variables for a local HRU
-  nested_Newton % deriv_data =  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
+  call move_alloc(dBaseflow_dMatric,nested_Newton % dBaseflow_dMatric)  ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
+  nested_Newton % prog_data  =>  prog_data  ! prognostic variables for a local HRU (assignment needed due to initial eval8summa call)
+  nested_Newton % diag_data  =>  diag_data  ! diagnostic variables for a local HRU
+  nested_Newton % deriv_data =>  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
 
-  ! data components that are not allocatable
+  ! scalar data components
   nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
   nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
 
@@ -1180,23 +1172,12 @@ contains
 
   ! * interface additional output that summaSolve4homegrown provides * 
 
-  ! indx_data only needs to update one data component (the number of flux calls per time step)
-  indx_data % var(iLookINDEX%numberFluxCalc) % dat(1) = nested_Newton % indx_data % var(iLookINDEX%numberFluxCalc)%dat(1)
-
   ! data structures changed by computFlux
-  diag_data  = nested_Newton % diag_data ! note: may not need to allocate 
-  do concurrent ( iVar=1:size(flux_temp % var) )
-    flux_temp%var(iVar)%dat(:) = nested_Newton % flux_data%var(iVar)%dat(:)
-  end do
-  deriv_data = nested_Newton % deriv_data ! note: may not need to allocate
-  dBaseflow_dMatric(:,:) = nested_Newton % dBaseflow_dMatric(:,:) 
-  fluxVec(:) = nested_Newton % fluxVec0(:)
+  call move_alloc(nested_Newton % dBaseflow_dMatric,dBaseflow_dMatric)  ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
 
   ! eval8summa changes the source/sink terms
-  resSink(:) = nested_Newton % rAdd(:)
 
   ! * save the computed functions, residuals, and solution *
-  resVec(:)        = nested_Newton % resVec(:) ! may be from previous Newton iteration
   stateVecTrial(:) = nested_Newton % x1(:)
   nSteps = 1_i4b ! number of time steps taken in solver
   niter  = nested_Newton % kcount + 1_i4b ! set iteration count according to classical/outer iterations (add one to match HG solver)  
@@ -1217,7 +1198,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 

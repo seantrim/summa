@@ -11,8 +11,6 @@ contains
 
  subroutine Newton_solve(f_obj)
   type(f_obj_type),intent(inout) :: f_obj 
-  integer(i4b) :: kmax                           ! max k index value
-  integer(i4b) :: lmax                           ! max l index value
   logical(i4b),parameter :: dynamic_strict = .true. ! strict initialization of f1, f2, J1, and J2 for nested portion of dynamic mode
 
   if (f_obj % n .gt. 0_i4b) then
@@ -22,10 +20,7 @@ contains
      f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
      f_obj % L_save = f_obj % L0; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
      f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
-     !kmax = f_obj % kmax_classical
-     !lmax = 0_i4b
      f_obj % dynamic_classical = .true.
-     !call nested_Newton_vector(f_obj,kmax,lmax) ! classical iterations using nested algorithm
      call Newton_vector(f_obj) ! classical iterations using classical algorithm
      if (.not.f_obj % dynamic_classical) then
 
@@ -41,14 +36,11 @@ contains
        f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
        call f_obj % J1_J2_eval(f_obj % x0)     ! get J1 and J2
       end if
-      kmax = f_obj % kmax
-      lmax = f_obj % lmax
-      call nested_Newton_vector(f_obj,kmax,lmax) ! nested iterations
+      call nested_Newton_vector(f_obj,f_obj % kmax,f_obj % lmax) ! nested iterations
+
      end if   
     else ! use nested regime only (original behaviour)
-     kmax = f_obj % kmax
-     lmax = f_obj % lmax
-     call nested_Newton_vector(f_obj,kmax,lmax)   
+     call nested_Newton_vector(f_obj,f_obj % kmax,f_obj % lmax)   
     end if
    else ! classical iterations only
     call Newton_vector(f_obj)
@@ -333,8 +325,8 @@ contains
   type(f_obj_type),intent(inout) :: f_obj 
   character(*),intent(in)  :: convergence         ! convergence option string that adapts to inner and outer/classical iterations
   integer(i4b),intent(in)  :: iteration           ! interation count
-  real(r8b),intent(in)     :: xkp1(1:f_obj % n)   ! current root estimate
-  real(r8b),intent(in)     :: xk(1:f_obj % n)     ! previous root estimate
+  real(r8b),intent(in)     :: xkp1(:)   ! current root estimate
+  real(r8b),intent(in)     :: xk(:)     ! previous root estimate
   logical,intent(inout)    :: exit_flag           ! exit flag
   logical,intent(out)      :: return_flag         ! return flag for early return from Newton solver call
   real(r8b),intent(out)    :: R_est               ! estimated R for current iteration (computed in the previous call)
@@ -372,7 +364,6 @@ contains
    if (f_obj % nested) then
     if (f_obj % dynamic) then
      if (f_obj % dynamic_classical) then
-      !call check_dynamic_mode(f_obj % xkp1lp1) ! nested algorithm used with lmax=0
       call check_dynamic_mode(f_obj % xkp1) ! classical algorithm used
       if (return_flag) return  ! return if switching from classical to nested iterations
      end if
@@ -471,7 +462,7 @@ contains
       f_obj % xk1(:) = xkp1(:) ! x1
      else if (f_obj % k == 1_i4b) then
       f_obj % xk2(:) = xkp1(:) ! x2
-     else if (f_obj % k == 2_i4b) then ! check convergence rate for second classical iteration
+     else if (f_obj % k == 2_i4b) then ! check convergence rate for third classical iteration
 
       f_obj % dynamic_revert = .false. ! initialize initial condition reversion flag
       do i=1,f_obj % n
@@ -530,10 +521,10 @@ contains
 
  subroutine linear_solve(f_obj,A,B,tol)
   ! *** Solve Ax=B -- x stored in B on output *** 
-  type(f_obj_type),intent(inout) :: f_obj                  ! nested Newton object
+  type(f_obj_type),intent(inout) :: f_obj          ! nested Newton object
   ! LAPACK Variables
-  real(r8b),intent(in)    :: A(:,:)                        ! input matrix
-  real(r8b),intent(inout) :: B(1:f_obj % n,1:1) ! right-hand side / solution vector
+  real(r8b),intent(in)    :: A(:,:)                ! input matrix
+  real(r8b),intent(inout) :: B(:,:)                ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
   character(1),parameter :: FACT='E'               ! option for matrix factoring (equilibrate matrix prior to factoring)

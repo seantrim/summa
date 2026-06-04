@@ -143,19 +143,19 @@ subroutine varSubstep(&
   type(io_type_varSubstep),intent(inout) :: io_varSubstep             ! model control
   ! input/output: data structures
   type(split_select_type),intent(in)     :: split_select              ! class object for selecting operator splitting methods
-  type(model_options),intent(in)         :: model_decisions(:)        ! model decisions
-  type(zLookup),intent(in)               :: lookup_data               ! lookup tables
-  type(var_i),intent(in)                 :: type_data                 ! type of vegetation and soil
-  type(var_d),intent(in)                 :: attr_data                 ! spatial attributes
-  type(var_d),intent(in)                 :: forc_data                 ! model forcing data
-  type(var_dlength),intent(in)           :: mpar_data                 ! model parameters
-  type(var_ilength),intent(inout)        :: indx_data                 ! indices for a local HRU
+  type(model_options),target,intent(in)  :: model_decisions(:)        ! model decisions
+  type(zLookup),target,intent(in)        :: lookup_data               ! lookup tables
+  type(var_i),target,intent(in)          :: type_data                 ! type of vegetation and soil
+  type(var_d),target,intent(in)          :: attr_data                 ! spatial attributes
+  type(var_d),target,intent(in)          :: forc_data                 ! model forcing data
+  type(var_dlength),target,intent(in)    :: mpar_data                 ! model parameters
+  type(var_ilength),target,intent(inout) :: indx_data                 ! indices for a local HRU
   type(var_dlength),intent(inout)        :: prog_data                 ! prognostic variables for a local HRU
   type(var_dlength),intent(inout)        :: diag_data                 ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout)        :: flux_data                 ! model fluxes for a local HRU
   type(var_dlength),intent(inout)        :: flux_mean                 ! mean model fluxes for a local HRU
   type(var_dlength),intent(inout)        :: deriv_data                ! derivatives in model fluxes w.r.t. relevant state variables
-  type(var_dlength),intent(in)           :: bvar_data                 ! model variables for the local basin
+  type(var_dlength),target,intent(in)    :: bvar_data                 ! model variables for the local basin
   type(convergence_stats_data),intent(inout) :: conv_data             ! convergence stats for a local HRU
   ! output: model control
   type(out_type_varSubstep),intent(out)  :: out_varSubstep            ! model control
@@ -190,7 +190,7 @@ subroutine varSubstep(&
   real(rkind)                        :: stateVecInit(in_varSubstep % nSubset)  ! initial state vector (mixed units)
   real(rkind)                        :: stateVecTrial(in_varSubstep % nSubset) ! trial state vector (mixed units)
   real(rkind)                        :: stateVecPrime(in_varSubstep % nSubset) ! trial state vector (mixed units)
-  type(var_dlength)                  :: flux_temp                              ! temporary model fluxes
+  type(var_dlength),target           :: flux_temp                              ! temporary model fluxes
   ! flags
   logical(lgt)                       :: firstSplitOper                         ! flag to indicate if we are processing the first flux call in a splitting operation
   logical(lgt)                       :: waterBalanceError                      ! flag to denote that there is a water balance error
@@ -775,31 +775,22 @@ contains
     ! allocate arrays that depend on nState
     allocate(nested_Newton % rVecScaled(1:nested_Newton % n))
     allocate(nested_Newton % aJacScaled(1:nested_Newton % nLeadDim,1:nested_Newton % n))
-    allocate(nested_Newton % fScale(1:nested_Newton % n))
-    allocate(nested_Newton % xScale(1:nested_Newton % n))
-    allocate(nested_Newton % sMul(1:nested_Newton % n))
-    allocate(nested_Newton % dMat(1:nested_Newton % n))
-
-    allocate(nested_Newton % resVec(1:nested_Newton % n))
-    allocate(nested_Newton % fRHS(1:nested_Newton % n))
-    allocate(nested_Newton % rAdd(1:nested_Newton % n))
-    allocate(nested_Newton % fluxVec0(1:nested_Newton % n))
 
     ! allocate certain components of the nested_Newton object (e.g., f and J arrays)
     call nested_Newton % allocate_memory()
 
-    ! initialize/allocate structures not modified at the start of systemSolv (avoid variables that change during systemSolv call)
-    nested_Newton % model_decisions   = model_decisions   ! model decisions
+    ! point to structures not modified at the start of systemSolv (avoid variables that change during systemSolv call)
+    nested_Newton % model_decisions => model_decisions ! model decisions
 
-    nested_Newton % lookup_data = lookup_data  ! lookup tables
-    nested_Newton % type_data   = type_data    ! type of vegetation and soil
-    nested_Newton % attr_data   = attr_data    ! spatial attributes
-    nested_Newton % forc_data   = forc_data    ! model forcing data
-    nested_Newton % mpar_data   = mpar_data    ! model parameters
-    nested_Newton % bvar_data   = bvar_data    ! model variables for the local basin
+    nested_Newton % lookup_data => lookup_data  ! lookup tables
+    nested_Newton % type_data   => type_data    ! type of vegetation and soil
+    nested_Newton % attr_data   => attr_data    ! spatial attributes
+    nested_Newton % forc_data   => forc_data    ! model forcing data
+    nested_Newton % mpar_data   => mpar_data    ! model parameters
+    nested_Newton % bvar_data   => bvar_data    ! model variables for the local basin
 
-    nested_Newton % indx_data  =  indx_data    ! indices defining model states and layers
-    nested_Newton % flux_data  =  flux_temp    ! flux variables for a local HRU (allocate -- initial values set in systemSolv)
+    nested_Newton % indx_data   =>  indx_data   ! indices defining model states and layers
+    nested_Newton % flux_data   =>  flux_temp   ! flux variables for a local HRU (allocate -- initial values set in systemSolv)
 
     call nested_Newton % get_f1_f2_flags()
 
