@@ -913,6 +913,10 @@ MODULE data_types
    logical(lgt)             :: computeVegFlux              ! intent(in): flag to indicate if computing fluxes over vegetation
    logical(lgt)             :: computeBaseflow             ! intent(in): flag to indicate if computing baseflow
    integer(i4b)             :: ixMatrix                    ! intent(in): form of the Jacobian matrix
+   logical(lgt)             :: mass_flag                   ! intent(in): flag to indicate if computing mass terms
+   logical(lgt)             :: energy_flag                 ! intent(in): flag to indicate if computing energy terms
+   logical(lgt)             :: J_mass_flag                 ! intent(in): flag to indicate if computing mass Jacobian
+   logical(lgt)             :: J_energy_flag               ! intent(in): flag to indicate if computing energy Jacobian
   contains
    procedure :: initialize => initialize_in_computJacob
  end type in_type_computJacob
@@ -2269,7 +2273,8 @@ contains
  ! **** end varSubstep ****
 
  ! **** computJacob ****
- subroutine initialize_in_computJacob(in_computJacob,dt,nSnow,nSoil,nLayers,computeVegFlux,computeBaseflow,ixMatrix)
+ subroutine initialize_in_computJacob(in_computJacob,dt,nSnow,nSoil,nLayers,computeVegFlux,computeBaseflow,ixMatrix,&
+                                     &mass_flag,energy_flag,J_mass_flag,J_energy_flag)
   class(in_type_computJacob),intent(out) :: in_computJacob           ! class object for intent(in) computJacob arguments
   real(rkind),intent(in)              :: dt                          ! intent(in): length of the time step (seconds)
   integer(i4b),intent(in)             :: nSnow                       ! intent(in): number of snow layers
@@ -2278,6 +2283,10 @@ contains
   logical(lgt),intent(in)             :: computeVegFlux              ! intent(in): flag to indicate if computing fluxes over vegetation
   logical(lgt),intent(in)             :: computeBaseflow             ! intent(in): flag to indicate if computing baseflow
   integer(i4b),intent(in)             :: ixMatrix                    ! intent(in): form of the Jacobian matrix                         
+  logical(lgt),intent(in)             :: mass_flag                   ! intent(in): flag to indicate if computing mass terms
+  logical(lgt),intent(in)             :: energy_flag                 ! intent(in): flag to indicate if computing energy terms
+  logical(lgt),intent(in)             :: J_mass_flag                 ! intent(in): flag to indicate if computing mass Jacobian
+  logical(lgt),intent(in)             :: J_energy_flag               ! intent(in): flag to indicate if computing energy Jacobian
  
   ! intent(in) arguments
   in_computJacob % dt               =  dt                            ! intent(in): length of the time step (seconds)                    
@@ -2287,6 +2296,10 @@ contains
   in_computJacob % computeVegFlux   =  computeVegFlux                ! intent(in): flag to indicate if computing fluxes over vegetation
   in_computJacob % computeBaseflow  =  computeBaseflow               ! intent(in): flag to indicate if computing baseflow
   in_computJacob % ixMatrix         =  ixMatrix                      ! intent(in): form of the Jacobian matrix                         
+  in_computJacob % mass_flag        =  mass_flag                     ! intent(in): flag to indicate if computing mass terms
+  in_computJacob % energy_flag      =  energy_flag                   ! intent(in): flag to indicate if computing energy terms
+  in_computJacob % J_mass_flag      =  J_mass_flag                   ! intent(in): flag to indicate if computing mass Jacobian
+  in_computJacob % J_energy_flag    =  J_energy_flag                 ! intent(in): flag to indicate if computing energy Jacobian
  end subroutine initialize_in_computJacob
 
  subroutine finalize_out_computJacob(out_computJacob,err,cmessage)
