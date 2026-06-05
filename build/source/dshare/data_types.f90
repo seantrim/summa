@@ -32,7 +32,6 @@ MODULE data_types
  USE var_lookup,only:iLookDECISIONS   ! lookup indices for elements of the decision structure
  USE var_lookup,only:iLookPROG        ! lookup indices for prognostic variables
  implicit none
- ! constants necessary for variable defs
  private
 
  ! ***********************************************************************************************************
@@ -1685,8 +1684,8 @@ contains
 
  subroutine finalize_out_diagv_node(out_diagv_node,iSoil,nSoil,io_soilLiqFlux,mLayerDiffuse,iceImpedeFac,&
                                    &dHydCond_dVolLiq,dDiffuse_dVolLiq,dHydCond_dTemp,err,cmessage)
-  class(out_type_diagv_node),intent(in)  :: out_diagv_node  ! class object for output diagv_node variables
-  integer(i4b),intent(in)                :: nSoil,iSoil     ! number of soil layers and index
+  class(out_type_diagv_node),intent(in)   :: out_diagv_node ! class object for output diagv_node variables
+  integer(i4b),intent(in)                 :: nSoil,iSoil    ! number of soil layers and index
   type(io_type_soilLiqFlux),intent(inout) :: io_soilLiqFlux ! input-output class object for soilLiqFlux
   real(rkind),intent(inout) :: mLayerDiffuse(1:nSoil)       ! diffusivity at layer mid-point (m2 s-1)
   real(rkind),intent(inout) :: iceImpedeFac(1:nSoil)        ! ice impedence factor at layer mid-points (-)

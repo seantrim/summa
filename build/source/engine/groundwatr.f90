@@ -41,12 +41,6 @@ USE var_lookup,only:iLookDIAG    ! named variables for structure elements
 USE var_lookup,only:iLookFLUX    ! named variables for structure elements
 USE var_lookup,only:iLookPARAM   ! named variables for structure elements
 
-! look-up values for the choice of groundwater parameterization
-USE mDecisions_module,only:  &
- qbaseTopmodel,              &   ! TOPMODEL-ish baseflow parameterization
- bigBucket,                  &   ! a big bucket (lumped aquifer model)
- noExplicit                      ! no explicit groundwater parameterization
-
 ! privacy
 implicit none
 private
@@ -149,12 +143,12 @@ subroutine groundwatr(&
     ! (1) compute the "active" portion of the soil profile
     ! ************************************************************************************************
 
-    ! get index of the lowest saturated layer
-    if (getSatDepth) then  ! NOTE: only compute for the first flux call
+   ! get index of the layer closest to surface that is more than field capacity (NOTE: only compute on the first flux call)
+    if (getSatDepth) then
       ixSaturation = nSoil+1  ! unsaturated profile when ixSaturation>nSoil
       do iLayer=nSoil,1,-1  ! start at the lowest soil layer and work upwards to the top layer
         if (mLayerVolFracLiq(iLayer) > fieldCapacity) then; ixSaturation = iLayer  ! index of saturated layer -- keeps getting over-written as move upwards
-        else; exit; end if                                                        ! only consider saturated layer at the bottom of the soil profile
+        else; exit; end if                                                         ! only consider saturated layer at the bottom of the soil profile
       end do  ! end looping through soil layers
     end if
 
@@ -193,7 +187,7 @@ subroutine groundwatr(&
     ! use the chain rule to compute the baseflow derivative w.r.t. matric head (s-1)
     do iLayer=1,nSoil
       dBaseflow_dMatric(1:iLayer,iLayer) = dBaseflow_dVolLiq(1:iLayer,iLayer)*mLayerdTheta_dPsi(iLayer)
-      if (iLayer<nSoil) dBaseflow_dMatric(iLayer+1:nSoil,iLayer) = 0._rkind
+      if (iLayer<nSoil) dBaseflow_dMatric(iLayer+1:nSoil,iLayer) = 0._rkind ! no dependence of baseflow in a layer on matric head in layers above the layer
     end do
 
   ! end association to variables in data structures
@@ -203,7 +197,7 @@ end subroutine groundwatr
 
 
 ! ***********************************************************************************************************************
-! * private subroutine computBaseflow: private subroutine so can be used to test the numerical jacobian
+! * private subroutine computBaseflow:  compute the baseflow flux and its derivative w.r.t. volumetric liquid water content
 ! ***********************************************************************************************************************
 subroutine computBaseflow(&
                           ! input: control and state variables
@@ -241,7 +235,7 @@ subroutine computBaseflow(&
   type(var_dlength),intent(inout)  :: flux_data               ! model fluxes for a local HRU
   ! output: baseflow
   real(rkind),intent(out)          :: mLayerBaseflow(:)       ! baseflow from each soil layer (m s-1)
-  real(rkind),intent(out)          :: dBaseflow_dVolLiq(:,:)  ! derivative in baseflow w.r.t. matric head (s-1)
+  real(rkind),intent(out)          :: dBaseflow_dVolLiq(:,:)  ! derivative in baseflow w.r.t. volumetric liquid water content (s-1)
   ! ---------------------------------------------------------------------------------------
   ! * local variables
   ! ---------------------------------------------------------------------------------------

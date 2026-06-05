@@ -266,7 +266,7 @@ subroutine computFlux(&
     end if 
   end associate
 
-  ! *** CALCULATE THE GROUNDWATER FLOW ***
+  ! *** CALCULATE THE SHALLOW GROUNDWATER FLOW ***
   associate(nSoilOnlyHyd => indx_data%var(iLookINDEX%nSoilOnlyHyd)%dat(1)) ! intent(in): [i4b] number of hydrology variables in the soil domain
     if (nSoilOnlyHyd>0) then ! check if computing soil hydrology
       if (local_ixGroundwater/=qbaseTopmodel) then ! set baseflow fluxes to zero if the topmodel baseflow routine is not used
@@ -287,7 +287,7 @@ subroutine computFlux(&
         call initialize_bigAquifer
         call bigAquifer(in_bigAquifer,mpar_data,diag_data,io_bigAquifer,out_bigAquifer)
         call finalize_bigAquifer; if(err/=0)then; return; endif
-      else ! if no aquifer, then fluxes are zero
+      else ! if no deep aquifer, then fluxes are zero
         call zeroAquiferFluxes
       end if ! end check aquifer model decision
     end if  ! if computing aquifer fluxes
@@ -329,7 +329,6 @@ contains
  subroutine computBaseflowRunoff
   ! compute total baseflow from the soil zone (needed for mass balance checks) and total runoff
   ! (Note: scalarSoilBaseflow is zero if topmodel is not used)
-  ! (Note: scalarSoilBaseflow may need to re-envisioned in topmodel formulation if parts of it flow into neighboring soil rather than exfiltrate)
   associate(&
    scalarSoilBaseflow           => flux_data%var(iLookFLUX%scalarSoilBaseflow)%dat(1),  & ! intent(out): [dp] total baseflow from the soil profile (m s-1)
    mLayerBaseflow               => flux_data%var(iLookFLUX%mLayerBaseflow)%dat,         & ! intent(out): [dp(:)] baseflow from each soil layer (m s-1)

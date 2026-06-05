@@ -244,32 +244,32 @@ contains
  ! perform the routing
  associate(totalArea => bvarData%var(iLookBVAR%basin__totalArea)%dat(1) )
 
- ! compute water balance for the basin aquifer
- if(model_decisions(iLookDECISIONS%spatial_gw)%iDecision == singleBasin)then
-  message=trim(message)//'multi_driver/bigBucket groundwater code not transferred from old code base yet'
-  err=20; return
- end if
-
- ! calculate total runoff depending on whether aquifer is connected
- if(model_decisions(iLookDECISIONS%groundwatr)%iDecision == bigBucket) then
-  ! aquifer
-  bvarData%var(iLookBVAR%basin__TotalRunoff)%dat(1) = bvarData%var(iLookBVAR%basin__SurfaceRunoff)%dat(1) + bvarData%var(iLookBVAR%basin__ColumnOutflow)%dat(1)/totalArea + bvarData%var(iLookBVAR%basin__AquiferBaseflow)%dat(1)
- else
-  ! no aquifer
-  bvarData%var(iLookBVAR%basin__TotalRunoff)%dat(1) = bvarData%var(iLookBVAR%basin__SurfaceRunoff)%dat(1) + bvarData%var(iLookBVAR%basin__ColumnOutflow)%dat(1)/totalArea + bvarData%var(iLookBVAR%basin__SoilDrainage)%dat(1)
- endif
-
- call qOverland(&
-                ! input
-                model_decisions(iLookDECISIONS%subRouting)%iDecision,          &  ! intent(in): index for routing method
-                bvarData%var(iLookBVAR%basin__TotalRunoff)%dat(1),             &  ! intent(in): total runoff to the channel from all active components (m s-1)
-                bvarData%var(iLookBVAR%routingFractionFuture)%dat,             &  ! intent(in): fraction of runoff in future time steps (m s-1)
-                bvarData%var(iLookBVAR%routingRunoffFuture)%dat,               &  ! intent(in): runoff in future time steps (m s-1)
-                ! output
-                bvarData%var(iLookBVAR%averageInstantRunoff)%dat(1),           &  ! intent(out): instantaneous runoff (m s-1)
-                bvarData%var(iLookBVAR%averageRoutedRunoff)%dat(1),            &  ! intent(out): routed runoff (m s-1)
-                err,message)                                                      ! intent(out): error control
- if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
+   ! compute water balance for the basin aquifer
+   if(model_decisions(iLookDECISIONS%spatial_gw)%iDecision == singleBasin)then
+    message=trim(message)//'multi_driver/bigBucket groundwater code not transferred from old code base yet'
+    err=20; return
+   end if
+   
+   ! calculate total runoff depending on whether aquifer is connected
+   if(model_decisions(iLookDECISIONS%groundwatr)%iDecision == bigBucket) then
+    ! deep aquifer (column outflow will be zero)
+    bvarData%var(iLookBVAR%basin__TotalRunoff)%dat(1) = bvarData%var(iLookBVAR%basin__SurfaceRunoff)%dat(1) + bvarData%var(iLookBVAR%basin__ColumnOutflow)%dat(1)/totalArea + bvarData%var(iLookBVAR%basin__AquiferBaseflow)%dat(1)
+   else
+    ! no deep aquifer (may have column outflow from shallow groundwater then soil drainage will be zero, else the converse is true)
+    bvarData%var(iLookBVAR%basin__TotalRunoff)%dat(1) = bvarData%var(iLookBVAR%basin__SurfaceRunoff)%dat(1) + bvarData%var(iLookBVAR%basin__ColumnOutflow)%dat(1)/totalArea + bvarData%var(iLookBVAR%basin__SoilDrainage)%dat(1)
+   endif
+   
+   call qOverland(&
+                  ! input
+                  model_decisions(iLookDECISIONS%subRouting)%iDecision,          &  ! intent(in): index for routing method
+                  bvarData%var(iLookBVAR%basin__TotalRunoff)%dat(1),             &  ! intent(in): total runoff to the channel from all active components (m s-1)
+                  bvarData%var(iLookBVAR%routingFractionFuture)%dat,             &  ! intent(in): fraction of runoff in future time steps (m s-1)
+                  bvarData%var(iLookBVAR%routingRunoffFuture)%dat,               &  ! intent(in): runoff in future time steps (m s-1)
+                  ! output
+                  bvarData%var(iLookBVAR%averageInstantRunoff)%dat(1),           &  ! intent(out): instantaneous runoff (m s-1)
+                  bvarData%var(iLookBVAR%averageRoutedRunoff)%dat(1),            &  ! intent(out): routed runoff (m s-1)
+                  err,message)                                                      ! intent(out): error control
+   if(err/=0)then; err=20; message=trim(message)//trim(cmessage); return; endif
  end associate
 
  end subroutine run_oneGRU
