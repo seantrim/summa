@@ -1333,9 +1333,7 @@ contains
   ! local variables
   type(in_type_computJacob)  :: in_computJacob  ! computJacob input object
   type(out_type_computJacob) :: out_computJacob ! computJacob output object  
-  real(rkind) :: aJac_mass(0,0),aJac_energy(0,0)
   logical,parameter :: mass_flag = .true.,energy_flag = .true.
-  logical,parameter :: J_mass_flag = .false.,J_energy_flag = .false.
 
   ! initialize
   ! *** Transfer data to in_computJacob class object from local variables in summaSolve4homegrown ***
@@ -1349,7 +1347,7 @@ contains
    computeVegFlux => f_obj % in_SS4HG % computeVegFlux  & ! intent(in): flag to indicate if computing fluxes over vegetation
   &)   
    call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),&
-                                   &ixMatrix,mass_flag,energy_flag,J_mass_flag,J_energy_flag)
+                                   &ixMatrix,mass_flag,energy_flag)
   end associate 
 
    ! update
@@ -1357,7 +1355,7 @@ contains
     prog_data         => f_obj % prog_data&         ! prognostic variables for a local HRU
    &)
     call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,&
-                    &aJac,aJac_mass,aJac_energy,out_computJacob)
+                    &aJac,out_computJacob)
    end associate
 
   ! finalize

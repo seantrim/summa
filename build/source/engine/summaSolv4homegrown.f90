@@ -246,7 +246,6 @@ contains
 
   subroutine update_Jacobian
    ! *** Update Jacobian used for Newton step ***
-   real(rkind) :: aJac_mass(0,0),aJac_energy(0,0) ! Jacobians for mass and energy (not used here)
   
    ! compute the analytical Jacobian matrix
    ! NOTE: The derivatives were computed in the previous call to computFlux
@@ -258,7 +257,7 @@ contains
     &)
     call initialize_computJacob_summaSolv4homegrown
     call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,&
-                    &aJac,aJac_mass,aJac_energy,out_computJacob)
+                    &aJac,out_computJacob)
     call finalize_computJacob_summaSolv4homegrown
     if (err/=0) then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if  ! (check for errors)
 
@@ -316,7 +315,7 @@ contains
     computeVegFlux => in_SS4HG % computeVegFlux  & ! intent(in): flag to indicate if computing fluxes over vegetation
     &)   
     call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),&
-                                    &ixMatrix,.true.,.true.,.false.,.false.)
+                                    &ixMatrix,.true.,.true.)
    end associate
   end subroutine initialize_computJacob_summaSolv4homegrown
 
