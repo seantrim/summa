@@ -1121,7 +1121,17 @@ contains
   if (nested_Newton % nested) then ! nested iterations
 
    ! get intial Jacobians
-   call nested_Newton % J1_J2_eval(stateVecTrial) 
+   call nested_Newton % J1_J2_eval(stateVecTrial) ! -------------- note: J also evaluated here and is needed for dynamic mode
+   !print *, "systemSolv:"
+   !print *, "banded=",nested_Newton % banded
+   !print *, "J=",nested_Newton % J
+   !call nested_Newton % J1_eval(stateVecTrial) 
+   !call nested_Newton % J2_eval(stateVecTrial)
+   !print *, "J1-J2=",nested_Newton % J1 - nested_Newton % J2
+   !if (sum(nested_Newton % J - (nested_Newton % J1 - nested_Newton % J2)).ne.0._rkind) then
+   ! print *,sum(nested_Newton % J - (nested_Newton % J1 - nested_Newton % J2))
+   ! stop
+   !end if
 
   else ! classical iterations
 
@@ -1198,7 +1208,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 

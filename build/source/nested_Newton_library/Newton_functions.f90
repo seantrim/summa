@@ -186,8 +186,6 @@ module Newton_functions
    ! vector routines
    procedure :: f_vec_eval  => f_SUMMA_vec  ! solver -- f
    !procedure :: f_vec_eval => f_diff_vec   ! solver (note: f_diff_vec requires nested iterations to be activated)
-   !procedure :: f1_vec_eval => f1_SUMMA_vec ! solver -- trivial split
-   !procedure :: f2_vec_eval => f2_zero_vec  ! solver -- trivial split
    procedure :: f1_vec_eval => f_f1_SUMMA_vec_full   ! solver -- f and f1
    procedure :: f2_vec_eval => f_f2_SUMMA_vec_full   ! solver -- f and f2
    procedure :: f1_vec_only_eval => f1_SUMMA_vec_full   ! solver --- f1 only
@@ -197,8 +195,6 @@ module Newton_functions
    procedure :: df1dx_vec => df1_Rich_dh_vec
    procedure :: df2dx_vec => df2_Rich_dh_vec
    procedure :: J_eval  => Jacobian_f_SUMMA_vec  ! solver
-   !procedure :: J1_eval => Jacobian_f1_SUMMA_vec ! solver -- trivial split
-   !procedure :: J2_eval => Jacobian_f2_zero_vec  ! solver -- trivial split
    procedure :: J1_eval => J_J1_SUMMA_vec_full   ! solver -- J and J1
    procedure :: J2_eval => J_J2_SUMMA_vec_full ! solver -- J and J2
    procedure :: J1_J2_eval => J_J1_J2_SUMMA_vec_full ! solver J, J1, and J2
@@ -994,7 +990,9 @@ contains
        ! have f -- need f1, J1, f2, and J2
        !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f - now obtained directly from eval8summa
        !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f - now obtained directly from eval8summa
-       call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
+       !call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
+       call f_obj % J1_eval(updated_solution) ! get J1 based on previous eval8summa call (used to compute f)
+       call f_obj % J2_eval(updated_solution) ! get J2 based on previous eval8summa call (used to compute f)
        f_obj % L0 = L1 ! store previous objective function value
       end if
      else
@@ -1028,7 +1026,9 @@ contains
      if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
       ! have f and f2 -- need J2, f1, J1
       !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f - now obtained directly from eval8summa
-      call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+      !call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+      call f_obj % J1_eval(updated_solution) ! get J1 based on previous eval8summa call (used to compute f2)
+      call f_obj % J2_eval(updated_solution) ! get J2 based on previous eval8summa call (used to compute f2)
      end if
 
     else
@@ -1315,13 +1315,14 @@ contains
   end associate
  end subroutine SUMMA_eval8summa
 
- subroutine SUMMA_computJacob(f_obj,&
+ subroutine SUMMA_computJacob(f_obj,mass_flag,energy_flag,&
                              &indx_data,diag_data,flux_data,deriv_data,&
                              &dMat,dBaseflow_dMatric,&
                              &aJac)
   ! ** Interface for SUMMA's computJacob subroutine **
   ! arguments
   class(f_obj_inputs),intent(inout) :: f_obj
+  logical          ,intent(in)      :: mass_flag,energy_flag  ! flags for evaluating mass and energy Jacobians
   type(var_ilength),intent(in)      :: indx_data              ! indices defining model states and layers for selected split 
   type(var_dlength),intent(in)      :: diag_data              ! diagnostic variables for a local HRU
   type(var_dlength),intent(in)      :: flux_data              ! flux data
@@ -1333,7 +1334,6 @@ contains
   ! local variables
   type(in_type_computJacob)  :: in_computJacob  ! computJacob input object
   type(out_type_computJacob) :: out_computJacob ! computJacob output object  
-  logical,parameter :: mass_flag = .true.,energy_flag = .true.
 
   ! initialize
   ! *** Transfer data to in_computJacob class object from local variables in summaSolve4homegrown ***
@@ -1575,17 +1575,25 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i,j,k  ! loop indices
   integer(i4b) :: nBands ! # of bands for banded storage
 
-  call f_obj % SUMMA_computJacob(&
+  call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
-  ! get nested Newton solver Jacobian J1
-  call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
+  ! get nested Newton solver Jacobian J1 --- not needed because only J1 terms are stored in aJac
+  !call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
 
+  ! store Jacobian used in solver
+  if (f_obj % banded) then ! banded storage
+   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+    nBands=nrow_banded+subdiag
+    f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+   end associate
+  else ! full matrix storage
+   f_obj % J1(:,:) = aJac(:,:)
+  end if
  end subroutine J_J1_SUMMA_vec_full
 
  subroutine f_f2_SUMMA_vec_full(f_obj,xvec)
@@ -1686,17 +1694,26 @@ contains
 
   ! local
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: i,j,k ! loop indices
   integer(i4b) :: nBands ! # of bands for banded storage
 
-  call f_obj % SUMMA_computJacob(&
+  call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
+  !call f_obj % SUMMA_computJacob(.true.,.true.,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
 
-  ! get nested Newton solver Jacobian J2
-  call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
+  ! get nested Newton solver Jacobian J2 --- not needed because only J2 terms are stored in aJac
+  !call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
 
+  ! store Jacobian used in solver
+  if (f_obj % banded) then ! banded storage
+   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
+    nBands=nrow_banded+subdiag
+    f_obj % J2(1:nrow_banded,1:n) = -aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows -------- note: negative sign applied
+   end associate
+  else ! full matrix storage
+   f_obj % J2(:,:) = -aJac(:,:) !-------- note: negative sign applied
+  end if
  end subroutine J_J2_SUMMA_vec_full
 
  subroutine J_J1_J2_SUMMA_vec_full(f_obj,xvec)
@@ -1712,7 +1729,7 @@ contains
   integer(i4b) :: i,j,k ! loop indices
   integer(i4b) :: nBands ! # of bands for banded storage
 
-  call f_obj % SUMMA_computJacob(&
+  call f_obj % SUMMA_computJacob(.true.,.true.,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                &aJac)
@@ -1828,29 +1845,6 @@ contains
   
  end subroutine f_SUMMA_vec
 
- subroutine f1_SUMMA_vec(f_obj,xvec)
-  ! *** Compute SUMMA's vector non-linear function ***
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:)  ! current guess
-
-  ! compute SUMMA residual (taken to be the non-linear function) based on current guess
-  ! note: - eval8summa may contain extraneous computations not needed for the residual
-  !       - perhaps introducing logical flags in eval8summa to isolate the required operations would boost efficiency 
-  call f_obj % SUMMA_eval8summa(xvec)
-
-  f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b)
-  
- end subroutine f1_SUMMA_vec
-
- subroutine f2_zero_vec(f_obj,xvec)
-  ! *** Compute zero vector non-linear function ***
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:)  ! current guess -- needed for argument interface
-
-  f_obj % f2_vec(:) = 0._rkind
-  
- end subroutine f2_zero_vec
-
  subroutine Jacobian_f_SUMMA_vec(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian **
   ! arguments
@@ -1859,12 +1853,14 @@ contains
   ! local variables
   integer(i4b) :: nBands                                                      ! SUMMA's leading dimension for banded Jacobians
   real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
+  logical,parameter :: mass_flag = .true.,energy_flag = .true.
 
   ! compute derivatives based on current guess
   !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
 
   ! assemble Jacobian using the computed derivatives
-  call f_obj % SUMMA_computJacob(f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+  call f_obj % SUMMA_computJacob(mass_flag,energy_flag,&
+                                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                                 &f_obj % dMat,f_obj % dBaseflow_dMatric,&
                                 &aJac)
 
@@ -1879,46 +1875,5 @@ contains
   end if
 
  end subroutine Jacobian_f_SUMMA_vec
-
- subroutine Jacobian_f1_SUMMA_vec(f_obj,xvec)
-  ! ** Compute SUMMA's Jacobian **
-  ! Note: for trivial decomposition with f2=0 such that f1=f
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
-  ! local variables
-  integer(i4b) :: nBands                                                      ! SUMMA's leading dimension for banded Jacobians
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-
-  ! compute derivatives based on current guess
-  !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
-
-  ! assemble Jacobian using the computed derivatives
-  call f_obj % SUMMA_computJacob(f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-                                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
-                                &aJac)
-
-  ! store Jacobian used in solver
-  if (f_obj % banded) then ! banded storage
-   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-    nBands=nrow_banded+subdiag
-    f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-   end associate
-  else ! full matrix storage
-   f_obj % J1(:,:) = aJac(:,:)
-  end if
-
- end subroutine Jacobian_f1_SUMMA_vec
-
- subroutine Jacobian_f2_zero_vec(f_obj,xvec)
-  ! ** Compute zero Jacobian **
-  ! solver variables
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess -- does not impact zero Jacobian but needed for argument interface
-
-  ! store Jacobian used in solver
-  f_obj % J2(:,:) = 0._rkind
-
- end subroutine Jacobian_f2_zero_vec
 
 end module Newton_functions

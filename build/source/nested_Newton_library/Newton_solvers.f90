@@ -34,7 +34,9 @@ contains
        call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes scaled residual and computes line search objective function)
        if (f_obj % f_error) return             ! check for function evaluation errors
        f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
-       call f_obj % J1_J2_eval(f_obj % x0)     ! get J1 and J2
+       !call f_obj % J1_J2_eval(f_obj % x0)     ! get J1 and J2
+       call f_obj % J1_eval(f_obj % x0)     ! get J1
+       call f_obj % J2_eval(f_obj % x0)     ! get J2
       end if
       call nested_Newton_vector(f_obj,f_obj % kmax,f_obj % lmax) ! nested iterations
 
