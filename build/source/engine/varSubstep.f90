@@ -711,9 +711,6 @@ contains
     ! Linear system solver choice
     nested_Newton % linear_system_solver = "LAPACK_standard"
 
-    ! Matrix-Vector products (for full matrix storage)
-    nested_Newton % matrix_vector        = "BLAS" 
-
     ! Newton step refinement
     nested_Newton % refinement           = .true.  ! apply Newton step refinement following inner iterations
 
@@ -740,7 +737,7 @@ contains
       nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 3_i4b 
+      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 2_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations

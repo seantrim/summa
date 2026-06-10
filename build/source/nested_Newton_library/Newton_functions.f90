@@ -58,23 +58,17 @@ module Newton_functions
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
    integer(i4b) :: KL,KU             ! # of subdiagonals and superdiagonals for LAPACK
    real(r8b),allocatable    :: WORK(:),AF(:,:)            ! LAPACK arrays
-   real(r8b),allocatable    :: x0(:),x1(:)                ! initial and final root estimates for vector algorithms
+   real(r8b),pointer        :: x0(:)                      ! guess vector for vector algorithms -- must be associated with vector allocated in external program 
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
    real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
    real(r8b),allocatable    :: xk1(:),xk2(:) ! solutions used for computing convergence order for dynamic mode
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
-   real(r8b),allocatable    :: J1_save(:,:)  ! Jacobian 1 (save for dynamic mode)
-   real(r8b),allocatable    :: J2_save(:,:)  ! Jacobian 2 (save for dynamic mode)
    real(r8b),allocatable    :: Jdiff(:,:)    ! difference Jacobian
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
-   real(r8b),allocatable    :: f1_vec_save(:) ! non-linear function evaluation 1 (save for dynamic mode)
-   real(r8b),allocatable    :: f2_vec_save(:) ! non-linear function evaluation 2 (save for dynamic mode)
-   real(r8b),allocatable    :: f_vec_scaled_save(:) ! scaled function value for line search (save for dynamic mode)
-   real(r8b)                :: L_save        ! line search objective function (save for dynamic mode)
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
@@ -82,7 +76,6 @@ module Newton_functions
    character(:),allocatable :: convergence          ! string for convergence control option for outer/classical iterations
    character(:),allocatable :: convergence_inner    ! string for convergence control option for inner iterations
    character(:),allocatable :: linear_system_solver ! string for selecting solver for linear systems
-   character(:),allocatable :: matrix_vector        ! string for selecting method for matrix-vector products
    character(1)             :: line_search_option   ! line search option/scheme
    ! solver output
    character(:),allocatable :: output ! string for solver output control option
@@ -96,7 +89,6 @@ module Newton_functions
    ! procedures used prior to calling the solver
    procedure :: set_defaults    => f_set_defaults    ! set default options 
    procedure :: allocate_memory => f_allocate_memory ! allocate array data components 
-   procedure :: initial_guess   => f_initial_guess   ! apply initial guess strategy
    procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
    procedure :: solver_output   => f_solver_output   ! set solver output options
    procedure :: matrix_vector_product                ! compute matrix-vector product using matmul or BLAS
@@ -249,7 +241,6 @@ contains
    f_obj % tol_inner   = 1.e-8   ! tolerance for inner iterations
 
    f_obj % linear_system_solver = "LAPACK_expert"          ! string for control of linear system solver
-   f_obj % matrix_vector        = "BLAS"                   ! string for selecting matrix-vector product method
    f_obj % convergence          = "strict"                 ! string for convergence criterion method for solver
    f_obj % convergence_inner    = "strict"                 ! string for convergence criterion method for solver
    f_obj % output               = "production"             ! string for solver output control option
@@ -264,15 +255,12 @@ contains
 
   ! allocate solution and function arrays
   associate(n => f_obj % n)
-   allocate(f_obj % x0(1:n),f_obj % x1(1:n))       ! initial and final root estimates
    allocate(f_obj % f_vec(1:n))                    ! total non-linear function vector
    if (f_obj % nested) then
     allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
     if (f_obj % dynamic) then
      allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
-     allocate(f_obj % f1_vec_save(1:n),f_obj % f2_vec_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
-     allocate(f_obj % f_vec_scaled_save(1:n)) ! non-linear functions vectors 1 and 2 (for original initial condition) 
      allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
     end if
    else
@@ -310,9 +298,6 @@ contains
   if (f_obj % nested) then
    allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
            &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
-   if (f_obj % dynamic) then
-    allocate(f_obj % J1_save(1:f_obj % nrow,1:f_obj % n),f_obj % J2_save(1:f_obj % nrow,1:f_obj % n))
-   end if
   end if
 
  end subroutine f_allocate_memory
@@ -408,22 +393,22 @@ contains
   end if
  end subroutine f_set_tolerance
 
- subroutine f_initial_guess(f_obj,method)
-  ! ** initial guess strategy for time-dependent algorithms for f_obj_base class **
-  ! note: it may be possible to add filtering techniques for the initial guess to improve efficiency
-  class(f_obj_base),intent(inout) :: f_obj
-  character(*),intent(in)         :: method
-
-  ! Note: avoid unintentional reallocation of object components (use array slices for assignment statements)
-  if (method.eq.'previous') then 
-   f_obj % x0(:) = f_obj % x1(:) ! initial guess -- solution from previous time step
-  else
-   if (f_obj % out_error) then
-    write(f_obj % unit,'(a66)') "Error in f_initial_guess: method argument not currently supported."
-   end if
-   stop
-  end if
- end subroutine f_initial_guess
+! subroutine f_initial_guess(f_obj,method)
+!  ! ** initial guess strategy for time-dependent algorithms for f_obj_base class **
+!  ! note: it may be possible to add filtering techniques for the initial guess to improve efficiency
+!  class(f_obj_base),intent(inout) :: f_obj
+!  character(*),intent(in)         :: method
+!
+!  ! Note: avoid unintentional reallocation of object components (use array slices for assignment statements)
+!  if (method.eq.'previous') then 
+!   f_obj % x0(:) = f_obj % x1(:) ! initial guess -- solution from previous time step
+!  else
+!   if (f_obj % out_error) then
+!    write(f_obj % unit,'(a66)') "Error in f_initial_guess: method argument not currently supported."
+!   end if
+!   stop
+!  end if
+! end subroutine f_initial_guess
 
  function matrix_vector_product(f_obj,A,x) result(y)
   ! *** Compute matrix vector product y=A*x ***
@@ -437,32 +422,20 @@ contains
     
   ! local variables
   character(1),parameter :: TRANS='N'                ! option for matrix transposition
-  integer(i4b) :: KL,KU                              ! # of subdiagonals and superdiagonals of A (banded storage)
-  integer(i4b) :: LDA                                ! first dimension of A
   integer(i4b),parameter :: INCX=1_i4b, INCY=1_i4b   ! increment for elements of x and y vectors
   real(r8b),parameter    :: ALPHA=1._r8b,BETA=0._r8b ! scalars used in LAPACK solvers
-    
-  ! set LAPACK parameters for choice of matrix storage
-  if (f_obj % banded) then ! banded storage 
-   KL=f_obj % subdiag; KU=f_obj % superdiag
-   LDA=KL + KU + 1
-  else ! full matrix storage
-   LDA=f_obj % n
-  end if
 
   if (f_obj % banded) then ! banded storage
-   call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
+   !KL=f_obj % subdiag; KU=f_obj % superdiag
+   !LDA=KL + KU + 1
+   associate(KL => f_obj % subdiag,KU => f_obj % superdiag,LDA => f_obj % subdiag + f_obj % superdiag + 1_i4b)
+    call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
+   end associate
   else ! full matrix storage
-   if (f_obj % matrix_vector == "BLAS") then
+   !LDA=f_obj % n
+   associate(LDA => f_obj % n)
     call DGEMV(TRANS,f_obj % n,f_obj % n,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
-   else if (f_obj % matrix_vector == "matmul") then
-    y=matmul(A,x)
-   else
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in matrix_vector_product: unsupported option."
-    end if
-    stop ! fatal error
-   end if
+   end associate
   end if
  end function matrix_vector_product
  

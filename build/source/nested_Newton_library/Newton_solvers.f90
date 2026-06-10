@@ -11,33 +11,23 @@ contains
 
  subroutine Newton_solve(f_obj)
   type(f_obj_type),intent(inout) :: f_obj 
-  logical(i4b),parameter :: dynamic_strict = .true. ! strict initialization of f1, f2, J1, and J2 for nested portion of dynamic mode
 
   if (f_obj % n .gt. 0_i4b) then
    if (f_obj % nested) then
     if (f_obj % dynamic) then ! for dynamic selection of classical or nested regimes
      ! note: start with classical regime and switch to nested regime if needed 
-     f_obj % f1_vec_save(:) = f_obj % f1_vec(:); f_obj % f2_vec_save(:) = f_obj % f2_vec(:) ! save f1 and f2 for original initial condition in case of reversion
-     f_obj % L_save = f_obj % L0; f_obj % f_vec_scaled_save(:) = f_obj % rVecScaled(:) ! save line search quantities
-     f_obj % J1_save(:,:) = f_obj % J1(:,:); f_obj % J2_save(:,:) = f_obj % J2(:,:) ! save J1 and J2 for original initial condition in case of reversion
      f_obj % dynamic_classical = .true.
      call Newton_vector(f_obj) ! classical iterations using classical algorithm
-     if (.not.f_obj % dynamic_classical) then
+     if (.not.f_obj % dynamic_classical) then ! go to nested iterations if classical iterations do not converge well
 
-      ! revert to original initial condition if needed
-      if (f_obj % dynamic_revert) then
-       f_obj % f1_vec(:) = f_obj % f1_vec_save(:); f_obj % f2_vec(:) = f_obj % f2_vec_save(:)
-       f_obj % L0 = f_obj % L_save; f_obj % rVecScaled(:) = f_obj % f_vec_scaled_save(:)
-       f_obj % J1(:,:) = f_obj % J1_save(:,:); f_obj % J2(:,:) = f_obj % J2_save(:,:)
-      else if (dynamic_strict) then
-       ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
-       call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes scaled residual and computes line search objective function)
-       if (f_obj % f_error) return             ! check for function evaluation errors
-       f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
-       !call f_obj % J1_J2_eval(f_obj % x0)     ! get J1 and J2
-       call f_obj % J1_eval(f_obj % x0)     ! get J1
-       call f_obj % J2_eval(f_obj % x0)     ! get J2
-      end if
+      ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
+      ! note: guess vector elements from classical iterations are reused where possible
+      call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes scaled residual and computes line search objective function)
+      if (f_obj % f_error) return             ! check for function evaluation errors
+      f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
+      call f_obj % J1_eval(f_obj % x0)        ! get J1
+      call f_obj % J2_eval(f_obj % x0)        ! get J2
+
       call nested_Newton_vector(f_obj,f_obj % kmax,f_obj % lmax) ! nested iterations
 
      end if   
@@ -141,7 +131,8 @@ contains
    end if
   end if
 
-  f_obj % x1(:) = f_obj % xkp1(:)
+  !f_obj % x1(:) = f_obj % xkp1(:)
+  f_obj % x0(:) = f_obj % xkp1(:)
   if (f_obj % out_basic) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
 
  end subroutine Newton_vector
@@ -229,7 +220,6 @@ contains
 
     call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
     if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
-    !f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess
 
     ! apply Newton step refinement and update guess
     if (f_obj % refinement) then
@@ -312,7 +302,8 @@ contains
    end if
   end if
 
-  f_obj % x1(:) = f_obj % xkp1lp1(:)
+  !f_obj % x1(:) = f_obj % xkp1lp1(:)
+  f_obj % x0(:) = f_obj % xkp1lp1(:)
   if ((f_obj % out_basic).and.(f_obj % convergence .ne. 'custom')) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then

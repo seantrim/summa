@@ -210,7 +210,7 @@ subroutine systemSolv(&
   ! output
   type(var_dlength),target,intent(inout) :: deriv_data             ! derivatives in model fluxes w.r.t. relevant state variables
   integer(i4b),intent(inout)      :: ixSaturation                  ! index of the lowest saturated layer (NOTE: only computed on the first iteration)
-  real(rkind),intent(out)         :: stateVecTrial(:)              ! trial state vector (mixed units)
+  real(rkind),target,intent(out)  :: stateVecTrial(:)              ! trial state vector (mixed units)
   real(rkind),intent(out)         :: stateVecPrime(:)              ! trial state vector (mixed units)
   real(rkind),target,intent(out)  :: fluxVec(nState)               ! flux vector (mixed units)
   real(rkind),target,intent(out)  :: resSink(nState)               ! additional terms in the residual vector homegrown solver
@@ -1121,17 +1121,12 @@ contains
   if (nested_Newton % nested) then ! nested iterations
 
    ! get intial Jacobians
-   call nested_Newton % J1_J2_eval(stateVecTrial) ! -------------- note: J also evaluated here and is needed for dynamic mode
-   !print *, "systemSolv:"
-   !print *, "banded=",nested_Newton % banded
-   !print *, "J=",nested_Newton % J
-   !call nested_Newton % J1_eval(stateVecTrial) 
-   !call nested_Newton % J2_eval(stateVecTrial)
-   !print *, "J1-J2=",nested_Newton % J1 - nested_Newton % J2
-   !if (sum(nested_Newton % J - (nested_Newton % J1 - nested_Newton % J2)).ne.0._rkind) then
-   ! print *,sum(nested_Newton % J - (nested_Newton % J1 - nested_Newton % J2))
-   ! stop
-   !end if
+   if (nested_Newton % dynamic) then ! start with classical iterations in dynamic mode
+    call nested_Newton % J_eval(stateVecTrial) 
+   else ! nested iterations (non-dynamic mode)
+    call nested_Newton % J1_eval(stateVecTrial) ! get J1
+    call nested_Newton % J2_eval(stateVecTrial) ! get J2
+   end if
 
   else ! classical iterations
 
@@ -1141,8 +1136,9 @@ contains
   end if
 
   ! set up initial guess
-  nested_Newton % x1(:) = stateVecTrial(:)  ! initialize solution from previous time step
-  call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
+  nested_Newton % x0 => stateVecTrial  ! initialize solution from previous time step
+  !nested_Newton % x1(:) = stateVecTrial(:)  ! initialize solution from previous time step
+  !call nested_Newton % initial_guess('previous') ! 'previous'=use previous solution for the initial guess
 
   ! call solver
   call Newton_solve(nested_Newton) ! call the solver (contains the iteration loop and convergence criterion)
@@ -1188,7 +1184,7 @@ contains
   ! eval8summa changes the source/sink terms
 
   ! * save the computed functions, residuals, and solution *
-  stateVecTrial(:) = nested_Newton % x1(:)
+  !stateVecTrial(:) = nested_Newton % x1(:)
   nSteps = 1_i4b ! number of time steps taken in solver
   niter  = nested_Newton % kcount + 1_i4b ! set iteration count according to classical/outer iterations (add one to match HG solver)  
 
