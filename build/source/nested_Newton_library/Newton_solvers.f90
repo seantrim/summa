@@ -544,7 +544,8 @@ contains
   if (f_obj % linear_system_solver .eq. LAPACK_standard) then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
     ! load banded storage matrix used by LAPACK (stores LU factors on output)
-    f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
+    !!!f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
+    f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale (if needed)
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
