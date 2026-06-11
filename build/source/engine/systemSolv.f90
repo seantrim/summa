@@ -279,9 +279,9 @@ subroutine systemSolv(&
   logical(lgt)                    :: converged                     ! convergence flag homegrown solver
   logical(lgt), parameter         :: post_massCons=.false.         ! “perfectly” conserve mass by pushing the errors into the states, turn off for now to agree with SUNDIALS
   ! class objects for call to summaSolv4homegrown
-  type(in_type_summaSolv4homegrown)  :: in_SS4HG  ! object for intent(in)  summaSolv4homegrown arguments
-  type(io_type_summaSolv4homegrown)  :: io_SS4HG  ! object for intent(io)  summaSolv4homegrown arguments
-  type(out_type_summaSolv4homegrown) :: out_SS4HG ! object for intent(out) summaSolv4homegrown arguments
+  type(in_type_summaSolv4homegrown) ,target :: in_SS4HG  ! object for intent(in)  summaSolv4homegrown arguments
+  type(io_type_summaSolv4homegrown) ,target :: io_SS4HG  ! object for intent(io)  summaSolv4homegrown arguments
+  type(out_type_summaSolv4homegrown),target :: out_SS4HG ! object for intent(out) summaSolv4homegrown arguments
   ! flags
   logical(lgt) :: return_flag ! flag for handling systemSolv returns trigerred from internal subroutines 
   logical(lgt) :: exit_flag   ! flag for handling loop exit statements trigerred from internal subroutines 
@@ -1057,8 +1057,12 @@ contains
   use Newton_solvers,                only: Newton_solve        ! nested Newton solver
 
   ! note: - reusing summaSolve4homegrown (SS4HG) objects due to similarities in data requirements
+  nested_Newton % in_SS4HG  => in_SS4HG
+  nested_Newton % io_SS4HG  => io_SS4HG
+  nested_Newton % out_SS4HG => out_SS4HG
 
   ! initialize SS4HG components within nested Newton object
+  
   associate(&
    ! layer geometry
    nSnow => indx_data%var(iLookINDEX%nSnow)%dat(1),& ! intent(in): [i4b] number of snow layers

@@ -681,13 +681,16 @@ contains
 
   subroutine initialize_nested_Newton
     ! initialize nested Newton solver (if needed)
-    use kind_params,only: r8b                 ! kind parameters from nested Newton library
-  
-    ! initialize solver options defaults
-    ! note: options set beyond this point will overwrite the defaults
-    call nested_Newton % set_defaults()
+    use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for output location
+    use kind_params,only: r8b                  ! kind parameters from nested Newton library
+    use Newton_functions,only: LAPACK_standard ! linear system solver options
+    use Newton_functions,only: silent          ! output options
+    use Newton_functions,only: custom          ! convergence options 
  
     ! * Solver Options *
+
+    ! solver output
+    call nested_Newton % solver_output(silent) ! standard output used by default 
 
     ! Newton iteration type
     nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
@@ -696,10 +699,8 @@ contains
      ! 'strict' uses two consecutive iterations and is extremely conservative
      !     |--> (actually computes the convergence error of the previous iteration)
      ! 'predictive' tries to compute the convergence error of the current iteration using a formula (under development)
-    nested_Newton % convergence = 'custom' ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
+    nested_Newton % convergence = custom ! 'strict', 'predictive', or 'custom' (to use checkConv from homegrown) 
 
-    ! solver output
-    call nested_Newton % solver_output('silent') ! standard output used by default 
 
     ! set tolerance values (also sets max iteration counts) --------- not required because we are using HG convergence criterion
     ! note: possibly use min of homegrown solver relative tolerances as nested Newton solver tolerance (but only absolute tolerances are used by HG)
@@ -709,7 +710,8 @@ contains
     nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
 
     ! Linear system solver choice
-    nested_Newton % linear_system_solver = "LAPACK_standard"
+    !nested_Newton % linear_system_solver = "LAPACK_standard"
+    nested_Newton % linear_system_solver = LAPACK_standard
 
     ! Newton step refinement
     nested_Newton % refinement           = .true.  ! apply Newton step refinement following inner iterations
@@ -734,7 +736,7 @@ contains
       nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
 
       ! convergence criterion for inner iterations
-      nested_Newton % convergence_inner = 'custom' ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
+      nested_Newton % convergence_inner = custom ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
       nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 2_i4b 
@@ -791,9 +793,10 @@ contains
 
     call nested_Newton % get_f1_f2_flags()
 
-    if (nested_Newton % nested) then
-      call nested_Newton % get_mass_energy_masks()
-    end if
+    ! note: logical state masks no longer needed for evaluate function and Jacobian values
+    !if (nested_Newton % nested) then
+    !  call nested_Newton % get_mass_energy_masks()
+    !end if
   end subroutine initialize_nested_Newton
 
 end subroutine varSubstep

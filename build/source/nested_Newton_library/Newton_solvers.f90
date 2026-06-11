@@ -46,7 +46,8 @@ contains
  end subroutine Newton_solve
 
  subroutine Newton_vector(f_obj)
-  ! Newton solver for vector problems
+  ! *** Newton solver for vector problems ***
+  use Newton_functions,only: LS_C
   type(f_obj_type),intent(inout) :: f_obj        ! nested Newton object 
   real(r8b)    :: final_mean                     ! mean of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
@@ -67,7 +68,7 @@ contains
 
   ! determine Newton step refinement option and whether we need to evaluate the RHS B vector (can be reused from the line search)
   if (f_obj % refinement) then
-   f_obj % line_search_option = 'C'
+   !f_obj % line_search_option = LS_C ! assignment not needed
    f_obj % evaluate_B = .false.
   else
    f_obj % evaluate_B = .true.
@@ -97,7 +98,7 @@ contains
 
    ! Newton step refinement and update guess
    if (f_obj % refinement) then
-    call f_obj % apply_nested_line_search('C',.false.,B(:,1)); if (f_obj % f_error) return
+    call f_obj % apply_nested_line_search(LS_C,.false.,B(:,1)); if (f_obj % f_error) return
    else
     f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
    end if
@@ -139,6 +140,8 @@ contains
 
  subroutine nested_Newton_vector(f_obj,kmax,lmax)
   ! *** Nested Newton solver for vector problems ***
+  use Newton_functions,only: LS_C,LS_I,LS_O ! line search options
+  use Newton_functions,only: custom!,custom_strict,strict,custom_predictive,predictive ! convergence options 
   ! arguments
   type(f_obj_type),intent(inout) :: f_obj 
   integer(i4b),intent(in) :: kmax                           ! max k index value (outer iterations)
@@ -192,10 +195,10 @@ contains
     ! determine line search scheme and whether we need to evaluate RHS vector
     if (f_obj % refinement) then
      if (f_obj % lmax == 0_i4b) then ! classical regime -- why doesn't (f_obj % lmax_loop == 0_i4b) work here?
-      f_obj % line_search_option = 'C'
+      f_obj % line_search_option = LS_C
       f_obj % evaluate_B = .false.
      else if (f_obj % l < f_obj % lmax_loop) then ! initial inner iterations
-      f_obj % line_search_option = 'I'
+      f_obj % line_search_option = LS_I
       if (f_obj % k == 0_i4b) then ! first inner scheme iteration -- reuse initial value from systemSolv 
        if (f_obj % l == 0_i4b) f_obj % evaluate_B = .false.
       else if (f_obj % l > 0_i4b) then
@@ -204,7 +207,7 @@ contains
        f_obj % evaluate_B = .true.
       end if
      else ! last inner iteration
-      f_obj % line_search_option = 'L'
+      f_obj % line_search_option = LS_O
       f_obj % evaluate_B = .false. ! RHS computed in previous inner LS scheme
      end if
     else
@@ -223,7 +226,7 @@ contains
 
     ! apply Newton step refinement and update guess
     if (f_obj % refinement) then
-     if (f_obj % line_search_option == 'L') then
+     if (f_obj % line_search_option == LS_O) then
       call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
      else
       call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
@@ -284,7 +287,7 @@ contains
    ! final convergence error for outer iterations (if early loop exit occurred)
    if (f_obj % out_detail) then
     final_mean=sum(f_obj % xkp1lp1)/f_obj % n
-    if (f_obj % convergence .ne. 'custom') then
+    if (f_obj % convergence .ne. custom) then
      write(f_obj % unit,'(i4,2(g23.15))') f_obj % k+1,final_mean,f_obj % R(1) ! mean of final solution 
     else ! custom methods don't have f_obj % R computed
      write(f_obj % unit,'(i4,2(g23.15))') f_obj % k+1,final_mean ! mean of final solution 
@@ -304,7 +307,7 @@ contains
 
   !f_obj % x1(:) = f_obj % xkp1lp1(:)
   f_obj % x0(:) = f_obj % xkp1lp1(:)
-  if ((f_obj % out_basic).and.(f_obj % convergence .ne. 'custom')) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
+  if ((f_obj % out_basic).and.(f_obj % convergence .ne. custom)) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
   if (f_obj % out_detail) then
    write(f_obj % unit,*) "# of outer iterations=",f_obj % kcount
@@ -315,8 +318,9 @@ contains
  subroutine check_residual_vector(f_obj,convergence,iteration,xkp1,xk,R_est,exit_flag,return_flag)
   ! *** Check residual vector for potential loop exit ***
   use,intrinsic :: ieee_arithmetic,only: ieee_is_finite
+  use Newton_functions,only: custom,custom_strict,strict,custom_predictive,predictive ! convergence options 
   type(f_obj_type),intent(inout) :: f_obj 
-  character(*),intent(in)  :: convergence         ! convergence option string that adapts to inner and outer/classical iterations
+  integer(i4b),intent(in)  :: convergence         ! convergence option string that adapts to inner and outer/classical iterations
   integer(i4b),intent(in)  :: iteration           ! interation count
   real(r8b),intent(in)     :: xkp1(:)   ! current root estimate
   real(r8b),intent(in)     :: xk(:)     ! previous root estimate
@@ -333,7 +337,7 @@ contains
 
   return_flag = .false. ! initialize return flag
 
-  if (convergence.eq.'custom') then ! use custom convergence criterion
+  if (convergence.eq.custom) then ! use custom convergence criterion
 
    exit_flag = f_obj % custom_convergence()
    if (exit_flag) return  ! set exit flag if criterion is satisfied
@@ -366,7 +370,7 @@ contains
   else
 
    ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
-   if ((convergence.eq.'custom-strict').or.(convergence.eq.'custom-predictive')) then
+   if ((convergence.eq.custom_strict).or.(convergence.eq.custom_predictive)) then
     exit_flag = f_obj % custom_convergence()
     if (exit_flag)  return  ! set exit flag if criterion is satisfied
    end if
@@ -388,9 +392,9 @@ contains
    end if
 
    R(0)=maxval(R_vec) ! actual worst case residual for input iteration
-   if ((convergence.eq.'strict').or.(convergence.eq.'custom-strict')) then ! strict estimate
+   if ((convergence.eq.strict).or.(convergence.eq.custom_strict)) then ! strict estimate
     R(1)=R(0) ! estimated residual for iteration+1
-   else if ((convergence.eq.'predictive').or.(convergence.eq.'custom-predictive')) then
+   else if ((convergence.eq.predictive).or.(convergence.eq.custom_predictive)) then
     if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
      R(1)=R(0) ! estimated residual for iteration+1 
     else ! compute prediction based on power function
@@ -513,6 +517,7 @@ contains
  end subroutine check_residual_vector
 
  subroutine linear_solve(f_obj,A,B,tol)
+  use Newton_functions,only: LAPACK_standard,LAPACK_expert
   ! *** Solve Ax=B -- x stored in B on output *** 
   type(f_obj_type),intent(inout) :: f_obj          ! nested Newton object
   ! LAPACK Variables
@@ -536,7 +541,7 @@ contains
   f_obj % LAPACK_error = .false.
 
   ! begin LAPACK operations
-  if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
+  if (f_obj % linear_system_solver .eq. LAPACK_standard) then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
     ! load banded storage matrix used by LAPACK (stores LU factors on output)
     f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
@@ -550,7 +555,7 @@ contains
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     call DGESV(f_obj % n,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
    end if
-  else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
+  else if (f_obj % linear_system_solver .eq. LAPACK_expert) then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % scaling) then
      if (f_obj % out_error) then
       write(f_obj % unit,*) "LAPACK Error: expert solver does not currently support custom scaling."
@@ -572,7 +577,7 @@ contains
   if (f_obj % scaling) call f_obj % custom_descaling(B)
 
   ! error control
-  if (f_obj % linear_system_solver .eq. "LAPACK_standard") then ! use standard LAPACK solver
+  if (f_obj % linear_system_solver .eq. LAPACK_standard) then ! use standard LAPACK solver
    if (INFO.ne.0) then
      if (f_obj % out_warning) then
       write(f_obj % unit,*) "LAPACK Error: DGESV or DGBSV exited with an error code of",info,"."
@@ -580,7 +585,7 @@ contains
      f_obj % LAPACK_error = .true.
      return ! recoverable error (if supported by external driver)
    end if
-  else if (f_obj % linear_system_solver .eq. "LAPACK_expert") then ! Use expert LAPACK solver with scaling and iterative refinement
+  else if (f_obj % linear_system_solver .eq. LAPACK_expert) then ! Use expert LAPACK solver with scaling and iterative refinement
    if (INFO.ne.0) then
     if (INFO.eq.(f_obj % n+1_i4b)) then
      if (f_obj % out_warning) then

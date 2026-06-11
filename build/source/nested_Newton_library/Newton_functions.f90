@@ -1,4 +1,5 @@
 module Newton_functions
+ use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
  ! nested Newton solver modules
  use kind_params,only: i4b,r8b ! kind parameters
  use Richards,only : Richards_obj ! Richards test problem
@@ -22,6 +23,13 @@ module Newton_functions
  implicit none
  private
 
+ ! option parameters
+ integer(i4b),parameter,public :: LAPACK_expert = 0_i4b,LAPACK_standard = 1_i4b ! linear_system_solver options
+ integer(i4b),parameter,public :: LS_C = 0_i4b, LS_I = 1_i4b, LS_O = 2_i4b ! line_search_option options
+ integer(i4b),parameter,public :: silent = 0_i4b,minimal = 1_i4b,production = 2_i4b,verbose = 3_i4b,debug = 4_i4b ! output options
+ integer(i4b),parameter,public :: custom = 0_i4b, custom_strict = 1_i4b, strict= 2_i4b,&
+                                & custom_predictive = 3_i4b, predictive = 4_i4b ! convergence criterion options
+ 
  ! ***** Parent Type ***** !
  type, public :: f_obj_base
    ! ** Default data components used by the Newton solvers ** !
@@ -73,13 +81,13 @@ module Newton_functions
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
    real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
    real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
-   character(:),allocatable :: convergence          ! string for convergence control option for outer/classical iterations
-   character(:),allocatable :: convergence_inner    ! string for convergence control option for inner iterations
-   character(:),allocatable :: linear_system_solver ! string for selecting solver for linear systems
-   character(1)             :: line_search_option   ! line search option/scheme
+   integer(i4b)             :: convergence          ! string for convergence control option for outer/classical iterations
+   integer(i4b)             :: convergence_inner    ! string for convergence control option for inner iterations
+   integer(i4b)             :: linear_system_solver ! option for selecting solver for linear systems
+   integer(i4b)             :: line_search_option   ! line search option/scheme
    ! solver output
-   character(:),allocatable :: output ! string for solver output control option
-   integer(i4b) :: unit        ! file unit number for solver output
+   integer(i4b) :: output      ! solver output control option
+   integer(i4b) :: unit = stdout ! file unit number for solver output (default is standard output)
    logical      :: out_debug   ! output flag for debugging
    logical      :: out_detail  ! output flag for details
    logical      :: out_basic   ! output flag for basic information
@@ -108,26 +116,26 @@ module Newton_functions
    type(var_dlength),pointer :: bvar_data => null()   ! model variables for the local basin
 
 
-   type(var_ilength),pointer :: indx_data => null()  ! indices defining model states and layers
-   type(var_dlength),pointer :: prog_data => null()  ! prognostic variables for a local HRU
-   type(var_dlength),pointer :: diag_data => null()  ! diagnostic variables for a local HRU
-   type(var_dlength),pointer :: flux_data => null()  ! temporary flux variables for a local HRU
-   type(var_dlength),pointer :: deriv_data => null() ! derivatives in model fluxes w.r.t. relevant state variables
-   real(rkind),allocatable :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
-   real(rkind),pointer     :: dMat(:) => null()      ! diagonal matrix (excludes flux derivatives) 
+   type(var_ilength),pointer :: indx_data => null()    ! indices defining model states and layers
+   type(var_dlength),pointer :: prog_data => null()    ! prognostic variables for a local HRU
+   type(var_dlength),pointer :: diag_data => null()    ! diagnostic variables for a local HRU
+   type(var_dlength),pointer :: flux_data => null()    ! temporary flux variables for a local HRU
+   type(var_dlength),pointer :: deriv_data => null()   ! derivatives in model fluxes w.r.t. relevant state variables
+   real(rkind),allocatable   :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+   real(rkind),pointer       :: dMat(:) => null()      ! diagonal matrix (excludes flux derivatives) 
 
    ! * summaSolve4homegrown (SS4HG) objects *
    ! classical and outer iterations
-   type(in_type_summaSolv4homegrown)  :: in_SS4HG   ! SS4HG input object: model control variables and previous function evaluation
-   type(io_type_summaSolv4homegrown)  :: io_SS4HG   ! SS4HG io object: model control variables and previous function evaluation
-   type(out_type_summaSolv4homegrown) :: out_SS4HG  ! SS4HG output object: model control variables and previous function evaluation
+   type(in_type_summaSolv4homegrown) ,pointer :: in_SS4HG  => null() ! SS4HG input object: model control variables and previous function evaluation
+   type(io_type_summaSolv4homegrown) ,pointer :: io_SS4HG  => null() ! SS4HG io object: model control variables and previous function evaluation
+   type(out_type_summaSolv4homegrown),pointer :: out_SS4HG => null() ! SS4HG output object: model control variables and previous function evaluation
 
    ! additional variables for eval8summa call
    logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
    real(rkind),pointer     :: fScale(:) => null()    ! characteristic scale of the function evaluations (mixed units)
    real(rkind),pointer     :: xScale(:) => null()    ! characteristic scale of the state vector (mixed units)
    real(qp),pointer        :: sMul(:)   => null()    ! NOTE: qp  ! multiplier for state vector for the residual calculations
-   logical(lgt) :: feasible                          ! feasibility flag
+   logical(lgt)            :: feasible               ! feasibility flag
    real(rkind),pointer     :: fluxVec0(:) => null()  ! flux vector (mixed units)
    real(rkind),pointer     :: fRHS(:)     => null()  ! RHS function for ARKODE
    real(rkind),pointer     :: rAdd(:)     => null()  ! additional terms in the residual vector
@@ -141,7 +149,6 @@ module Newton_functions
    integer(i4b)             :: nLeadDim ! lead dimension of SUMMA LAPACK arrays
 
    ! variables to handle state type non-linear function decompositions
-   !integer(i4b)             :: nLeadDim1,nLeadDim2
    integer(i4b)             :: nSubset1,nSubset2
    logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
    logical :: f1_mass_flag,f1_energy_flag
@@ -156,19 +163,6 @@ module Newton_functions
    procedure :: SUMMA_eval8summa
    procedure :: SUMMA_computJacob
 
-!   ! f=space minus time
-!   ! scalar input routines
-!   procedure :: f1 => f_Rich_space
-!   procedure :: f2 => f_Rich_time
-!   procedure :: df1dx_element => df_Rich_dh_element_space
-!   procedure :: df2dx_element => df_Rich_dh_element_time
-
-   ! f=time minus space
-   ! scalar input routines
-   procedure :: f1 => f_Rich_time
-   procedure :: f2 => f_Rich_space
-   procedure :: df1dx_element => df_Rich_dh_element_time
-   procedure :: df2dx_element => df_Rich_dh_element_space
  end type f_obj_inputs
 
  type,extends(f_obj_inputs),public :: f_obj_type
@@ -177,15 +171,11 @@ module Newton_functions
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
    procedure :: f_vec_eval  => f_SUMMA_vec  ! solver -- f
-   !procedure :: f_vec_eval => f_diff_vec   ! solver (note: f_diff_vec requires nested iterations to be activated)
    procedure :: f1_vec_eval => f_f1_SUMMA_vec_full   ! solver -- f and f1
    procedure :: f2_vec_eval => f_f2_SUMMA_vec_full   ! solver -- f and f2
    procedure :: f1_vec_only_eval => f1_SUMMA_vec_full   ! solver --- f1 only
    procedure :: f2_vec_only_eval => f2_SUMMA_vec_full   ! solver --- f2 only
    procedure :: f1_f2_vec_eval => f_f1_f2_SUMMA_vec_full   ! solver -- f, f1, and f2
-   procedure :: dfdx_vec  => dfdx_diff_vec 
-   procedure :: df1dx_vec => df1_Rich_dh_vec
-   procedure :: df2dx_vec => df2_Rich_dh_vec
    procedure :: J_eval  => Jacobian_f_SUMMA_vec  ! solver
    procedure :: J1_eval => J_J1_SUMMA_vec_full   ! solver -- J and J1
    procedure :: J2_eval => J_J2_SUMMA_vec_full ! solver -- J and J2
@@ -200,11 +190,6 @@ module Newton_functions
    procedure :: get_f1_f2_flags => get_SUMMA_f1_f2_flags
    procedure :: f_state_SUMMA_vec_full
 
-   ! scalar routines
-   procedure :: f     => f_diff 
-   procedure :: dfdx  => dfdx_diff 
-   procedure :: df1dx => df1_Rich_dh 
-   procedure :: df2dx => df2_Rich_dh 
  end type f_obj_type
 
 contains
@@ -215,7 +200,6 @@ contains
 
  subroutine f_set_defaults(f_obj)
   ! ** set default values for options in f_obj_base class **
-  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
   class(f_obj_base),intent(inout) :: f_obj
 
    f_obj % banded            = .false. ! flag for banded Jacobians
@@ -240,12 +224,12 @@ contains
    f_obj % tol         = 1.e-8   ! tolerance for classical/outer iterations
    f_obj % tol_inner   = 1.e-8   ! tolerance for inner iterations
 
-   f_obj % linear_system_solver = "LAPACK_expert"          ! string for control of linear system solver
-   f_obj % convergence          = "strict"                 ! string for convergence criterion method for solver
-   f_obj % convergence_inner    = "strict"                 ! string for convergence criterion method for solver
-   f_obj % output               = "production"             ! string for solver output control option
+   f_obj % linear_system_solver = LAPACK_standard          ! string for control of linear system solver
+   f_obj % convergence          = strict                   ! string for convergence criterion method for solver
+   f_obj % convergence_inner    = strict                   ! string for convergence criterion method for solver
+   f_obj % output               = production               ! string for solver output control option
    
-   f_obj % unit                 = stdout                   ! file unit number for solver output
+   f_obj % unit                 = stdout                   ! file unit number for solver output (this is also the initial value on declaration of f_obj)
 
  end subroutine f_set_defaults
  
@@ -278,11 +262,11 @@ contains
    f_obj % KL = f_obj % subdiag; f_obj % KU = f_obj % superdiag
    f_obj % LDA = f_obj % KL + f_obj % KU + 1_i4b; f_obj % LDAF = f_obj % LDA + f_obj % KL
    allocate(f_obj % AF(1:f_obj % LDAF,1:f_obj % n)) ! storing LU factors requires an additional f_obj % subdiag rows
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(f_obj % WORK(1:3_i4b*f_obj % n))
+   if (f_obj % linear_system_solver .eq. LAPACK_expert) allocate(f_obj % WORK(1:3_i4b*f_obj % n))
   else ! full matrix storage
    f_obj % LDA = f_obj % n; f_obj % LDAF = f_obj % n
    allocate(f_obj % AF(1:f_obj % n,1:f_obj % n))
-   if (f_obj % linear_system_solver .eq. "LAPACK_expert") allocate(f_obj % WORK(1:4_i4b*f_obj % n))
+   if (f_obj % linear_system_solver .eq. LAPACK_expert) allocate(f_obj % WORK(1:4_i4b*f_obj % n))
   end if
 
   ! allocate Jacobian arrays (and initialize to zero)
@@ -302,50 +286,41 @@ contains
 
  end subroutine f_allocate_memory
 
- subroutine f_solver_output(f_obj,method,unit)
+ subroutine f_solver_output(f_obj,method)
   ! ** set output control for solver **
-  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
   class(f_obj_base),intent(inout)  :: f_obj
-  character(*),intent(in)          :: method
-  integer(i4b),optional,intent(in) :: unit
-
-  ! set file unit for solver output - default is standard output
-  if (present(unit)) then
-   f_obj % unit = unit 
-  else
-   f_obj % unit = stdout 
-  end if  
+  integer(i4b),intent(in)          :: method
  
-  if (method.eq.'debug') then
-   f_obj % out_debug   = .true. ! output flag for debugging
-   f_obj % out_detail  = .true. ! output flag for details
-   f_obj % out_basic   = .true. ! output flag for basic information
-   f_obj % out_warning = .true. ! output flag for warnings
-   f_obj % out_error   = .true. ! output flag for errors
-  else if (method.eq.'verbose') then
-   f_obj % out_debug   = .false. ! output flag for debugging
-   f_obj % out_detail  = .true.  ! output flag for details
-   f_obj % out_basic   = .true.  ! output flag for basic information
-   f_obj % out_warning = .true.  ! output flag for warnings
-   f_obj % out_error   = .true.  ! output flag for errors
-  else if (method.eq.'production') then
-   f_obj % out_debug   = .false. ! output flag for debugging
-   f_obj % out_detail  = .false. ! output flag for details
-   f_obj % out_basic   = .true.  ! output flag for basic information
-   f_obj % out_warning = .true.  ! output flag for warnings
-   f_obj % out_error   = .true.  ! output flag for errors
-  else if (method.eq.'minimal') then
-   f_obj % out_debug   = .false. ! output flag for debugging
-   f_obj % out_detail  = .false. ! output flag for details
-   f_obj % out_basic   = .true.  ! output flag for basic information
-   f_obj % out_warning = .false. ! output flag for warnings
-   f_obj % out_error   = .true.  ! output flag for errors
-  else if (method.eq.'silent') then
+  if (method.eq.silent) then
    f_obj % out_debug   = .false. ! output flag for debugging
    f_obj % out_detail  = .false. ! output flag for details
    f_obj % out_basic   = .false. ! output flag for basic information
    f_obj % out_warning = .false. ! output flag for warnings
    f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.minimal) then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .false. ! output flag for details
+   f_obj % out_basic   = .true.  ! output flag for basic information
+   f_obj % out_warning = .false. ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.production) then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .false. ! output flag for details
+   f_obj % out_basic   = .true.  ! output flag for basic information
+   f_obj % out_warning = .true.  ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.verbose) then
+   f_obj % out_debug   = .false. ! output flag for debugging
+   f_obj % out_detail  = .true.  ! output flag for details
+   f_obj % out_basic   = .true.  ! output flag for basic information
+   f_obj % out_warning = .true.  ! output flag for warnings
+   f_obj % out_error   = .true.  ! output flag for errors
+  else if (method.eq.debug) then
+   f_obj % out_debug   = .true. ! output flag for debugging
+   f_obj % out_detail  = .true. ! output flag for details
+   f_obj % out_basic   = .true. ! output flag for basic information
+   f_obj % out_warning = .true. ! output flag for warnings
+   f_obj % out_error   = .true. ! output flag for errors
   else
    if (f_obj % out_error) then
     write(f_obj % unit,'(a65)') "Error in f_solver_output: method argument not currently supported"
@@ -356,7 +331,7 @@ contains
 
  ! **** Numerics **** !
 
- subroutine f_set_tolerance(f_obj,method,tol,kmax)
+ subroutine f_set_tolerance(f_obj,method,tol,kmax) ! ***** note: not currently in use (needs updates, including change to integer method options) *****
   ! ** set tolerance for f_obj_base class **
   class(f_obj_base),intent(inout) :: f_obj
   character(*),intent(in)         :: method
@@ -393,7 +368,7 @@ contains
   end if
  end subroutine f_set_tolerance
 
-! subroutine f_initial_guess(f_obj,method)
+! subroutine f_initial_guess(f_obj,method) ! no longer used: x0 is now interfaced to nested Newton object using a pointer
 !  ! ** initial guess strategy for time-dependent algorithms for f_obj_base class **
 !  ! note: it may be possible to add filtering techniques for the initial guess to improve efficiency
 !  class(f_obj_base),intent(inout) :: f_obj
@@ -438,255 +413,6 @@ contains
    end associate
   end if
  end function matrix_vector_product
- 
- ! **** Richards Problem **** !
-
- real(r8b) function f_Rich_space(f_obj,x) result(f_space)
-  ! ** space terms for discrete Richards' equation **
-  class(f_obj_inputs),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-
-  associate(i => Richards_obj % i)
-    Richards_obj % h(i) = x ! populate h array with current guess 
-    f_space=Richards_obj % KT()-Richards_obj % S()
-  end associate
- end function f_Rich_space
-
- real(r8b) function f_Rich_time(f_obj,x) result(f_time)
-  ! ** time terms for discrete Richards' equation **
-  class(f_obj_inputs),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-
-  associate(i => Richards_obj % i)
-    Richards_obj % h(i) = x ! populate h array with current guess 
-    f_time=Richards_obj % CT()
-  end associate
- end function f_Rich_time
-
- real(r8b) function df_Rich_dh_element_space(f_obj,x,j) result(dfdh_element_space)
-  class(f_obj_inputs),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-  integer(i4b),intent(in)      :: j
-
-  associate(i => Richards_obj % i)
-    Richards_obj % h(i) = x ! populate h array with current guess 
-    dfdh_element_space=Richards_obj % dKTdh(j)
-  end associate
- end function df_Rich_dh_element_space
-
- real(r8b) function df_Rich_dh_element_time(f_obj,x,j) result(dfdh_element_time)
-  class(f_obj_inputs),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-  integer(i4b),intent(in)      :: j
-
-  associate(i => Richards_obj % i)
-    Richards_obj % h(i) = x ! populate h array with current guess 
-    dfdh_element_time=Richards_obj % dCTdh(j)
-  end associate
- end function df_Rich_dh_element_time
-
-!!!!!!!!!!!!!!! ****************** Functions that adapt to specified scalar functions below ****************** !!!!!!!!!!!!!!! 
-
- function Jacobian_f_Rich_vec(f_obj,xvec) result(J)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: xvec(1:f_obj % n) ! current guess
-  real(r8b),allocatable        :: J(:,:)
-  !real(r8b)                    :: J(1:f_obj % n,1:f_obj % n) ! original Jacobian (full matrix storage)
-  integer(i4b)                 :: icol,irow
-  integer(i4b)                 :: nrow_banded ! # of rows for LAPACK banded matrix storage
-
-  if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nrow_banded=subdiag+superdiag+1
-    allocate(J(1:nrow_banded,1:n))
-    do icol=1,n
-     do irow=max(1,icol-superdiag),min(n,icol+subdiag)
-      Richards_obj % i = irow
-      J(superdiag+1+irow-icol,icol)=f_obj % dfdx_vec(xvec,icol)
-     end do
-    end do 
-   end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    allocate(J(1:n,1:n))
-    do icol=1,n
-     do irow=1,n
-      Richards_obj % i = irow
-      J(irow,icol)=f_obj % dfdx_vec(xvec,icol)
-     end do
-    end do 
-   end associate
-  end if
- end function Jacobian_f_Rich_vec
-
- subroutine Jacobian_f1_Rich_vec(f_obj,xvec)
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  integer(i4b)                    :: icol,irow
-
-  if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    do icol=1,n
-     do irow=max(1,icol-superdiag),min(n,icol+subdiag)
-      Richards_obj % i = irow
-      f_obj % J1(superdiag+1+irow-icol,icol)=f_obj % df1dx_vec(xvec,icol)
-     end do
-    end do 
-   end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    do icol=1,n
-     do irow=1,n
-      Richards_obj % i = irow
-      f_obj % J1(irow,icol)=f_obj % df1dx_vec(xvec,icol)
-     end do
-    end do 
-   end associate
-  end if
- end subroutine Jacobian_f1_Rich_vec
-
- subroutine Jacobian_f2_Rich_vec(f_obj,xvec)
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  integer(i4b)                    :: icol,irow
-
-  if (f_obj % banded) then ! banded storage
-   associate(n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    do icol=1,n
-     do irow=max(1,icol-superdiag),min(n,icol+subdiag)
-      Richards_obj % i = irow
-      f_obj % J2(superdiag+1+irow-icol,icol)=f_obj % df2dx_vec(xvec,icol)
-     end do
-    end do 
-   end associate
-  else ! full matrix storage
-   associate(n => f_obj % n)
-    do icol=1,n
-     do irow=1,n
-      Richards_obj % i = irow
-      f_obj % J2(irow,icol)=f_obj % df2dx_vec(xvec,icol)
-     end do
-    end do 
-   end associate
-  end if
- end subroutine Jacobian_f2_Rich_vec
-
- subroutine f_diff_vec(f_obj,xvec)
-  ! *** form non-linear vector function using the decomposition ***
-  ! note: f1_vec and f2_vec components currently only allocated for nested iterations
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n)  ! current guess
-
-  if (f_obj % f1_eval_flag) call f_obj % f1_vec_eval(xvec)
-  if (f_obj % f2_eval_flag) call f_obj % f2_vec_eval(xvec)
-
-  f_obj % f_vec = f_obj % f1_vec(:) - f_obj % f2_vec(:)
- end subroutine f_diff_vec
-
- subroutine f1_Rich_vec(f_obj,xvec)
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  integer(i4b)                    :: i
-
-  associate(n => f_obj % n)
-   do i=1,n ! interior grid points
-    Richards_obj % i = i
-    ! populate h array with current guess on ith stencil
-    if (i.ne.1) Richards_obj % h(i-1) = xvec(i-1) ! BC 
-                Richards_obj % h(i) = xvec(i) 
-    if (i.ne.n) Richards_obj % h(i+1) = xvec(i+1) ! BC 
-    f_obj % f1_vec(i) = f_obj % f1(xvec(i))
-   end do
-  end associate
- end subroutine f1_Rich_vec
-
- subroutine f2_Rich_vec(f_obj,xvec)
-  class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(1:f_obj % n) ! current guess
-  integer(i4b)                    :: i
-
-  associate(n => f_obj % n)
-   do i=1,n ! interior grid points
-    Richards_obj % i = i
-    ! populate h array with current guess on ith stencil
-    if (i.ne.1) Richards_obj % h(i-1) = xvec(i-1) ! BC 
-                Richards_obj % h(i) = xvec(i) 
-    if (i.ne.n) Richards_obj % h(i+1) = xvec(i+1) ! BC 
-    f_obj % f2_vec(i) = f_obj % f2(xvec(i))
-   end do
-  end associate
- end subroutine f2_Rich_vec
-
- real(r8b) function f_diff(f_obj,x) result(f)
-  ! ** complete scalar non-linear function from Jordan decomposition **
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-
-  f=f_obj % f1(x)-f_obj % f2(x)
- end function f_diff
-
- real(r8b) function dfdx_diff(f_obj,x) result(dfdx)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-
-  dfdx=f_obj % df1dx(x)-f_obj % df2dx(x)
- end function dfdx_diff
-
- real(r8b) function dfdx_diff_vec(f_obj,x,j) result(dfdx_vec)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x(1:f_obj % n) ! current guess
-  integer(i4b),intent(in)      :: j   
-  dfdx_vec=f_obj % df1dx_vec(x,j)-f_obj % df2dx_vec(x,j)
- end function dfdx_diff_vec
-
- real(r8b) function df1_Rich_dh_vec(f_obj,x,j) result(df1dh)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x(1:f_obj % n) ! current guess
-  integer(i4b),intent(in)      :: j   
-
-  associate(i => Richards_obj % i)
-   ! populate h array with current guess
-   if (i.ne.1)                 Richards_obj % h(i-1) = x(i-1)
-                               Richards_obj % h(i) = x(i)     
-   if (i.ne.Richards_obj % nz) Richards_obj % h(i+1) = x(i+1)
-   ! evaluate derivative of f WRT x(j)
-   df1dh=f_obj % df1dx_element(x(i),j)
-  end associate
- end function df1_Rich_dh_vec
-
- real(r8b) function df2_Rich_dh_vec(f_obj,x,j) result(df2dh)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x(1:f_obj % n) ! current guess
-  integer(i4b),intent(in)      :: j   
-
-  associate(i => Richards_obj % i)
-   ! populate h array with current guess
-   if (i.ne.1)                 Richards_obj % h(i-1) = x(i-1)
-                               Richards_obj % h(i) = x(i)     
-   if (i.ne.Richards_obj % nz) Richards_obj % h(i+1) = x(i+1)
-   ! evaluate derivative of f WRT x(j)
-   df2dh=f_obj % df2dx_element(x(i),j)
-  end associate
- end function df2_Rich_dh_vec
-
- real(r8b) function df1_Rich_dh(f_obj,x) result(df1dh)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-
-  associate(i => Richards_obj % i)
-    df1dh=f_obj % df1dx_element(x,i) ! index j = i for scalar problem
-  end associate
- end function df1_Rich_dh
-
- real(r8b) function df2_Rich_dh(f_obj,x) result(df2dh)
-  class(f_obj_type),intent(in) :: f_obj
-  real(r8b),intent(in)         :: x ! current guess
-
-  associate(i => Richards_obj % i)
-    df2dh=f_obj % df2dx_element(x,i) ! index j = i for scalar problem
-  end associate
- end function df2_Rich_dh
-
 
  !! ******************************* SUMMA procedures below ******************************* !!
 
@@ -733,7 +459,7 @@ contains
   ! ** nested Newton line search **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj            ! nested Newton object
-  character(1)     ,intent(in)    :: option           ! line search scheme option
+  integer(i4b)     ,intent(in)    :: option           ! line search scheme option
   logical          ,intent(in)    :: nested_algorithm ! flag for nested algorithm (takes dynamic Newton iteration type selection mode into account)
   real(r8b)        ,intent(in)    :: p(:) ! search direction
 
@@ -762,12 +488,12 @@ contains
   logical, parameter :: debug_output=.false.
   real(r8b) :: f_temp(1:f_obj % n) ! temporary storage of f1 for 'L' scheme
 
-  ! working options: 'I' for inner iterations, 'L' for last inner iteration, 'C' for classical (lmax=0)
+  ! working options: LS_I for inner iterations, LS_O for last inner iteration (outer scheme), LS_C for classical (lmax=0)
 
   ! initial solutions and option validation
-  if (option == 'I') then ! inner case
+  if (option == LS_I) then ! inner case
    initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
-  else if ((option == 'L').or.(option == 'C')) then ! last inner iteration (L) or classical (C)
+  else if ((option == LS_O).or.(option == LS_C)) then ! last inner iteration (LS_O) or classical (LS_C)
    !if (f_obj % nested) then
    if (nested_algorithm) then
     initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
@@ -780,11 +506,11 @@ contains
   end if
 
   ! get initial objective function (scaled)
-  if (option == 'L') then
+  if (option == LS_O) then
    f_temp(:) = f_obj % f1_vec(:) ! save value of f1 for scaled residual calculations in objective function procedure
    call f_obj % line_search_objective(nested_algorithm,.true.,.true.,option,initial_solution,f_temp,L0) ! need to compute when switching to outer scheme
   else if (f_obj % evaluate_B) then
-   if (option == 'I') then
+   if (option == LS_I) then
     call f_obj % line_search_objective(nested_algorithm,.false.,.false.,option,initial_solution,f_temp,L0) ! can reuse f, J, and rVecScaled values
    end if
   else
@@ -795,19 +521,8 @@ contains
   ! note: uses scaled Jacobian from LAPACK system (J for classical, Jdiff=J1-J2 for nested)
   call SUMMA_computeGradient(f_obj,f_obj % aJacScaled,f_obj % rVecScaled,grad_L)
 
-  ! compute search direction
-  !if (option == 'I') then ! nested or inner cases or first inner iteration (F)
-  ! p(:)=f_obj % xkp1lp1 - f_obj % xkp1l ! inner Newton step
-  !else if ((option == 'L').or.(option == 'C')) then
-  ! !if (f_obj % nested) then
-  ! if (nested_algorithm) then
-  !  p(:)=f_obj % xkp1lp1 - f_obj % xk0   ! outer Newton step
-  ! else
-  !  p(:)=f_obj % xkp1 - f_obj % xk       ! classical Newton step
-  ! end if
-  !end if
-
   ! compute local slope (use scaled values)
+  ! note: descaled search direction p computed from LAPACK solve
   m = dot_product(grad_L,p(:)/f_obj % xScale(:)) ! confirmed against homegrown line search
   c_m = c*m ! control parameter times local slope
 
@@ -849,7 +564,7 @@ contains
    !end if
 
    ! get convergence flag
-   !if (option == 'I') then
+   !if (option == LS_I) then
    ! converged = .false.
    !else
     converged = SUMMA_checkConv(f_obj,p,updated_solution)
@@ -955,7 +670,7 @@ contains
    if (.not.converged) then ! if outer/classical iterations not converged, prep for next Newton iteration (if applicable)
 
     ! obtain remaining function and Jacobian variables needed for next Newton iteration
-    if (option == 'C') then
+    if (option == LS_C) then
 
      !if (f_obj % nested) then
      if (nested_algorithm) then
@@ -976,7 +691,7 @@ contains
       end if 
      end if
 
-    else if (option == 'I') then
+    else if (option == LS_I) then
      ! have f and f1 -- need J1 (f2 and J2 don't change)
 
      ! SJT: testing computing J1 every other inner iteration
@@ -994,7 +709,7 @@ contains
 
      f_obj % L0 = L1 ! store previous inner scheme objective function value (does not apply if switching to outer line search scheme)
 
-    else if (option == 'L') then
+    else if (option == LS_O) then
 
      if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
       ! have f and f2 -- need J2, f1, J1
@@ -1021,12 +736,12 @@ contains
   logical          ,intent(in)    :: nested_algorithm ! flag for nested algorithm (takes dynamic Newton iteration type selection mode into account)
   logical          ,intent(in)    :: evaluate_f ! perform evaluations for f, f1, or f2? (if not, use stored values)
   logical          ,intent(in)    :: evaluate_rVecScaled ! perform evaluations for rVecScaled (if not, use stored values)
-  character(1)     ,intent(in)    :: option ! line search option
+  integer(i4b)     ,intent(in)    :: option ! line search option
   real(r8b)        ,intent(in)    :: solution(:) ! updated solution vector
   real(r8b)        ,intent(in)    :: f_temp(:) ! storage vector for f1 for 'L' scheme
   real(r8b)        ,intent(out)   :: L ! objective function value
 
-  if (option == 'C') then ! classical case
+  if (option == LS_C) then ! classical case
    !if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
    if (evaluate_f) then
     if (nested_algorithm) then
@@ -1037,7 +752,7 @@ contains
    end if
    !if (evaluate_rVecScaled) f_obj % rVecScaled(:) = f_obj % fScale(:) * f_obj % f_vec ! now obtained from f_vec_eval (e.g., eval8summa)
    L=f_obj % out_SS4HG % fNew ! scaled
-  else if (option == 'I') then ! inner case
+  else if (option == LS_I) then ! inner case
    if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1 (and f)
    if (evaluate_rVecScaled) then 
     f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
@@ -1045,7 +760,7 @@ contains
                         & )
    end if
    L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
-  else if (option == 'L') then ! last inner iteration case
+  else if (option == LS_O) then ! last inner iteration case
    ! OG
    !if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2 (and f which is used for checkConv)
    !if (evaluate_rVecScaled) then 
