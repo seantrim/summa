@@ -73,7 +73,7 @@ module Newton_functions
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
-   real(r8b),allocatable    :: Jdiff(:,:)    ! difference Jacobian
+   !real(r8b),allocatable    :: Jdiff(:,:)    ! difference Jacobian
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
@@ -176,9 +176,9 @@ module Newton_functions
    procedure :: f1_vec_only_eval => f1_SUMMA_vec_full   ! solver --- f1 only
    procedure :: f2_vec_only_eval => f2_SUMMA_vec_full   ! solver --- f2 only
    procedure :: f1_f2_vec_eval => f_f1_f2_SUMMA_vec_full   ! solver -- f, f1, and f2
-   procedure :: J_eval  => Jacobian_f_SUMMA_vec  ! solver
-   procedure :: J1_eval => J_J1_SUMMA_vec_full   ! solver -- J and J1
-   procedure :: J2_eval => J_J2_SUMMA_vec_full ! solver -- J and J2
+   procedure :: J_eval  => J_SUMMA_vec       ! solver -- J
+   procedure :: J1_eval => J1_SUMMA_vec_full ! solver -- J1
+   procedure :: J2_eval => J2_SUMMA_vec_full ! solver -- J2
    !procedure :: J1_J2_eval => J_J1_J2_SUMMA_vec_full ! solver J, J1, and J2
    procedure :: apply_constraints  => SUMMA_imposeConstraints
    procedure :: apply_nested_line_search => SUMMA_nested_line_search
@@ -281,8 +281,9 @@ contains
   
   allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n),source=0._r8b) ! SJT: available for classical and nested iterations (for testing -- not needed for nested)
   if (f_obj % nested) then
-   allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
-           &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
+   !allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
+   !        &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
+   allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
   end if
 
  end subroutine f_allocate_memory
@@ -1259,38 +1260,19 @@ contains
 
  end subroutine f_f1_SUMMA_vec_full
 
- subroutine J_J1_SUMMA_vec_full(f_obj,xvec)
-  ! *** Compute Jacobian for mass non-linear function --- use fully-coupled computJacob call and filter results ***
-  ! evaluate J1 and J using stateMask1
+ subroutine J1_SUMMA_vec_full(f_obj,xvec)
+  ! *** Compute Jacobian J1 for f1 non-linear function ***
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(:) ! current guess (needed for interface)
 
-  ! local
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: nBands ! # of bands for banded storage
-
   call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
-               &aJac)
+               &f_obj % J1)
 
-  ! get nested Newton solver Jacobian J1 --- not needed because only J1 terms are stored in aJac
-  !call filter_SUMMA_Jacobian(f_obj,.false.,f_obj % stateMask1,aJac,f_obj % J,f_obj % J1)
-
-  !! store Jacobian used in solver
-  !if (f_obj % banded) then ! banded storage
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-  !  nBands=nrow_banded+subdiag
-  !  f_obj % J1(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-  ! end associate
-  !else ! full matrix storage
-  ! f_obj % J1(:,:) = aJac(:,:)
-  !end if
-
-  f_obj % J1(:,:) = aJac(:,:) ! standard LAPACK solver assumed
- end subroutine J_J1_SUMMA_vec_full
+ end subroutine J1_SUMMA_vec_full
 
  subroutine f_f2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute energy non-linear function --- use fully-coupled eval8summa call and filter results ***
@@ -1380,7 +1362,7 @@ contains
 
  end subroutine f_f1_f2_SUMMA_vec_full   ! solver
 
- subroutine J_J2_SUMMA_vec_full(f_obj,xvec)
+ subroutine J2_SUMMA_vec_full(f_obj,xvec)
   ! *** Compute Jacobian for energy non-linear function --- use fully-coupled computJacob call and filter results ***
   ! evaluate J2 and J using stateMask2
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
@@ -1388,31 +1370,33 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(:) ! current guess (needed for interface)
 
-  ! local
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
-  integer(i4b) :: nBands ! # of bands for banded storage
-
   call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
-  !call f_obj % SUMMA_computJacob(.true.,.true.,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
-               &aJac)
+               &f_obj % J2)
 
-  ! get nested Newton solver Jacobian J2 --- not needed because only J2 terms are stored in aJac
-  !call filter_SUMMA_Jacobian(f_obj,.true.,f_obj % stateMask2,aJac,f_obj % J,f_obj % J2) ! negative sign applied
+  !f_obj % J2(:,:) = -f_obj % J2(:,:) !-------- note: negative sign applied (standard LAPACK solver assumed)
+  call flip_sign(f_obj % nrow, f_obj % n,f_obj % J2) ! apply negative sign to J2 entries (so that J = J1 - J2)
 
-  !! store Jacobian used in solver
-  !if (f_obj % banded) then ! banded storage
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-  !  nBands=nrow_banded+subdiag
-  !  f_obj % J2(1:nrow_banded,1:n) = -aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows -------- note: negative sign applied
-  ! end associate
-  !else ! full matrix storage
-  ! f_obj % J2(:,:) = -aJac(:,:) !-------- note: negative sign applied
-  !end if
+ contains
 
-  f_obj % J2(:,:) = -aJac(:,:) !-------- note: negative sign applied (standard LAPACK solver assumed)
- end subroutine J_J2_SUMMA_vec_full
+  subroutine flip_sign(nrow,n,array)
+   ! ** optimized routine to flip array signs **
+   ! arguments
+   integer(i4b),intent(in)            :: nrow,n
+   real(r8b),intent(inout),contiguous :: array(:,:) 
+   !local
+   integer(i4b) :: i,j
+
+   do j = 1,n
+    do concurrent (i = 1:nrow) ! permits the compiler to optimize aggressively (e.g., simd vectorization)
+     array(i,j) = -array(i,j)
+    end do
+   end do
+
+  end subroutine flip_sign
+
+ end subroutine J2_SUMMA_vec_full
 
 ! subroutine J_J1_J2_SUMMA_vec_full(f_obj,xvec) ! works if logical state masks are computed first, but no longer used
 !  ! *** Compute Jacobian for mass and energy non-linear functions --- use fully-coupled computJacob call and filter results ***
@@ -1543,14 +1527,12 @@ contains
   
  end subroutine f_SUMMA_vec
 
- subroutine Jacobian_f_SUMMA_vec(f_obj,xvec)
+ subroutine J_SUMMA_vec(f_obj,xvec)
   ! ** Compute SUMMA's Jacobian **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in)            :: xvec(:) ! current guess
   ! local variables
-  integer(i4b) :: nBands                                                      ! SUMMA's leading dimension for banded Jacobians
-  real(rkind)  :: aJac(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! SUMMA's unscaled Jacobian matrix
   logical,parameter :: mass_flag = .true.,energy_flag = .true.
 
   ! compute derivatives based on current guess
@@ -1560,19 +1542,8 @@ contains
   call f_obj % SUMMA_computJacob(mass_flag,energy_flag,&
                                 &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
                                 &f_obj % dMat,f_obj % dBaseflow_dMatric,&
-                                &aJac)
+                                &f_obj % J)
 
-  !! store Jacobian used in solver
-  !if (f_obj % banded) then ! banded storage
-  ! associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag)
-  !  nBands=nrow_banded+subdiag
-  !  f_obj % J(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-  ! end associate
-  !else ! full matrix storage
-  ! f_obj % J(:,:) = aJac(:,:)
-  !end if
-
-  f_obj % J(:,:) = aJac(:,:) ! standard LAPACK solver is assumed here
- end subroutine Jacobian_f_SUMMA_vec
+ end subroutine J_SUMMA_vec
 
 end module Newton_functions

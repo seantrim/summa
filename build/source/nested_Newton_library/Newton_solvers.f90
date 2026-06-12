@@ -92,7 +92,9 @@ contains
    end if
 
    ! solve for Newton step
-   call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
+   f_obj % AF(:,:) = f_obj % J(:,:) ! load matrix used for LU factors
+   call linear_solve(f_obj,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
+   !call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
    if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
    !f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
@@ -189,7 +191,8 @@ contains
      call f_obj % f1_vec_eval(f_obj % xkp1l); if (f_obj % f_error) return
     end if
     if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
-    f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
+    !f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
+    f_obj % AF(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:) ! difference of Jacobians (formerly Jdiff)
 
     ! refactored for efficiency
     ! determine line search scheme and whether we need to evaluate RHS vector
@@ -221,7 +224,8 @@ contains
      B(:,1) = -f_obj % rVecScaled(:)
     end if
 
-    call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
+    !call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
+    call linear_solve(f_obj,B,f_obj % tol) ! Solve AF*x_step_inner=B -- inner Newton step stored in B on output
     if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
 
     ! apply Newton step refinement and update guess
@@ -435,7 +439,7 @@ contains
 
    subroutine compute_relative_residual
     ! ** compute current residual **
-    do i=1,f_obj % n
+    do concurrent (i=1:f_obj % n)
      if (xk(i).ne.0._r8b) then
       R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
      else if (xkp1(i).ne.0._r8b) then
@@ -516,12 +520,14 @@ contains
 
  end subroutine check_residual_vector
 
- subroutine linear_solve(f_obj,A,B,tol)
+ !subroutine linear_solve(f_obj,A,B,tol)
+ subroutine linear_solve(f_obj,B,tol)
   use Newton_functions,only: LAPACK_standard,LAPACK_expert
   ! *** Solve Ax=B -- x stored in B on output *** 
   type(f_obj_type),intent(inout) :: f_obj          ! nested Newton object
   ! LAPACK Variables
-  real(r8b),intent(in)    :: A(:,:)                ! input matrix
+  !real(r8b),intent(in)    :: A(:,:)                ! input matrix
+  !real(r8b),intent(inout) :: A(:,:)                ! input matrix
   real(r8b),intent(inout) :: B(:,:)                ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
@@ -545,16 +551,18 @@ contains
    if (f_obj % banded) then ! banded matrix storage
     ! load banded storage matrix used by LAPACK (stores LU factors on output)
     !!!f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
-    f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
+    !f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale (if needed)
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
     call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
+    !call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,A,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
-    f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
+    !f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     call DGESV(f_obj % n,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
+    !call DGESV(f_obj % n,NRHS,A,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
    end if
   else if (f_obj % linear_system_solver .eq. LAPACK_expert) then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % scaling) then
@@ -564,11 +572,11 @@ contains
      stop ! fatal error
    end if
    EQUED='N' ! note: not a parameter because LAPACK may change this value on output
-   if (f_obj % banded) then ! banded matrix storage
-    call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,&
+   if (f_obj % banded) then ! banded matrix storage ---------------- may need to update A argument in this call (tried a fix but not tested)
+    call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF(f_obj % KL+1:,:),f_obj % LDA,f_obj % AF,f_obj % LDAF,&
                &IPIV,EQUED,RA,CA,B,f_obj % LDB,X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
    else ! full matrix storage
-    call DGESVX(FACT,TRANS,f_obj % n,NRHS,A,f_obj % LDA,f_obj % AF,f_obj % LDAF,IPIV,EQUED,RA,CA,B,f_obj % LDB,&
+    call DGESVX(FACT,TRANS,f_obj % n,NRHS,f_obj % AF,f_obj % LDA,f_obj % AF,f_obj % LDAF,IPIV,EQUED,RA,CA,B,f_obj % LDB,&
                &X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
    end if
    B(:,:)=X(:,:) ! put solution in output vector
