@@ -187,7 +187,7 @@ subroutine systemSolv(&
   integer(i4b),intent(in)         :: nLayers                       ! total number of layers
   logical(lgt),intent(in)         :: firstSubStep                  ! flag to indicate if we are processing the first sub-step
   logical(lgt),intent(inout)      :: firstFluxCall                 ! flag to define the first flux call
-  logical(lgt),intent(in)         :: firstSplitOper                ! flag to indicate if we are processing the first flux call in a splitting operation
+  logical(lgt),target,intent(in)  :: firstSplitOper                ! flag to indicate if we are processing the first flux call in a splitting operation
   logical(lgt),intent(in)         :: computeVegFlux                ! flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
   logical(lgt),intent(in)         :: scalarSolution                ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)         :: computMassBalance             ! flag to compute mass balance
@@ -252,7 +252,7 @@ subroutine systemSolv(&
   real(rkind),target              :: fRHS(nState)                  ! RHS function for ARKODE
   real(rkind)                     :: rAdd(nState)                  ! additional terms in the residual vector
   real(rkind)                     :: rVecScaled(nState)            ! scaled residual vector
-  logical(lgt)                    :: feasible                      ! feasibility flag
+  logical(lgt),target             :: feasible                      ! feasibility flag
   logical(lgt)                    :: sunSucceeds                   ! flag to indicate if SUNDIALS successfully solved the problem in current data step
   ! ida variables
   real(rkind)                     :: atol(nState)                  ! absolute tolerance ida
@@ -1109,8 +1109,8 @@ contains
   nested_Newton % deriv_data =>  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
 
   ! scalar data components
-  nested_Newton % firstSplitOper = firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
-  nested_Newton % feasible       = feasible       ! feasibility flag (output from eval8summa)
+  nested_Newton % firstSplitOper => firstSplitOper ! flag to indicate if we are processing the first flux call in a splitting operation 
+  nested_Newton % feasible       => feasible       ! feasibility flag (output from eval8summa)
 
 !  note: the following iteration parameters are not needed until we start reading max iteration counts from input files  
 !  ! define maximum number of iterations

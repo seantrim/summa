@@ -131,15 +131,15 @@ module Newton_functions
    type(out_type_summaSolv4homegrown),pointer :: out_SS4HG => null() ! SS4HG output object: model control variables and previous function evaluation
 
    ! additional variables for eval8summa call
-   logical(lgt)            :: firstSplitOper         ! flag to indicate if we are processing the first flux call in a splitting operation
-   real(rkind),pointer     :: fScale(:) => null()    ! characteristic scale of the function evaluations (mixed units)
-   real(rkind),pointer     :: xScale(:) => null()    ! characteristic scale of the state vector (mixed units)
-   real(qp),pointer        :: sMul(:)   => null()    ! NOTE: qp  ! multiplier for state vector for the residual calculations
-   logical(lgt)            :: feasible               ! feasibility flag
-   real(rkind),pointer     :: fluxVec0(:) => null()  ! flux vector (mixed units)
-   real(rkind),pointer     :: fRHS(:)     => null()  ! RHS function for ARKODE
-   real(rkind),pointer     :: rAdd(:)     => null()  ! additional terms in the residual vector
-   real(qp),pointer        :: resVec(:)   => null()  ! NOTE: qp  ! residual vector 
+   logical(lgt),pointer    :: firstSplitOper => null() ! flag to indicate if we are processing the first flux call in a splitting operation
+   real(rkind),pointer     :: fScale(:)      => null() ! characteristic scale of the function evaluations (mixed units)
+   real(rkind),pointer     :: xScale(:)      => null() ! characteristic scale of the state vector (mixed units)
+   real(qp),pointer        :: sMul(:)        => null() ! NOTE: qp  ! multiplier for state vector for the residual calculations
+   logical(lgt),pointer    :: feasible       => null() ! feasibility flag
+   real(rkind),pointer     :: fluxVec0(:)    => null() ! flux vector (mixed units)
+   real(rkind),pointer     :: fRHS(:)        => null() ! RHS function for ARKODE
+   real(rkind),pointer     :: rAdd(:)        => null() ! additional terms in the residual vector
+   real(qp),pointer        :: resVec(:)      => null() ! NOTE: qp  ! residual vector 
 
    ! scaled arrays
    real(rkind),allocatable :: rVecScaled(:) ! scaled residual
@@ -475,8 +475,8 @@ contains
   real(r8b) :: L1_prev ! objective function value from previous line search iteration
   real(r8b) :: initial_solution(1:f_obj % n) ! intial solution vector
   real(r8b) :: updated_solution(1:f_obj % n) ! updated solution vector
-  !real(r8b) :: p(1:f_obj % n) ! search direction
-  real(r8b) :: grad_L(1:f_obj % n) ! gradient of objective function L
+  real(r8b) :: p_scaled(1:f_obj % n)         ! search direction (scaled)
+  real(r8b) :: grad_L(1:f_obj % n)           ! gradient of objective function L
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
   real(r8b)            :: c_m ! c times m
@@ -489,7 +489,7 @@ contains
   logical   :: do_line_search
   logical   :: converged ! checkConv convergence flag
   integer(i4b), parameter :: i_max = 5_i4b ! max number of line search iterations
-  integer(i4b)   :: i        ! loop index
+  integer(i4b)   :: i,j      ! loop index
   integer(i4b)   :: err      ! SUMMA error code
   character(256) :: cmessage ! error message from SUMMA
   logical, parameter :: debug_output=.false.
@@ -530,7 +530,10 @@ contains
 
   ! compute local slope (use scaled values)
   ! note: descaled search direction p computed from LAPACK solve
-  m = dot_product(grad_L,p(:)/f_obj % xScale(:)) ! confirmed against homegrown line search
+  do concurrent (i = 1:f_obj % n)
+   p_scaled(i) = p(i)/f_obj % xScale(i)
+  end do
+  m = dot_product(grad_L,p_scaled) ! confirmed against homegrown line search
   c_m = c*m ! control parameter times local slope
 
   ! check that local slope is negative (needed to reduce the line search objective function)
@@ -556,7 +559,9 @@ contains
   
   alpha = 1._r8b ! initialize line search step size
   line_search: do i=1_i4b,i_max+1_i4b
-   updated_solution(:) = initial_solution(:) + alpha*p(:)
+   do concurrent (j = 1:f_obj % n)
+    updated_solution(j) = initial_solution(j) + alpha*p(j)
+   end do
 
    ! impose constraints (calls SUMMA's imposeConstraints routine)
    call f_obj % apply_constraints(initial_solution,updated_solution)
@@ -747,6 +752,8 @@ contains
   real(r8b)        ,intent(in)    :: solution(:) ! updated solution vector
   real(r8b)        ,intent(in)    :: f_temp(:) ! storage vector for f1 for 'L' scheme
   real(r8b)        ,intent(out)   :: L ! objective function value
+  ! local
+  integer(i4b) :: i ! loop index
 
   if (option == LS_C) then ! classical case
    !if (evaluate_f) call f_obj % f_vec_eval(solution) ! update total f
@@ -761,10 +768,19 @@ contains
    L=f_obj % out_SS4HG % fNew ! scaled
   else if (option == LS_I) then ! inner case
    if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1 (and f)
-   if (evaluate_rVecScaled) then 
-    f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
-                        & - ( f_obj % f2_vec(:) + f_obj % matrix_vector_product(f_obj % J2,solution - f_obj % xk0) )&
-                        & )
+   if (evaluate_rVecScaled) then
+    do concurrent (i = 1:f_obj % n)
+     f_obj % rVecScaled(i) = solution(i) - f_obj % xk0(i)
+    end do
+    f_obj % rVecScaled(:) = f_obj % matrix_vector_product(f_obj % J2,f_obj % rVecScaled) 
+    do concurrent (i = 1:f_obj % n)
+     f_obj % rVecScaled(i) = f_obj % fScale(i) * ( f_obj % f1_vec(i) &
+                         & - ( f_obj % f2_vec(i) + f_obj % rVecScaled(i) )&
+                         & )
+    end do
+    !f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
+    !                    & - ( f_obj % f2_vec(:) + f_obj % matrix_vector_product(f_obj % J2,solution - f_obj % xk0) )&
+    !                    & )
    end if
    L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
   else if (option == LS_O) then ! last inner iteration case
@@ -782,16 +798,34 @@ contains
     !end if
     if (evaluate_f) call f_obj % f1_f2_vec_eval(solution) ! update f2 (also f which is used for checkConv and f1 for next iteration)
     if (evaluate_rVecScaled) then ! f1 stored within f_temp because f1_vec is overwritten
-     f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_temp(:) &
-                         & + f_obj % matrix_vector_product(f_obj % J1,solution - f_obj % xkp1l) - f_obj % f2_vec(:)&
-                         & )
+     do concurrent (i = 1:f_obj % n)
+      f_obj % rVecScaled(i) = solution(i) - f_obj % xkp1l(i)
+     end do
+     f_obj % rVecScaled(:) = f_obj % matrix_vector_product(f_obj % J1,f_obj % rVecScaled)
+     do concurrent (i = 1:f_obj % n)
+      f_obj % rVecScaled(i) = f_obj % fScale(i) * ( f_temp(i) &
+                          & + f_obj % rVecScaled(i) - f_obj % f2_vec(i)&
+                          & )
+     end do
+     !f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_temp(:) &
+     !                    & + f_obj % matrix_vector_product(f_obj % J1,solution - f_obj % xkp1l) - f_obj % f2_vec(:)&
+     !                    & )
     end if
    else ! don't need f1 for last outer iteration
     if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2 (and f which is used for checkConv)
     if (evaluate_rVecScaled) then 
-     f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
-                         & + f_obj % matrix_vector_product(f_obj % J1,solution - f_obj % xkp1l) - f_obj % f2_vec(:)&
-                         & )
+     do concurrent (i = 1:f_obj % n)
+      f_obj % rVecScaled(i) = solution(i) - f_obj % xkp1l(i)
+     end do
+     f_obj % rVecScaled(:) = f_obj % matrix_vector_product(f_obj % J1,f_obj % rVecScaled)
+     do concurrent (i = 1:f_obj % n)
+      f_obj % rVecScaled(i) = f_obj % fScale(i) * ( f_obj % f1_vec(i) &
+                          & + f_obj % rVecScaled(i) - f_obj % f2_vec(i)&
+                          & )
+     end do
+     !f_obj % rVecScaled(:) = f_obj % fScale(:) * ( f_obj % f1_vec(:) &
+     !                    & + f_obj % matrix_vector_product(f_obj % J1,solution - f_obj % xkp1l) - f_obj % f2_vec(:)&
+     !                    & )
     end if
    end if
    L = 0.5_r8b*dot_product(f_obj % rVecScaled,f_obj % rVecScaled)
@@ -833,6 +867,7 @@ contains
   real(r8b),intent(inout) :: B(:,:) ! right-hand side vector
 
   ! local
+  integer(i4b)   :: i
   integer(i4b)   :: err
   character(256) :: cmessage
 
@@ -841,8 +876,10 @@ contains
 
   ! if computing RHS vector, scale in preparation for LAPACK
   if (f_obj % evaluate_B) then
-   B(:,1) = f_obj % fScale(:) * B(:,1)
-   f_obj % rVecScaled(:) = -B(:,1) ! store for reuse
+   do concurrent (i = 1:f_obj % n)
+    B(i,1) = f_obj % fScale(i) * B(i,1)
+    f_obj % rVecScaled(i) = -B(i,1) ! store for reuse
+   end do
   end if
 
   associate(&
@@ -870,7 +907,12 @@ contains
   ! input-output
   real(r8b),intent(inout) :: B(:,:) ! solution side vector
 
-  B(:,1) = B(:,1) * f_obj % xScale(:)
+  ! local
+  integer(i4b)   :: i
+
+  do concurrent (i = 1:f_obj % n)
+   B(i,1) = B(i,1) * f_obj % xScale(i)
+  end do
   
  end subroutine SUMMA_descaling
 

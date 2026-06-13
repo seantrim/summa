@@ -52,6 +52,7 @@ contains
   real(r8b)    :: final_mean                     ! mean of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: k                              ! iteration counter
+  integer(i4b) :: i                              ! loop index
   logical      :: exit_flag                      ! exit flag
   logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
@@ -82,27 +83,31 @@ contains
    if (f_obj % f_eval_flag) then
     call f_obj % f_vec_eval(f_obj % xk); if (f_obj % f_error) return ! compute non-linear function vector (f_obj % f_vec)
    end if
-   if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk)     ! compute Jacobian (f_obj % J)
 
    ! obtain RHS vector
    if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
-    B(:,1) = -f_obj % f_vec(:) ! initialize right-side vector used by LAPACK
+    do concurrent (i = 1:f_obj % n)
+     B(i,1) = -f_obj % f_vec(i) ! initialize right-side vector used by LAPACK
+    end do
    else ! get scaled RHS from previous line search call or initial value
-    B(:,1) = -f_obj % rVecScaled(:)
+    do concurrent (i = 1:f_obj % n)
+     B(i,1) = -f_obj % rVecScaled(i)
+    end do
    end if
 
    ! solve for Newton step
+   if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk) ! compute Jacobian (f_obj % J)
    f_obj % AF(:,:) = f_obj % J(:,:) ! load matrix used for LU factors
    call linear_solve(f_obj,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
-   !call linear_solve(f_obj,f_obj % J,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
    if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
-   !f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
 
    ! Newton step refinement and update guess
    if (f_obj % refinement) then
     call f_obj % apply_nested_line_search(LS_C,.false.,B(:,1)); if (f_obj % f_error) return
    else
-    f_obj % xkp1(:) = f_obj % xk(:) + B(:,1) ! update guess based on unrefined Newton step
+    do concurrent (i = 1:f_obj % n)
+     f_obj % xkp1(i) = f_obj % xk(i) + B(i,1) ! update guess based on unrefined Newton step
+    end do
    end if
 
    call check_residual_vector(f_obj,f_obj % convergence,k,f_obj % xkp1,f_obj % xk,&
@@ -152,6 +157,7 @@ contains
   real(r8b)    :: final_mean                     ! mean value of final solution vector
   real(r8b)    :: R_est                          ! estimated max relative difference in solution between iterations
   integer(i4b) :: l_total                        ! total number of inner iterations
+  integer(i4b) :: i,j
   logical      :: exit_outer,exit_inner          ! exit flags for outer and inner loops
   logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
@@ -190,9 +196,6 @@ contains
     if (f_obj % f1_eval_flag) then
      call f_obj % f1_vec_eval(f_obj % xkp1l); if (f_obj % f_error) return
     end if
-    if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
-    !f_obj % Jdiff(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:)
-    f_obj % AF(:,:) = f_obj % J1(:,:) - f_obj % J2(:,:) ! difference of Jacobians (formerly Jdiff)
 
     ! refactored for efficiency
     ! determine line search scheme and whether we need to evaluate RHS vector
@@ -219,24 +222,38 @@ contains
 
     ! obtain RHS vector
     if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
-     B(:,1) = -(f_obj % f1_vec(:) - f_obj % f2_vec(:)) + f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
+      B(:,1) = f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
+     do concurrent (i = 1:f_obj % n)
+      B(i,1) = -(f_obj % f1_vec(i) - f_obj % f2_vec(i)) + B(i,1)
+     end do
     else ! get scaled RHS from previous line search call or initial value
-     B(:,1) = -f_obj % rVecScaled(:)
+     do concurrent (i = 1:f_obj % n)
+      B(i,1) = -f_obj % rVecScaled(i)
+     end do
     end if
 
-    !call linear_solve(f_obj,f_obj % Jdiff,B,f_obj % tol) ! Solve Jdiff*x_step_inner=B -- inner Newton step stored in B on output
+    if (f_obj % J1_eval_flag) call f_obj % J1_eval(f_obj % xkp1l) ! compute Jacobian
+    do concurrent (i = 1:f_obj % nrow, j = 1:f_obj % n)
+     f_obj % AF(i,j) = f_obj % J1(i,j) - f_obj % J2(i,j) ! difference of Jacobians (formerly Jdiff)
+    end do
     call linear_solve(f_obj,B,f_obj % tol) ! Solve AF*x_step_inner=B -- inner Newton step stored in B on output
     if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
 
     ! apply Newton step refinement and update guess
     if (f_obj % refinement) then
      if (f_obj % line_search_option == LS_O) then
-      call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
-     else
-      call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
+      do concurrent (i = 1:f_obj % n) ! compute search direction for outer line search scheme
+       B(i,1) = f_obj % xkp1l(i) + B(i,1) - f_obj % xk0(i)
+      end do
+      !call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
+     !else
+     ! call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
      end if
+     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
     else
-     f_obj % xkp1lp1(:)=f_obj % xkp1l(:)+B(:,1) ! update guess if no refinement
+     do concurrent (i = 1:f_obj % n)
+      f_obj % xkp1lp1(i)=f_obj % xkp1l(i)+B(i,1) ! update guess if no refinement
+     end do
     end if
 
     call check_residual_vector(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&
@@ -520,14 +537,11 @@ contains
 
  end subroutine check_residual_vector
 
- !subroutine linear_solve(f_obj,A,B,tol)
  subroutine linear_solve(f_obj,B,tol)
   use Newton_functions,only: LAPACK_standard,LAPACK_expert
   ! *** Solve Ax=B -- x stored in B on output *** 
   type(f_obj_type),intent(inout) :: f_obj          ! nested Newton object
   ! LAPACK Variables
-  !real(r8b),intent(in)    :: A(:,:)                ! input matrix
-  !real(r8b),intent(inout) :: A(:,:)                ! input matrix
   real(r8b),intent(inout) :: B(:,:)                ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
@@ -550,19 +564,16 @@ contains
   if (f_obj % linear_system_solver .eq. LAPACK_standard) then ! use standard LAPACK solver
    if (f_obj % banded) then ! banded matrix storage
     ! load banded storage matrix used by LAPACK (stores LU factors on output)
-    !!!f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
     !f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale (if needed)
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
     call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
-    !call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,A,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
     !f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     call DGESV(f_obj % n,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
-    !call DGESV(f_obj % n,NRHS,A,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
    end if
   else if (f_obj % linear_system_solver .eq. LAPACK_expert) then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % scaling) then
