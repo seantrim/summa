@@ -566,7 +566,7 @@ subroutine eval8summa(&
                     ! input-output: data structures
                     diag_data,                 & ! intent(inout): model diagnostic variables for a local HRU
                     flux_data,                 & ! intent(inout): model fluxes for a local HRU
-                    deriv_data,                & ! intent(out):   derivatives in model fluxes w.r.t. relevant state variables
+                    deriv_data,                & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                     ! input-output: flux vector and baseflow derivatives
                     ixSaturation,              & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
                     dBaseflow_dMatric,         & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)

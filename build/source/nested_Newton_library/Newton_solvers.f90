@@ -550,11 +550,11 @@ contains
   character(1)           :: EQUED                  ! specifies equilibration type (no initial equilibration)
   integer(i4b),parameter :: NRHS = 1_i4b           ! # of right-hand-side vectors
   integer(i4b) :: INFO                             ! error code
-  integer(i4b) :: IPIV(1:f_obj % n)                ! pivot index vector
-  integer(i4b) :: IWORK(1:f_obj % n)               ! work integer array
-  real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)     ! row and column scale factors for A
+  !integer(i4b) :: IPIV(1:f_obj % n)                ! pivot index vector
+  !integer(i4b) :: IWORK(1:f_obj % n)               ! work integer array
+  !real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)     ! row and column scale factors for A
   real(r8b) :: RCOND                               ! estimate of condition number reciprocal
-  real(r8b) :: X(1:f_obj % n,1:1)                  ! solution to original (unscaled) system
+  !real(r8b) :: X(1:f_obj % n,1:1)                  ! solution to original (unscaled) system
   real(r8b) :: FERR(1:1),BERR(1:1)                 ! forward and backward error estimates (single right-hand side assumed)
 
   ! initialize error flag (used to enable recoverable errors for external drivers)
@@ -568,12 +568,12 @@ contains
     ! scale (if needed)
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
     ! solve 
-    call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO)
+    call DGBSV(f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF,f_obj % LDAF,f_obj % IPIV,B,f_obj % LDB,INFO)
    else ! full matrix storage
     !f_obj % AF(:,:)=A(:,:) ! load matrix used by LAPACK (stores LU factors on output) 
     ! scale
     if (f_obj % scaling) call f_obj % custom_scaling(B) ! B will be scaled solution vector after solving
-    call DGESV(f_obj % n,NRHS,f_obj % AF,f_obj % LDAF,IPIV,B,f_obj % LDB,INFO) ! solve
+    call DGESV(f_obj % n,NRHS,f_obj % AF,f_obj % LDAF,f_obj % IPIV,B,f_obj % LDB,INFO) ! solve
    end if
   else if (f_obj % linear_system_solver .eq. LAPACK_expert) then ! Use expert LAPACK solver with scaling and iterative refinement
    if (f_obj % scaling) then
@@ -585,12 +585,12 @@ contains
    EQUED='N' ! note: not a parameter because LAPACK may change this value on output
    if (f_obj % banded) then ! banded matrix storage ---------------- may need to update A argument in this call (tried a fix but not tested)
     call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF(f_obj % KL+1:,:),f_obj % LDA,f_obj % AF,f_obj % LDAF,&
-               &IPIV,EQUED,RA,CA,B,f_obj % LDB,X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
+               &f_obj % IPIV,EQUED,f_obj % RA,f_obj % CA,B,f_obj % LDB,f_obj % X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,f_obj % IWORK,INFO)
    else ! full matrix storage
-    call DGESVX(FACT,TRANS,f_obj % n,NRHS,f_obj % AF,f_obj % LDA,f_obj % AF,f_obj % LDAF,IPIV,EQUED,RA,CA,B,f_obj % LDB,&
-               &X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,IWORK,INFO)
+    call DGESVX(FACT,TRANS,f_obj % n,NRHS,f_obj % AF,f_obj % LDA,f_obj % AF,f_obj % LDAF,f_obj % IPIV,EQUED,f_obj % RA,f_obj % CA,B,f_obj % LDB,&
+               &f_obj % X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,f_obj % IWORK,INFO)
    end if
-   B(:,:)=X(:,:) ! put solution in output vector
+   B(:,:)=f_obj % X(:,:) ! put solution in output vector
   end if
 
   ! compute descaled solution if needed

@@ -65,7 +65,8 @@ module Newton_functions
    integer(i4b) :: kcount,lcount     ! total # of classical/outer and inner iterations
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
    integer(i4b) :: KL,KU             ! # of subdiagonals and superdiagonals for LAPACK
-   real(r8b),allocatable    :: WORK(:),AF(:,:)            ! LAPACK arrays
+   integer(i4b),allocatable :: IPIV(:),IWORK(:)                              ! LAPACK arrays
+   real(r8b),allocatable    :: WORK(:),RA(:),CA(:),X(:,:),AF(:,:)            ! LAPACK arrays
    real(r8b),pointer        :: x0(:)                      ! guess vector for vector algorithms -- must be associated with vector allocated in external program 
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
    real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
@@ -262,11 +263,23 @@ contains
    f_obj % KL = f_obj % subdiag; f_obj % KU = f_obj % superdiag
    f_obj % LDA = f_obj % KL + f_obj % KU + 1_i4b; f_obj % LDAF = f_obj % LDA + f_obj % KL
    allocate(f_obj % AF(1:f_obj % LDAF,1:f_obj % n)) ! storing LU factors requires an additional f_obj % subdiag rows
-   if (f_obj % linear_system_solver .eq. LAPACK_expert) allocate(f_obj % WORK(1:3_i4b*f_obj % n))
+   allocate(f_obj % IPIV(1:f_obj % n))                            ! pivot index vector
+   if (f_obj % linear_system_solver .eq. LAPACK_expert) then
+    allocate(f_obj % IWORK(1:f_obj % n))                          ! work integer array
+    allocate(f_obj % WORK(1:3_i4b*f_obj % n))
+    allocate(f_obj % RA(1:f_obj % n),f_obj % CA(1:f_obj % n))     ! row and column scale factors for A
+    allocate(f_obj % X(1:f_obj % n,1:1))                          ! solution to original (unscaled) system
+   end if
   else ! full matrix storage
    f_obj % LDA = f_obj % n; f_obj % LDAF = f_obj % n
    allocate(f_obj % AF(1:f_obj % n,1:f_obj % n))
-   if (f_obj % linear_system_solver .eq. LAPACK_expert) allocate(f_obj % WORK(1:4_i4b*f_obj % n))
+   allocate(f_obj % IPIV(1:f_obj % n))                            ! pivot index vector
+   if (f_obj % linear_system_solver .eq. LAPACK_expert) then
+    allocate(f_obj % IWORK(1:f_obj % n))                          ! work integer array
+    allocate(f_obj % WORK(1:4_i4b*f_obj % n))
+    allocate(f_obj % RA(1:f_obj % n),f_obj % CA(1:f_obj % n))     ! row and column scale factors for A
+    allocate(f_obj % X(1:f_obj % n,1:1))                          ! solution to original (unscaled) system
+   end if
   end if
 
   ! allocate Jacobian arrays (and initialize to zero)
