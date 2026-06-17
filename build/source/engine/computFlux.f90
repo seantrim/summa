@@ -105,6 +105,7 @@ subroutine computFlux(&
                       scalarSolution,           & ! intent(in):    flag to indicate the scalar solution
                       checkLWBalance,           & ! intent(in):    flag to check longwave balance
                       drainageMeltPond,         & ! intent(in):    drainage from the surface melt pond (kg m-2 s-1)
+                      f1_mass,f1_energy,f2_mass,f2_energy, & ! intent(in): flags to compute f1 and f2 for nested Newton
                       ! input: state variables
                       scalarCanairTempTrial,    & ! intent(in):    trial value for the temperature of the canopy air space (K)
                       scalarCanopyTempTrial,    & ! intent(in):    trial value for the temperature of the vegetation canopy (K)
@@ -159,6 +160,7 @@ subroutine computFlux(&
   logical(lgt),intent(in)            :: scalarSolution              ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)            :: checkLWBalance              ! flag to check longwave balance
   real(rkind),intent(in)             :: drainageMeltPond            ! drainage from the surface melt pond (kg m-2 s-1)
+  logical(lgt),intent(in)            :: f1_mass,f1_energy,f2_mass,f2_energy! flags to compute f1 and f2 for nested Newton
   ! input: state variables
   real(rkind),intent(in)             :: scalarCanairTempTrial       ! trial value for temperature of the canopy air space (K)
   real(rkind),intent(in)             :: scalarCanopyTempTrial       ! trial value for temperature of the vegetation canopy (K)
@@ -563,17 +565,19 @@ contains
    scalarSoilDrainage = iLayerLiqFluxSoil(nSoil)
   end associate
 
-  associate(&
-   dq_dHydStateAbove            => deriv_data%var(iLookDERIV%dq_dHydStateAbove)%dat,        & ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer above
-   dq_dHydStateBelow            => deriv_data%var(iLookDERIV%dq_dHydStateBelow)%dat,        & ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer below
-   dq_dHydStateLayerSurfVec     => deriv_data%var(iLookDERIV%dq_dHydStateLayerSurfVec)%dat, & ! intent(out): [dp(:)] change in the flux in soil surface interface w.r.t. state variables in layers
-   dPsiLiq_dPsi0                => deriv_data%var(iLookDERIV%dPsiLiq_dPsi0   )%dat          ) ! intent(in):  [dp(:)] derivative in liquid water matric pot w.r.t. the total water matric pot (-)
-   ! expand derivatives to the total water matric potential
-   ! NOTE: arrays are offset because computing derivatives in interface fluxes, at the top and bottom of the layer respectively
-   dq_dHydStateAbove(1:nSoil)   = dq_dHydStateAbove(1:nSoil)  *dPsiLiq_dPsi0(1:nSoil)
-   dq_dHydStateBelow(0:nSoil-1) = dq_dHydStateBelow(0:nSoil-1)*dPsiLiq_dPsi0(1:nSoil)
-   if(all(dq_dHydStateLayerSurfVec/=realMissing)) dq_dHydStateLayerSurfVec(1:nSoil) = dq_dHydStateLayerSurfVec(1:nSoil)*dPsiLiq_dPsi0(1:nSoil)
-  end associate
+  if ((f1_mass.or.f2_mass).or.(.not.(f1_mass.and.f2_mass.and.f1_energy.and.f2_energy))) then ! SJT: second .or. condition true for evaluating total f --- simplify and test 
+   associate(&
+    dq_dHydStateAbove            => deriv_data%var(iLookDERIV%dq_dHydStateAbove)%dat,        & ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer above
+    dq_dHydStateBelow            => deriv_data%var(iLookDERIV%dq_dHydStateBelow)%dat,        & ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer below
+    dq_dHydStateLayerSurfVec     => deriv_data%var(iLookDERIV%dq_dHydStateLayerSurfVec)%dat, & ! intent(out): [dp(:)] change in the flux in soil surface interface w.r.t. state variables in layers
+    dPsiLiq_dPsi0                => deriv_data%var(iLookDERIV%dPsiLiq_dPsi0   )%dat          ) ! intent(in):  [dp(:)] derivative in liquid water matric pot w.r.t. the total water matric pot (-)
+    ! expand derivatives to the total water matric potential
+    ! NOTE: arrays are offset because computing derivatives in interface fluxes, at the top and bottom of the layer respectively
+    dq_dHydStateAbove(1:nSoil)   = dq_dHydStateAbove(1:nSoil)  *dPsiLiq_dPsi0(1:nSoil)
+    dq_dHydStateBelow(0:nSoil-1) = dq_dHydStateBelow(0:nSoil-1)*dPsiLiq_dPsi0(1:nSoil)
+    if(all(dq_dHydStateLayerSurfVec/=realMissing)) dq_dHydStateLayerSurfVec(1:nSoil) = dq_dHydStateLayerSurfVec(1:nSoil)*dPsiLiq_dPsi0(1:nSoil)
+   end associate
+  end if
  end subroutine finalize_soilLiqFlux
  ! **** end soilLiqFlux ****
 

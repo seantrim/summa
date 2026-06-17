@@ -707,7 +707,7 @@ contains
     !call nested_Newton % set_tolerance('strict',1.e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
     ! set max # of classical iterations (for classical and dynamic modes)
-    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
+    nested_Newton % kmax_classical = 49_i4b ! for classical iterations in dynamic mode
 
     ! Linear system solver choice
     !nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -730,7 +730,7 @@ contains
 
       ! dynamic switching between classical and nested regimes?
       nested_Newton % dynamic   = .true.
-      nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamic mode
+      nested_Newton % order_min = 0.05_r8b ! min convergence order to use classical iterations in dynamic mode
 
       ! use dual method?
       nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
