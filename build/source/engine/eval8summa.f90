@@ -104,6 +104,7 @@ subroutine eval8summa(&
                       mass_flag,               & ! intent(in):    flag to compute mass terms
                       energy_flag,             & ! intent(in):    flag to compute energy terms
                       f_flag,f1_mass,f1_energy,f2_mass,f2_energy, & ! flags to compute f, f1, and f2 for nested Newton
+                      J_mass,J_energy,         & ! intent(in):    flags to compute mass and energy Jacobian terms
                       ! input: state vectors
                       stateVec,                & ! intent(in):    model state vector
                       fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -165,6 +166,7 @@ subroutine eval8summa(&
   logical(lgt),intent(in)         :: scalarSolution              ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)         :: mass_flag,energy_flag       ! flags to compute mass and energy terms
   logical(lgt),intent(in)         :: f_flag,f1_mass,f1_energy,f2_mass,f2_energy ! flags to compute f, f1, and f2 for nested Newton
+  logical(lgt),intent(in)         :: J_mass,J_energy             ! flags to compute mass and energy Jacobian terms
   ! input: state vectors
   real(rkind),intent(in)          :: stateVec(:)                 ! model state vector
   real(rkind),intent(in)          :: fScale(:)                   ! characteristic scale of the function evaluations
@@ -543,6 +545,7 @@ subroutine eval8summa(&
                     checkLWBalance,            & ! intent(in):    flag to check longwave balance
                     scalarSfcMeltPond/dt,      & ! intent(in):    drainage from the surface melt pond (kg m-2 s-1)
                     f1_mass,f1_energy,f2_mass,f2_energy, & ! intent(in): flags to compute f1 and f2 for nested Newton
+                    J_mass,J_energy,           & ! intent(in):    flags to compute mass and energy Jacobian terms
                     ! input: state variables
                     scalarCanairTempTrial,     & ! intent(in):    trial value for the temperature of the canopy air space (K)
                     scalarCanopyTempTrial,     & ! intent(in):    trial value for the temperature of the vegetation canopy (K)
@@ -740,7 +743,8 @@ integer(c_int) function eval8summa4kinsol(sunvec_y, sunvec_r, user_data) &
                 eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                 .true.,                            & ! intent(in):    flag to compute mass terms
                 .true.,                            & ! intent(in):    flag to compute energy terms
-                .false.,.false.,.false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
+                .false.,.false.,.false.,.false.,.false., & ! intent(in):    flags to compute f, f1, and f2 for nested Newton
+                .true.,.true.,                     & ! intent(in):    flags to compute mass and energy Jacobian terms
                 ! input: state vectors
                 stateVec,                          & ! intent(in):    model state vector
                 eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -860,7 +864,8 @@ integer(c_int) function eval8summa4arkode(tn, sunvec_y, sunvec_f, user_data) &
                 eqns_data%scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                 .true.,                            & ! intent(in):    flag to compute mass terms
                 .true.,                            & ! intent(in):    flag to compute energy terms
-                .false.,.false.,.false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
+                .false.,.false.,.false.,.false.,.false., & ! intent(in):    flags to compute f, f1, and f2 for nested Newton
+                .true.,.true.,                     & ! intent(in):    flags to compute mass and energy Jacobian terms
                 ! input: state vectors
                 stateVec,                          & ! intent(in):    model state vector
                 eqns_data%fScale,                  & ! intent(in):    characteristic scale of the function evaluations

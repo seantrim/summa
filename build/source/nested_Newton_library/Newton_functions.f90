@@ -1018,6 +1018,7 @@ contains
                     mass_flag,                         & ! intent(in):    flag to compute mass terms
                     energy_flag,                       & ! intent(in):    flag to compute energy terms
                     .true.,.false.,.false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton (classical iterations assumed)
+                    .true.,.true.,                     & ! intent(in):    flags to compute mass and energy Jacobian terms
                     ! input: state vectors
                     stateVecTrial,                   & ! intent(in):    model state vector
                     f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -1501,6 +1502,15 @@ contains
   real(rkind)      ,intent(out)   :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
   real(qp)         ,intent(out)   :: resVec(:)            ! residual vector
 
+  ! local
+  logical :: f1_mass,f1_energy,f2_mass,f2_energy
+
+  ! determine flags for function evaluations (takes choice of decomposition and input flags for f1 and f2 evaluations into account)
+  f1_mass   = f_obj % f1_mass_flag.and.f1_flag
+  f1_energy = f_obj % f1_energy_flag.and.f1_flag
+  f2_mass   = f_obj % f2_mass_flag.and.f2_flag
+  f2_energy = f_obj % f2_energy_flag.and.f2_flag
+
   ! evaluate residual vector for mass split
   call eval8summa(&
                    ! input: model control
@@ -1518,9 +1528,8 @@ contains
                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                    mass_flag,                         & ! intent(in):    flag to compute mass terms
                    energy_flag,                       & ! intent(in):    flag to compute energy terms
-                   .true., &
-                   f_obj % f1_mass_flag.and.f1_flag,f_obj % f1_energy_flag.and.f1_flag, &
-                   f_obj % f2_mass_flag.and.f2_flag,f_obj % f2_energy_flag.and.f2_flag, & ! intent(in): flag to compute f, f1, and f2 for nested Newton
+                   .true.,f1_mass,f1_energy,f2_mass,f2_energy, & ! intent(in): flag to compute f, f1, and f2 for nested Newton
+                   f1_mass.or.f2_mass,f1_energy.or.f2_energy,  & ! intent(in): flags to compute mass and energy Jacobian terms
                    ! input: state vectors
                    xvec,                            & ! intent(in):    model state vector
                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations

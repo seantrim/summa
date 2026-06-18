@@ -1857,7 +1857,9 @@ contains
   call update_iLayerFlux_fluxes; if (return_flag) return
 
   ! ** compute the derivatives
-  call update_iLayerFlux_derivatives; if (return_flag) return
+  if (in_iLayerFlux % J_mass) then ! if computing mass Jacobian terms
+   call update_iLayerFlux_derivatives; if (return_flag) return
+  end if
 
  end subroutine update_iLayerFlux
  

@@ -106,6 +106,7 @@ subroutine computFlux(&
                       checkLWBalance,           & ! intent(in):    flag to check longwave balance
                       drainageMeltPond,         & ! intent(in):    drainage from the surface melt pond (kg m-2 s-1)
                       f1_mass,f1_energy,f2_mass,f2_energy, & ! intent(in): flags to compute f1 and f2 for nested Newton
+                      J_mass,J_energy,          & ! intent(in):    flags to compute mass and energy Jacobian terms
                       ! input: state variables
                       scalarCanairTempTrial,    & ! intent(in):    trial value for the temperature of the canopy air space (K)
                       scalarCanopyTempTrial,    & ! intent(in):    trial value for the temperature of the vegetation canopy (K)
@@ -160,7 +161,8 @@ subroutine computFlux(&
   logical(lgt),intent(in)            :: scalarSolution              ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)            :: checkLWBalance              ! flag to check longwave balance
   real(rkind),intent(in)             :: drainageMeltPond            ! drainage from the surface melt pond (kg m-2 s-1)
-  logical(lgt),intent(in)            :: f1_mass,f1_energy,f2_mass,f2_energy! flags to compute f1 and f2 for nested Newton
+  logical(lgt),intent(in)            :: f1_mass,f1_energy,f2_mass,f2_energy ! flags to compute f1 and f2 for nested Newton
+  logical(lgt),intent(in)            :: J_mass,J_energy             ! flags to compute mass and energy Jacobian terms
   ! input: state variables
   real(rkind),intent(in)             :: scalarCanairTempTrial       ! trial value for temperature of the canopy air space (K)
   real(rkind),intent(in)             :: scalarCanopyTempTrial       ! trial value for temperature of the vegetation canopy (K)
@@ -541,7 +543,7 @@ contains
 
  ! **** soilLiqFlux ****
  subroutine initialize_soilLiqFlux
-  call in_soilLiqFlux%initialize(nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
+  call in_soilLiqFlux%initialize(nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,J_mass,scalarAquiferStorageTrial,&
                                 mLayerTempTrial,mLayerMatricHeadTrial,mLayerMatricHeadLiqTrial,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,&
                                 flux_data,deriv_data)
   call io_soilLiqFlux%initialize(nSoil,dHydCond_dMatric,flux_data,diag_data,deriv_data)
@@ -565,7 +567,7 @@ contains
    scalarSoilDrainage = iLayerLiqFluxSoil(nSoil)
   end associate
 
-  if ((f1_mass.or.f2_mass).or.(.not.(f1_mass.and.f2_mass.and.f1_energy.and.f2_energy))) then ! SJT: second .or. condition true for evaluating total f --- simplify and test 
+  if (J_mass) then ! if mass Jacobian terms are needed 
    associate(&
     dq_dHydStateAbove            => deriv_data%var(iLookDERIV%dq_dHydStateAbove)%dat,        & ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer above
     dq_dHydStateBelow            => deriv_data%var(iLookDERIV%dq_dHydStateBelow)%dat,        & ! intent(out): [dp(:)] change in flux at layer interfaces w.r.t. states in the layer below

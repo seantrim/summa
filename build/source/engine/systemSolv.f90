@@ -499,6 +499,7 @@ contains
                     nested_Newton % f1_energy_flag, & ! intent(in):    flag to compute f1 vector for nested Newton
                     nested_Newton % f2_mass_flag,   & ! intent(in):    flag to compute f2 vector for nested Newton
                     nested_Newton % f2_energy_flag, & ! intent(in):    flag to compute f2 vector for nested Newton
+                    .true.,.true.,                  & ! intent(in):    flags to compute mass and energy Jacobian terms
                     ! input: state vectors
                     stateVecTrial,           & ! intent(in):    model state vector
                     fScale,                  & ! intent(in):    characteristic scale of the function evaluations
@@ -550,6 +551,7 @@ contains
                     .true.,                  & ! intent(in):    flag to compute mass terms
                     .true.,                  & ! intent(in):    flag to compute energy terms
                     .false.,.false.,.false.,.false.,.false., & ! intent(in):    flags to compute f, f1, and f2 for nested Newton
+                    .true.,.true.,           & ! intent(in):    flags to compute mass and energy Jacobian terms
                     ! input: state vectors
                     stateVecTrial,           & ! intent(in):    model state vector
                     fScale,                  & ! intent(in):    characteristic scale of the function evaluations

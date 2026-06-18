@@ -578,6 +578,7 @@ subroutine eval8summaWithPrime(&
                     .false.,                   & ! intent(in):    do not check longwave balance
                     scalarSfcMeltPond/dt,      & ! intent(in):    drainage from the surface melt pond (kg m-2 s-1)
                     .false.,.false.,.false.,.false., & ! intent(in): flags to compute f1 and f2 for nested Newton
+                    .true.,.true.,             & ! intent(in):    flags to compute mass and energy Jacobian terms
                     ! input: state variables
                     scalarCanairTempTrial,     & ! intent(in):    trial value for the temperature of the canopy air space (K)
                     scalarCanopyTempTrial,     & ! intent(in):    trial value for the temperature of the vegetation canopy (K)

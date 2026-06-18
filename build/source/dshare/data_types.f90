@@ -466,6 +466,7 @@ MODULE data_types
    integer(i4b)             :: nSoil                             ! intent(in):    number of soil layers
    logical(lgt)             :: firstSplitOper                    ! intent(in):    flag indicating first flux call in a splitting operation
    logical(lgt)             :: scalarSolution                    ! intent(in):    flag to indicate the scalar solution
+   logical(lgt)             :: J_mass                            ! intent(in):    flag for computing mass Jacobian terms
    real(rkind)              :: scalarAquiferStorageTrial         ! intent(in):    trial value of aquifer storage (m)
    real(rkind), allocatable :: mLayerTempTrial(:)                ! intent(in):    trial temperature at the current iteration (K)
    real(rkind), allocatable :: mLayerMatricHeadTrial(:)          ! intent(in):    matric potential (m)
@@ -737,6 +738,7 @@ MODULE data_types
  type, public :: in_type_iLayerFlux ! intent(in) data
    ! input: model control
    integer(i4b) :: ixRichards    ! index defining the option for Richards' equation (moisture or mixdform)
+   logical(lgt) :: J_mass        ! flag for computing mass Jacobian terms
    ! input: state variables
    real(rkind),allocatable :: nodeMatricHeadLiqTrial(:) ! liquid matric head at the soil nodes (m)
    real(rkind),allocatable :: nodeVolFracLiqTrial(:)    ! volumetric fraction of liquid water at the soil nodes (-)
@@ -1275,7 +1277,7 @@ contains
  ! **** end snowLiqFlux ****
 
  ! **** soilLiqFlux ****
- subroutine initialize_in_soilLiqFlux(in_soilLiqFlux,nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,scalarAquiferStorageTrial,&
+ subroutine initialize_in_soilLiqFlux(in_soilLiqFlux,nSnow,nSoil,nlayers,firstSplitOper,scalarSolution,firstFluxCall,J_mass,scalarAquiferStorageTrial,&
                                      mLayerTempTrial,mLayerMatricHeadTrial,mLayerMatricHeadLiqTrial,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,&
                                      flux_data,deriv_data)
   class(in_type_soilLiqFlux),intent(out) :: in_soilLiqFlux              ! class object for intent(in) soilLiqFlux arguments
@@ -1285,6 +1287,7 @@ contains
   logical(lgt),intent(in)                :: firstSplitOper              ! flag to indicate if we are processing the first flux call in a splitting operation
   logical(lgt),intent(in)                :: scalarSolution              ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)                :: firstFluxCall               ! flag to indicate if we are processing the first flux call
+  logical(lgt),intent(in)                :: J_mass                      ! flag to compute mass Jacobian terms 
   real(rkind),intent(in)                 :: scalarAquiferStorageTrial   ! trial value of aquifer storage (m)
   real(rkind),intent(in)                 :: mLayerTempTrial(:)          ! trial value for temperature of each snow/soil layer (K)
   real(rkind),intent(in)                 :: mLayerMatricHeadTrial(:)    ! trial value for the total water matric potential (m)
@@ -1298,6 +1301,7 @@ contains
   in_soilLiqFlux % nSoil         =nSoil                                         ! intent(in): number of soil layers
   in_soilLiqFlux % firstSplitOper=firstSplitOper                                ! intent(in): flag indicating first flux call in a splitting operation
   in_soilLiqFlux % scalarSolution=(scalarSolution .and. .not.firstFluxCall)     ! intent(in): flag to indicate the scalar solution
+  in_soilLiqFlux % J_mass        =J_mass                                        ! intent(in): flag to compute mass Jacobian terms 
 
   ! intent(in) arguments: aquifer variables needed for FUSE parameterizations
   in_soilLiqFlux % scalarAquiferStorageTrial = scalarAquiferStorageTrial        ! intent(in): trial value of aquifer storage (m)
@@ -1981,6 +1985,7 @@ contains
   associate(&
    ! intent(in): model control
    ixRichards    => model_decisions(iLookDECISIONS%f_Richards)%iDecision,& ! index of the form of Richards' equation
+   J_mass        => in_soilLiqFlux % J_mass,                             & ! flag for computing mass Jacobian terms
    ! intent(in): state variables (adjacent layers)
    mLayerMatricHeadLiqTrial => in_soilLiqFlux % mLayerMatricHeadLiqTrial, & ! liquid matric head in each layer at the current iteration (m)
    mLayerVolFracLiqTrial    => in_soilLiqFlux % mLayerVolFracLiqTrial,    & ! volumetric fraction of liquid water at the current iteration (-)
@@ -1995,6 +2000,7 @@ contains
   &)
    ! intent(in): model control
    in_iLayerFlux % ixRichards    = ixRichards    ! index defining the form of Richards' equation (moisture or mixdform)
+   in_iLayerFlux % J_mass        = J_mass        ! flag for computing mass Jacobian terms
    ! intent(in): state variables (adjacent layers)
    in_iLayerFlux % nodeMatricHeadLiqTrial = mLayerMatricHeadLiqTrial(iLayer:iLayer+1) ! liquid matric head at the soil nodes (m)
    in_iLayerFlux % nodeVolFracLiqTrial    = mLayerVolFracLiqTrial(iLayer:iLayer+1)    ! volumetric liquid water content at the soil nodes (-)

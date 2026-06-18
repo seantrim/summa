@@ -1084,7 +1084,8 @@ contains
                    scalarSolution,          & ! intent(in):    flag to indicate the scalar solution
                    .true.,                  & ! intent(in):    flag to compute mass terms
                    .true.,                  & ! intent(in):    flag to compute energy terms
-                   .false.,.false.,.false.,.false.,.false., & ! intent(in):    flag to compute f, f1, and f2 for nested Newton
+                   .false.,.false.,.false.,.false.,.false., & ! intent(in):    flags to compute f, f1, and f2 for nested Newton
+                   .true.,.true.,           & ! intent(in):    flags to compute mass and energy Jacobian terms
                    ! input: state vectors
                    stateVecNew,             & ! intent(in):    updated model state vector
                    fScale,                  & ! intent(in):    characteristic scale of the function evaluations
