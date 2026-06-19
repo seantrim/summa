@@ -1530,6 +1530,7 @@ contains
                    energy_flag,                       & ! intent(in):    flag to compute energy terms
                    .true.,f1_mass,f1_energy,f2_mass,f2_energy, & ! intent(in): flag to compute f, f1, and f2 for nested Newton
                    f1_mass.or.f2_mass,f1_energy.or.f2_energy,  & ! intent(in): flags to compute mass and energy Jacobian terms
+                   !.true.,.true.,  & ! intent(in): flags to compute mass and energy Jacobian terms -- SJT: used to create reference output
                    ! input: state vectors
                    xvec,                            & ! intent(in):    model state vector
                    f_obj % fScale,                  & ! intent(in):    characteristic scale of the function evaluations

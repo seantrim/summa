@@ -598,6 +598,7 @@ MODULE data_types
  type, public :: in_type_diagv_node ! intent(in) data
    ! input: model control
    integer(i4b)           :: ixRichards                ! index defining the option for Richards' equation (moisture or mixdform)
+   logical(lgt)           :: J_mass                    ! flag to compute mass Jacobian terms
    ! input: state and diagnostic variables
    real(rkind)            :: scalarMatricHeadLiqTrial  ! liquid matric head in each layer (m)
    real(rkind)            :: scalarVolFracLiqTrial     ! volumetric fraction of liquid water in a given layer (-)
@@ -1647,7 +1648,8 @@ contains
 
   associate(&
    ! intent(in): model control
-   ixRichards    => model_decisions(iLookDECISIONS%f_Richards)%iDecision,& ! index of the form of Richards' equation
+   ixRichards    => model_decisions(iLookDECISIONS%f_Richards)%iDecision, & ! index of the form of Richards' equation
+   J_mass        => in_soilLiqFlux % J_mass,                              & ! flag to compute mass Jacobian terms 
    ! intent(in): state variables
    mLayerMatricHeadLiqTrial => in_soilLiqFlux % mLayerMatricHeadLiqTrial, & ! liquid matric head in each layer at the current iteration (m)
    mLayerVolFracLiqTrial    => in_soilLiqFlux % mLayerVolFracLiqTrial,    & ! volumetric fraction of liquid water at the current iteration (-)
@@ -1655,19 +1657,20 @@ contains
    mLayerdTheta_dTk         => in_soilLiqFlux % mLayerdTheta_dTk,         & ! derivative in volumetric liquid water content w.r.t. temperature (K-1)
    dPsiLiq_dTemp            => in_soilLiqFlux % dPsiLiq_dTemp,            & ! derivative in liquid water matric potential w.r.t. temperature (m K-1)
    ! intent(in): van Genuchten and other soil parameters..
-   vGn_alpha          => mpar_data%var(iLookPARAM%vGn_alpha)%dat,        & ! "alpha" parameter (m-1)
-   vGn_n              => mpar_data%var(iLookPARAM%vGn_n)%dat,            & ! "n" parameter (-)
-   vGn_m              => diag_data%var(iLookDIAG%scalarVGn_m)%dat,       & ! "m" parameter (-)
-   mpExp              => mpar_data%var(iLookPARAM%mpExp)%dat(1),         & ! empirical exponent in macropore flow equation (-)
-   theta_sat          => mpar_data%var(iLookPARAM%theta_sat)%dat,        & ! soil porosity (-)
-   theta_res          => mpar_data%var(iLookPARAM%theta_res)%dat,        & ! soil residual volumetric water content (-)
-   theta_mp           => mpar_data%var(iLookPARAM%theta_mp)%dat(1),      & ! volumetric liquid water content when macropore flow begins (-)
-   f_impede           => mpar_data%var(iLookPARAM%f_impede)%dat(1),      & ! ice impedence factor (-)
-   mLayerSatHydCond   => flux_data%var(iLookFLUX%mLayerSatHydCond)%dat,  & ! saturated hydraulic conductivity at the mid-point of each layer (m s-1)
-   mLayerSatHydCondMP => flux_data%var(iLookFLUX%mLayerSatHydCondMP)%dat & ! saturated hydraulic conductivity of macropores at the mid-point of each layer (m s-1)
+   vGn_alpha          => mpar_data%var(iLookPARAM%vGn_alpha)%dat,         & ! "alpha" parameter (m-1)
+   vGn_n              => mpar_data%var(iLookPARAM%vGn_n)%dat,             & ! "n" parameter (-)
+   vGn_m              => diag_data%var(iLookDIAG%scalarVGn_m)%dat,        & ! "m" parameter (-)
+   mpExp              => mpar_data%var(iLookPARAM%mpExp)%dat(1),          & ! empirical exponent in macropore flow equation (-)
+   theta_sat          => mpar_data%var(iLookPARAM%theta_sat)%dat,         & ! soil porosity (-)
+   theta_res          => mpar_data%var(iLookPARAM%theta_res)%dat,         & ! soil residual volumetric water content (-)
+   theta_mp           => mpar_data%var(iLookPARAM%theta_mp)%dat(1),       & ! volumetric liquid water content when macropore flow begins (-)
+   f_impede           => mpar_data%var(iLookPARAM%f_impede)%dat(1),       & ! ice impedence factor (-)
+   mLayerSatHydCond   => flux_data%var(iLookFLUX%mLayerSatHydCond)%dat,   & ! saturated hydraulic conductivity at the mid-point of each layer (m s-1)
+   mLayerSatHydCondMP => flux_data%var(iLookFLUX%mLayerSatHydCondMP)%dat  & ! saturated hydraulic conductivity of macropores at the mid-point of each layer (m s-1)
   &)
    ! input: model control
    in_diagv_node % ixRichards    = ixRichards    ! index defining the option for Richards' equation (moisture or mixdform)
+   in_diagv_node % J_mass        = J_mass        ! flag to compute mass Jacobian terms
    ! input: state variables
    in_diagv_node % scalarMatricHeadLiqTrial = mLayerMatricHeadLiqTrial(iSoil) ! liquid matric head in each layer (m)
    in_diagv_node % scalarVolFracLiqTrial    = mLayerVolFracLiqTrial(iSoil)    ! volumetric fraction of liquid water in a given layer (-)

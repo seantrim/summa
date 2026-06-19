@@ -600,7 +600,9 @@ contains
  subroutine update_diagv_node
   ! **** Update operations for diagv_node ****
 
-   call update_diagv_node_characteristic_derivatives; if (return_flag) return
+   if (in_diagv_node % J_mass) then ! if computing mass Jacobian terms
+    call update_diagv_node_characteristic_derivatives; if (return_flag) return
+   end if
 
    call update_diagv_node_hydraulic_conductivity;     if (return_flag) return
 
@@ -772,38 +774,40 @@ contains
    scalarHydCondMP = hydCondMP_liq(localVolFracLiq,theta_sat,theta_mp,mpExp,scalarSatHydCondMP,scalarSatHydCond)
    scalarHydCond   = hydCond_noIce*iceImpedeFac + scalarHydCondMP
 
-   ! compute derivative in hydraulic conductivity (m s-1)
-   ! compute derivative for macropores
-   if (localVolFracLiq > theta_mp) then
-     relSatMP              = (localVolFracLiq - theta_mp)/(theta_sat - theta_mp)
-     dHydCondMacro_dVolLiq = ((scalarSatHydCondMP - scalarSatHydCond)/(theta_sat - theta_mp))*mpExp*(relSatMP**(mpExp - 1._rkind))
-     dHydCondMacro_dMatric = scalardTheta_dPsi*dHydCondMacro_dVolLiq
-   else
-     dHydCondMacro_dVolLiq = 0._rkind
-     dHydCondMacro_dMatric = 0._rkind
-   end if
-   ! compute derivatives for micropores
-   if (scalarVolFracIceTrial > verySmaller) then
-     dK_dPsi__noIce        = dHydCond_dPsi(scalarMatricHeadLiqTrial,scalarSatHydCond,vGn_alpha,vGn_n,vGn_m)
-     dHydCondMicro_dTemp   = dPsiLiq_dTemp*dK_dPsi__noIce  ! m s-1 K-1
-     dHydCondMicro_dMatric = hydCond_noIce*dIceImpede_dLiq*scalardTheta_dPsi + dK_dPsi__noIce*iceImpedeFac
-   else
-     dHydCondMicro_dTemp   = 0._rkind
-     dHydCondMicro_dMatric = dHydCond_dPsi(scalarMatricHeadLiqTrial,scalarSatHydCond,vGn_alpha,vGn_n,vGn_m)
-   end if
-   ! combine matric derivatives
-   dHydCond_dMatric = dHydCondMicro_dMatric + dHydCondMacro_dMatric
+   if (in_diagv_node % J_mass) then ! if computing mass Jacobian terms
+     ! compute derivative in hydraulic conductivity (m s-1)
+     ! compute derivative for macropores
+     if (localVolFracLiq > theta_mp) then
+       relSatMP              = (localVolFracLiq - theta_mp)/(theta_sat - theta_mp)
+       dHydCondMacro_dVolLiq = ((scalarSatHydCondMP - scalarSatHydCond)/(theta_sat - theta_mp))*mpExp*(relSatMP**(mpExp - 1._rkind))
+       dHydCondMacro_dMatric = scalardTheta_dPsi*dHydCondMacro_dVolLiq
+     else
+       dHydCondMacro_dVolLiq = 0._rkind
+       dHydCondMacro_dMatric = 0._rkind
+     end if
+     ! compute derivatives for micropores
+     if (scalarVolFracIceTrial > verySmaller) then
+       dK_dPsi__noIce        = dHydCond_dPsi(scalarMatricHeadLiqTrial,scalarSatHydCond,vGn_alpha,vGn_n,vGn_m)
+       dHydCondMicro_dTemp   = dPsiLiq_dTemp*dK_dPsi__noIce  ! m s-1 K-1
+       dHydCondMicro_dMatric = hydCond_noIce*dIceImpede_dLiq*scalardTheta_dPsi + dK_dPsi__noIce*iceImpedeFac
+     else
+       dHydCondMicro_dTemp   = 0._rkind
+       dHydCondMicro_dMatric = dHydCond_dPsi(scalarMatricHeadLiqTrial,scalarSatHydCond,vGn_alpha,vGn_n,vGn_m)
+     end if
+     ! combine matric derivatives
+     dHydCond_dMatric = dHydCondMicro_dMatric + dHydCondMacro_dMatric
 
-   ! compute analytical derivative for change in ice impedance factor w.r.t. temperature
-   call dIceImpede_dTemp(scalarVolFracIceTrial, & ! intent(in):  trial value of volumetric ice content (-)
-                         dTheta_dTk,            & ! intent(in):  derivative in volumetric liquid water content w.r.t. temperature (K-1)
-                         f_impede,              & ! intent(in):  ice impedance parameter (-)
-                         dIceImpede_dT          ) ! intent(out): derivative in ice impedance factor w.r.t. temperature (K-1)
-   ! compute derivative in hydraulic conductivity w.r.t. temperature
-   dHydCond_dTemp = hydCond_noIce*dIceImpede_dT + dHydCondMicro_dTemp*iceImpedeFac
-   ! set values that are not used to missing
-   dHydCond_dVolLiq = realMissing ! not used, so cause problems
-   dDiffuse_dVolLiq = realMissing ! not used, so cause problems
+     ! compute analytical derivative for change in ice impedance factor w.r.t. temperature
+     call dIceImpede_dTemp(scalarVolFracIceTrial, & ! intent(in):  trial value of volumetric ice content (-)
+                           dTheta_dTk,            & ! intent(in):  derivative in volumetric liquid water content w.r.t. temperature (K-1)
+                           f_impede,              & ! intent(in):  ice impedance parameter (-)
+                           dIceImpede_dT          ) ! intent(out): derivative in ice impedance factor w.r.t. temperature (K-1)
+     ! compute derivative in hydraulic conductivity w.r.t. temperature
+     dHydCond_dTemp = hydCond_noIce*dIceImpede_dT + dHydCondMicro_dTemp*iceImpedeFac
+     ! set values that are not used to missing
+     dHydCond_dVolLiq = realMissing ! not used, so cause problems
+     dDiffuse_dVolLiq = realMissing ! not used, so cause problems
+   end if
 
   end associate
  end subroutine update_diagv_node_hydraulic_conductivity_mixed_form
@@ -1023,7 +1027,7 @@ contains
            case(zero_SE)         ! zero saturation excess surface runoff, all area infiltrates if not frozen
             io_surfaceFlux % scalarInfilArea = 1._rkind 
            case(homegrown_SE)    ! homegrown saturation excess surface runoff (original SUMMA method)
-              call update_surfaceFlux_homegrown_infilArea;     if (return_flag) return
+             call update_surfaceFlux_homegrown_infilArea;      if (return_flag) return
            case(FUSEPRMS)        ! FUSE PRMS surface runoff
              call update_surfaceFlux_FUSE_PRMS_infilArea;      if (return_flag) return
            case(FUSEAVIC)        ! FUSE ARNO/VIC surface runoff
