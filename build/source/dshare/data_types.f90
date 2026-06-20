@@ -647,6 +647,7 @@ MODULE data_types
  type, public :: in_type_surfaceFlux ! intent(in) data
    ! input: model control
    logical(lgt) :: firstSplitOper   ! flag indicating if desire to compute infiltration
+   logical(lgt) :: J_mass           ! flag to compute mass Jacobian terms
    integer(i4b) :: ixRichards       ! index defining the option for Richards' equation (moisture or mixdform)
    integer(i4b) :: ixInfRateMax     ! index defining the maximum infiltration rate method (GreenAmpt or topmodel_GA)
    integer(i4b) :: surfRun_SE       ! index defining the saturation excess surface runoff method
@@ -784,6 +785,7 @@ MODULE data_types
    ! input: model control
    integer(i4b) :: ixRichards                ! index defining the option for Richards' equation (moisture or mixdform)
    integer(i4b) :: bc_lower                  ! index defining the type of boundary conditions
+   logical(lgt) :: J_mass                    ! flag to compute mass Jacobian terms
    ! input: state and diagnostic variables
    real(rkind)  :: nodeMatricHeadLiq         ! liquid matric head in the lowest unsaturated node (m)
    real(rkind)  :: nodeVolFracLiq            ! volumetric liquid water content in the lowest unsaturated node (-)
@@ -1752,7 +1754,8 @@ contains
 
   associate(&
    ! model control
-   firstSplitOper         => in_soilLiqFlux % firstSplitOper,                      & ! flag to compute infiltration
+   firstSplitOper         => in_soilLiqFlux % firstSplitOper,                     & ! flag to compute infiltration
+   J_mass                 => in_soilLiqFlux % J_mass,                             & ! flag to compute mass Jacobian terms
    ixRichards             => model_decisions(iLookDECISIONS%f_Richards)%iDecision,& ! index of the form of Richards' equation
    ixBcUpperSoilHydrology => model_decisions(iLookDECISIONS%bcUpprSoiH)%iDecision,& ! index defining the type of boundary conditions
    ixInfRateMax           => model_decisions(iLookDECISIONS%infRateMax)%iDecision,& ! index of the maximum infiltration rate parameterization
@@ -1760,6 +1763,7 @@ contains
   &)
    ! intent(in): model control
    in_surfaceFlux % firstSplitOper = firstSplitOper          ! flag indicating if desire to compute infiltration
+   in_surfaceFlux % J_mass         = J_mass                  ! flag to compute mass Jacobian terms
    in_surfaceFlux % ixRichards     = ixRichards              ! index defining the form of Richards' equation (moisture or mixdform)
    in_surfaceFlux % bc_upper       = ixBcUpperSoilHydrology  ! index defining the type of boundary conditions (Neumann or Dirichlet)
    in_surfaceFlux % ixInfRateMax   = ixInfRateMax            ! index defining the maximum infiltration rate parameterization (GreenAmpt or topmodel_GA)
@@ -2079,6 +2083,7 @@ contains
    ! intent(in): model control
    ixRichards             => model_decisions(iLookDECISIONS%f_Richards)%iDecision,& ! index of the form of Richards' equation
    ixBcLowerSoilHydrology => model_decisions(iLookDECISIONS%bcLowrSoiH)%iDecision,& ! index of the lower boundary conditions for soil hydrology
+   J_mass                 => in_soilLiqFlux % J_mass,                             & ! flag to compute mass Jacobian terms 
    ! intent(in): state variables
    mLayerMatricHeadLiqTrial => in_soilLiqFlux % mLayerMatricHeadLiqTrial, & ! liquid matric head in each layer at the current iteration (m)
    mLayerVolFracLiqTrial    => in_soilLiqFlux % mLayerVolFracLiqTrial,    & ! volumetric fraction of liquid water at the current iteration (-)
@@ -2108,6 +2113,7 @@ contains
    ! intent(in): model control
    in_qDrainFlux % ixRichards    = ixRichards             ! index defining the form of Richards' equation (moisture or mixdform)
    in_qDrainFlux % bc_lower      = ixBcLowerSoilHydrology ! index defining the type of boundary conditions
+   in_qDrainFlux % J_mass        = J_mass                 ! flag to compute mass Jacobian terms  
    ! intent(in): state variables
    in_qDrainFlux % nodeMatricHeadLiq = mLayerMatricHeadLiqTrial(nSoil) ! liquid matric head in the lowest unsaturated node (m)
    in_qDrainFlux % nodeVolFracLiq    = mLayerVolFracLiqTrial(nSoil)    ! volumetric liquid water content the lowest unsaturated node (-)

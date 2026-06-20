@@ -684,13 +684,14 @@ contains
     use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for output location
     use kind_params,only: r8b                  ! kind parameters from nested Newton library
     use Newton_functions,only: LAPACK_standard ! linear system solver options
-    use Newton_functions,only: silent          ! output options
+    use Newton_functions,only: silent,verbose  ! output options
     use Newton_functions,only: custom          ! convergence options 
  
     ! * Solver Options *
 
     ! solver output
     call nested_Newton % solver_output(silent) ! standard output used by default 
+    !call nested_Newton % solver_output(verbose) ! standard output used by default 
 
     ! Newton iteration type
     nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
