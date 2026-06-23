@@ -122,7 +122,9 @@ module Newton_functions
    type(var_dlength),pointer :: diag_data => null()    ! diagnostic variables for a local HRU
    type(var_dlength),pointer :: flux_data => null()    ! temporary flux variables for a local HRU
    type(var_dlength),pointer :: deriv_data => null()   ! derivatives in model fluxes w.r.t. relevant state variables
-   real(rkind),allocatable   :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+   !real(rkind),allocatable   :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+   real(rkind),allocatable   :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
+   real(rkind),allocatable   :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
    real(rkind),pointer       :: dMat(:) => null()      ! diagonal matrix (excludes flux derivatives) 
 
    ! * summaSolve4homegrown (SS4HG) objects *
@@ -1039,7 +1041,9 @@ contains
                     f_obj % deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                     ! input-output: baseflow
                     f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                    f_obj % dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    !f_obj % dBaseflow_dMatric,       & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                    f_obj % dBaseflow_dWat,          & ! intent(out):   derivative in baseflow w.r.t. water content (s-1)
+                    f_obj % dBaseflow_dTk,           & ! intent(out):   derivative in baseflow w.r.t. temperature (s-1)
                     ! output
                     f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                     f_obj % fluxVec0,                & ! intent(out):   flux vector
@@ -1068,7 +1072,7 @@ contains
 
  subroutine SUMMA_computJacob(f_obj,mass_flag,energy_flag,&
                              &indx_data,diag_data,flux_data,deriv_data,&
-                             &dMat,dBaseflow_dMatric,&
+                             &dMat,dBaseflow_dWat,dBaseflow_dTk,&
                              &aJac)
   ! ** Interface for SUMMA's computJacob subroutine **
   ! arguments
@@ -1079,7 +1083,9 @@ contains
   type(var_dlength),intent(in)      :: flux_data              ! flux data
   type(var_dlength),intent(in)      :: deriv_data             ! derivative data
   real(rkind)      ,intent(in)      :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
-  real(rkind)      ,intent(in)      :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+  !real(rkind)      ,intent(in)      :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+  real(rkind)      ,intent(in)      :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
+  real(rkind)      ,intent(in)      :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
   real(rkind)      ,intent(out)     :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
 
   ! local variables
@@ -1094,10 +1100,11 @@ contains
    nSnow          => f_obj % in_SS4HG % nSnow          ,& ! intent(in): number of snow layers
    nSoil          => f_obj % in_SS4HG % nSoil          ,& ! intent(in): number of soil layers
    nLayers        => f_obj % in_SS4HG % nLayers        ,& ! intent(in): total number of layers
+   ixRichards     => f_obj % model_decisions(iLookDECISIONS%f_Richards)%iDecision,&  ! intent(in): form of Richards' equation
    ixMatrix       => f_obj % in_SS4HG % ixMatrix       ,& ! intent(in): type of matrix (full or band diagonal)
    computeVegFlux => f_obj % in_SS4HG % computeVegFlux  & ! intent(in): flag to indicate if computing fluxes over vegetation
   &)   
-   call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),&
+   call in_computJacob % initialize(dt_cur,nSnow,nSoil,nLayers,computeVegFlux,(ixGroundwater==qbaseTopmodel),ixRichards,&
                                    &ixMatrix,mass_flag,energy_flag)
   end associate 
 
@@ -1105,7 +1112,7 @@ contains
    associate(&
     prog_data         => f_obj % prog_data&         ! prognostic variables for a local HRU
    &)
-    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dMatric,dMat,&
+    call computJacob(in_computJacob,indx_data,prog_data,diag_data,deriv_data,dBaseflow_dWat,dBaseflow_dTk,dMat,&
                     &aJac,out_computJacob)
    end associate
 
@@ -1305,7 +1312,7 @@ contains
   call f_obj % f_state_SUMMA_vec_full(&
                &mass_flag,energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
-               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+               &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
   ! note: now obtained from computResid
   !! store total non-linear function
@@ -1325,7 +1332,7 @@ contains
 
   call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+               &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
                &f_obj % J1)
 
  end subroutine J1_SUMMA_vec_full
@@ -1345,7 +1352,7 @@ contains
   call f_obj % f_state_SUMMA_vec_full(&
                &mass_flag,energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
-               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+               &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
   ! note: now obtained from computResid
   !! store total non-linear function
@@ -1366,7 +1373,7 @@ contains
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
-               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+               &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
   ! note: now obtained from computResid
   !! store total non-linear function
@@ -1384,7 +1391,7 @@ contains
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
-               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+               &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
   ! note: now obtained from computResid
   !! store total non-linear function
@@ -1406,7 +1413,7 @@ contains
   call f_obj % f_state_SUMMA_vec_full(&
                &mass_flag,energy_flag,.true.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
-               &f_obj % dBaseflow_dMatric,f_obj % resVec)
+               &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
   ! note: now obtained from computResid
   !! store total non-linear function
@@ -1428,7 +1435,7 @@ contains
 
   call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-               &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+               &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
                &f_obj % J2)
 
   !f_obj % J2(:,:) = -f_obj % J2(:,:) !-------- note: negative sign applied (standard LAPACK solver assumed)
@@ -1484,7 +1491,7 @@ contains
 
  subroutine f_state_SUMMA_vec_full(f_obj,mass_flag,energy_flag,f1_flag,f2_flag,xvec,&
                                   &indx_data,diag_data,flux_data,deriv_data,sMul,&
-                                  &dBaseflow_dMatric,resVec)
+                                  &dBaseflow_dWat,dBaseflow_dTk,resVec)
   ! *** Compute SUMMA's vector non-linear function for mass or energy state variables -- uses fully-coupled eval8summa call ***
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
 
@@ -1499,7 +1506,9 @@ contains
   type(var_dlength),intent(inout) :: flux_data            ! flux data
   type(var_dlength),intent(inout) :: deriv_data           ! derivative data
   real(qp)         ,intent(inout) :: sMul(:)              ! state vector multipliers
-  real(rkind)      ,intent(out)   :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
+  !real(rkind)      ,intent(out)   :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
+  real(rkind)      ,intent(out)   :: dBaseflow_dWat(:,:)         ! derivative in baseflow w.r.t. soil water characteristic
+  real(rkind)      ,intent(out)   :: dBaseflow_dTk(:,:)          ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
   real(qp)         ,intent(out)   :: resVec(:)            ! residual vector
 
   ! local
@@ -1551,7 +1560,9 @@ contains
                    deriv_data,                      & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                    ! input-output: baseflow
                    f_obj % io_SS4HG % ixSaturation, & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                   dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                   !dBaseflow_dMatric,               & ! intent(out):   derivative in baseflow w.r.t. matric head (s-1)
+                   dBaseflow_dWat,                  & ! intent(out):   derivative in baseflow w.r.t. water content (s-1)
+                   dBaseflow_dTk,                   & ! intent(out):   derivative in baseflow w.r.t. temperature (s-1)
                    ! output
                    f_obj % feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                    f_obj % fluxVec0,                & ! intent(out):   flux vector
@@ -1606,7 +1617,7 @@ contains
   ! assemble Jacobian using the computed derivatives
   call f_obj % SUMMA_computJacob(mass_flag,energy_flag,&
                                 &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-                                &f_obj % dMat,f_obj % dBaseflow_dMatric,&
+                                &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
                                 &f_obj % J)
 
  end subroutine J_SUMMA_vec

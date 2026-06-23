@@ -388,9 +388,13 @@ contains
 
     ! allocate space for other variables -- SJT: commented out lines not required for eval8summa4arkode
     if (model_decisions(iLookDECISIONS%groundwatr)%iDecision==qbaseTopmodel) then
-      allocate(eqns_data%dBaseflow_dMatric(nSoil,nSoil),stat=err)
+      !allocate(eqns_data%dBaseflow_dMatric(nSoil,nSoil),stat=err)
+      allocate(eqns_data%dBaseflow_dWat(nSoil,nSoil),stat=err)
+      allocate(eqns_data%dBaseflow_dTk(nSoil,nSoil),stat=err)
     else
-      allocate(eqns_data%dBaseflow_dMatric(0,0),stat=err)
+      !allocate(eqns_data%dBaseflow_dMatric(0,0),stat=err)
+      allocate(eqns_data%dBaseflow_dWat(0,0),stat=err)
+      allocate(eqns_data%dBaseflow_dTk(0,0),stat=err)
     end if
     !allocate( eqns_data%mLayerTempPrev(nLayers) )     ! may be required for root finding problem
     !allocate( eqns_data%mLayerMatricHeadPrev(nSoil) )
@@ -816,7 +820,9 @@ contains
     deallocate( eqns_data%model_decisions)
     deallocate( eqns_data%sMul )
     deallocate( eqns_data%dMat )
-    deallocate( eqns_data%dBaseflow_dMatric )
+    !deallocate( eqns_data%dBaseflow_dMatric )
+    deallocate( eqns_data%dBaseflow_dWat )
+    deallocate( eqns_data%dBaseflow_dTk )
     !deallocate( eqns_data%mLayerTempPrev )          ! may be required for root finding problem
     !deallocate( eqns_data%mLayerMatricHeadPrev )
     !deallocate( eqns_data%mLayerTempTrial )         ! may be required for root finding problem
