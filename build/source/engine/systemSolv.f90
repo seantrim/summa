@@ -414,12 +414,14 @@ contains
    end if
 
    ! allocate space for the baseflow derivatives
-   if (ixGroundwater==qbaseTopmodel) then
-    allocate(dBaseflow_dWat(nSoil,nSoil),dBaseflow_dTk(nSoil,nSoil),stat=err)
-   else
-     allocate(dBaseflow_dWat(0,0),dBaseflow_dTk(0,0),stat=err)
+   if (.not.nested_Newton_flag) then ! all solvers except nested Newton (because allocation is already done)
+     if (ixGroundwater==qbaseTopmodel) then
+      allocate(dBaseflow_dWat(nSoil,nSoil),dBaseflow_dTk(nSoil,nSoil),stat=err)
+     else
+       allocate(dBaseflow_dWat(0,0),dBaseflow_dTk(0,0),stat=err)
+     end if
+     if (err/=0) then; err=20; message=trim(message)//'unable to allocate space for the baseflow derivatives'; return_flag=.true.; return; end if
    end if
-   if (err/=0) then; err=20; message=trim(message)//'unable to allocate space for the baseflow derivatives'; return_flag=.true.; return; end if
   end associate
 
  end subroutine allocate_memory
@@ -520,8 +522,8 @@ contains
                     deriv_data,              & ! intent(inout): derivatives in model fluxes w.r.t. relevant state variables
                     ! input-output: baseflow
                     ixSaturation,            & ! intent(inout): index of the lowest saturated layer (NOTE: only computed on the first iteration)
-                    dBaseflow_dWat,          & ! intent(out):   derivative in baseflow w.r.t. soil water characteristic
-                    dBaseflow_dTk,           & ! intent(out):   derivative in baseflow w.r.t. temperature (m s-1 K-1)
+                    nested_Newton % dBaseflow_dWat, & ! intent(out):   derivative in baseflow w.r.t. soil water characteristic
+                    nested_Newton % dBaseflow_dTk,  & ! intent(out):   derivative in baseflow w.r.t. temperature (m s-1 K-1)
                     ! output
                     feasible,                & ! intent(out):   flag to denote the feasibility of the solution
                     fluxVec0,                & ! intent(out):   flux vector
@@ -646,7 +648,7 @@ contains
                     ! output: new values of variables needed in data window outside of internal IDA for rootfinding and to start enthalpy calculations
                     mLayerTemp,              & ! intent(inout): vector of layer temperature (K)
                     mLayerMatricHead,        & ! intent(out):   value for total water matric potential (m)
-                  ! output: new prime values of variables needed in data window outside of internal IDA for Jacobian
+                    ! output: new prime values of variables needed in data window outside of internal IDA for Jacobian
                     scalarCanopyTempPrime,   & ! intent(out):   prime value for temperature of the vegetation canopy (K s-1)
                     scalarCanopyWatPrime,    & ! intent(out):   prime value for total water content of the vegetation canopy (kg m-2 s-1)
                     mLayerTempPrime,         & ! intent(out):   prime vector of temperature of each snow and soil layer (K s-1)
@@ -1110,8 +1112,8 @@ contains
   nested_Newton % resVec         => resVec           ! residual vector    
 
   !call move_alloc(dBaseflow_dMatric,nested_Newton % dBaseflow_dMatric)  ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
-  call move_alloc(dBaseflow_dWat,nested_Newton % dBaseflow_dWat) ! derivative in baseflow w.r.t. water content (s-1) -- allocated in systemSolv
-  call move_alloc(dBaseflow_dTk,nested_Newton % dBaseflow_dTk)   ! derivative in baseflow w.r.t. temperature (s-1) -- allocated in systemSolv
+  !call move_alloc(dBaseflow_dWat,nested_Newton % dBaseflow_dWat) ! derivative in baseflow w.r.t. water content (s-1) -- allocated in systemSolv
+  !call move_alloc(dBaseflow_dTk,nested_Newton % dBaseflow_dTk)   ! derivative in baseflow w.r.t. temperature (s-1) -- allocated in systemSolv
   nested_Newton % prog_data  =>  prog_data  ! prognostic variables for a local HRU (assignment needed due to initial eval8summa call)
   nested_Newton % diag_data  =>  diag_data  ! diagnostic variables for a local HRU
   nested_Newton % deriv_data =>  deriv_data ! derivatives in model fluxes w.r.t. relevant state variables
@@ -1192,8 +1194,8 @@ contains
 
   ! data structures changed by computFlux
   !call move_alloc(nested_Newton % dBaseflow_dMatric,dBaseflow_dMatric)  ! derivative in baseflow w.r.t. matric head (s-1) -- allocated in systemSolv
-  call move_alloc(nested_Newton % dBaseflow_dWat,dBaseflow_dWat) ! derivative in baseflow w.r.t. water content (s-1) -- allocated in systemSolv
-  call move_alloc(nested_Newton % dBaseflow_dTk,dBaseflow_dTk)   ! derivative in baseflow w.r.t. temperature (s-1) -- allocated in systemSolv
+  !call move_alloc(nested_Newton % dBaseflow_dWat,dBaseflow_dWat) ! derivative in baseflow w.r.t. water content (s-1) -- allocated in systemSolv
+  !call move_alloc(nested_Newton % dBaseflow_dTk,dBaseflow_dTk)   ! derivative in baseflow w.r.t. temperature (s-1) -- allocated in systemSolv
 
   ! eval8summa changes the source/sink terms
 
@@ -1247,8 +1249,10 @@ contains
   ! free memory
   deallocate(mLayerCmpress_sum)
   deallocate(mLayerMatricHeadPrime)
-  deallocate(dBaseflow_dWat)
-  deallocate(dBaseflow_dTk)
+  if (.not.nested_Newton_flag) then ! deallocation not needed for nested Newton solver
+    deallocate(dBaseflow_dWat)
+    deallocate(dBaseflow_dTk)
+  end if
  end subroutine finalize_systemSolv
 
 end subroutine systemSolv

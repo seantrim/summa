@@ -686,6 +686,7 @@ contains
     use Newton_functions,only: LAPACK_standard ! linear system solver options
     use Newton_functions,only: silent,verbose  ! output options
     use Newton_functions,only: custom          ! convergence options 
+    use mDecisions_module,only: qbaseTopmodel  ! TOPMODEL-ish baseflow parameterization
  
     ! * Solver Options *
 
@@ -731,7 +732,7 @@ contains
 
       ! dynamic switching between classical and nested regimes?
       nested_Newton % dynamic   = .true.
-      nested_Newton % order_min = 0.05_r8b ! min convergence order to use classical iterations in dynamic mode
+      nested_Newton % order_min = 0.01_r8b ! min convergence order to use classical iterations in dynamic mode
 
       ! use dual method?
       nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
@@ -740,7 +741,7 @@ contains
       nested_Newton % convergence_inner = custom ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 2_i4b 
+      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 1_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
@@ -775,6 +776,18 @@ contains
     ! allocate arrays that depend on nState
     allocate(nested_Newton % rVecScaled(1:nested_Newton % n))
     allocate(nested_Newton % aJacScaled(1:nested_Newton % nLeadDim,1:nested_Newton % n))
+
+    ! allocate space for the baseflow derivatives
+    associate(&
+     nSoil             => indx_data%var(iLookINDEX%nSoil)%dat(1)              ,& ! intent(in): [i4b] number of soil layers
+     ixGroundwater     => model_decisions(iLookDECISIONS%groundwatr)%iDecision & ! intent(in): [i4b] groundwater parameterization
+     &)
+      if (ixGroundwater==qbaseTopmodel) then
+        allocate(nested_Newton % dBaseflow_dWat(nSoil,nSoil),nested_Newton % dBaseflow_dTk(nSoil,nSoil))
+      else
+        allocate(nested_Newton % dBaseflow_dWat(0,0),nested_Newton % dBaseflow_dTk(0,0))
+      end if
+    end associate
 
     ! allocate certain components of the nested_Newton object (e.g., f and J arrays)
     call nested_Newton % allocate_memory()
