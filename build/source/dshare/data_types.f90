@@ -532,6 +532,7 @@ MODULE data_types
    integer(i4b)             :: nLayers                           ! intent(in):    total number of layers
    integer(i4b)             :: ixRichards                        ! intent(in):    index defining the option for Richards' equation
    logical(lgt)             :: firstFluxCall                     ! intent(in):    logical flag to compute index of the lowest saturated layer
+   logical(lgt)             :: J_mass                            ! intent(in):    flag for computing mass Jacobian terms
    real(rkind), allocatable :: dVolTot_dPsi0(:)                  ! intent(in):    derivative in total volumetric water content w.r.t. matric head (m-1)
    real(rkind), allocatable :: mLayerdTheta_dPsi(:)              ! intent(in):    derivative in liquid water content w.r.t. matric potential (m-1)
    real(rkind), allocatable :: mLayerdTheta_dTk(:)               ! intent(in):    derivative in volumetric liquid water content w.r.t. temperature (K-1)
