@@ -109,7 +109,7 @@ subroutine snowLiqFlux(&
     mw_exp           => mpar_data%var(iLookPARAM%mw_exp)%dat(1),                & ! intent(in):    exponent for meltwater flow (-)
     ! input-output: diagnostic variables -- only computed for the first iteration
     mLayerPoreSpace  => diag_data%var(iLookDIAG%mLayerPoreSpace)%dat,           & ! intent(inout): pore space in each snow layer (-)
-    mLayerThetaResid => diag_data%var(iLookDIAG%mLayerThetaResid)%dat,          & ! intent(inout): esidual volumetric liquid water content in each snow layer (-)
+    mLayerThetaResid => diag_data%var(iLookDIAG%mLayerThetaResid)%dat,          & ! intent(inout): residual volumetric liquid water content in each snow layer (-)
     ! input-output: fluxes and derivatives
     iLayerLiqFluxSnow      => io_snowLiqFlux % iLayerLiqFluxSnow,                & ! intent(inout): vertical liquid water flux at layer interfaces (m s-1)
     iLayerLiqFluxSnowDeriv => io_snowLiqFlux % iLayerLiqFluxSnowDeriv,           & ! intent(inout): derivative in vertical liquid water flux at layer interfaces (m s-1)
