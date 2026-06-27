@@ -592,13 +592,13 @@ contains
     message=trim(message)//'expect dBaseflow_dWat and dBaseflow_dTk to be nSoil x nSoil'
     err=20; return
   end if
-  call in_groundwatr%initialize(nSnow,nSoil,nLayers,firstFluxCall,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,deriv_data,model_decisions)
+  call in_groundwatr%initialize(nSnow,nSoil,nLayers,firstFluxCall,J_mass,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,deriv_data,model_decisions)
   call io_groundwatr%initialize(ixSaturation)
  end subroutine initialize_groundwatr
 
  subroutine finalize_groundwatr
   call io_groundwatr%finalize(ixSaturation)
-  call out_groundwatr%finalize(dBaseflow_dWat,dBaseflow_dTk,flux_data,err,cmessage)
+  call out_groundwatr%finalize(J_mass,dBaseflow_dWat,dBaseflow_dTk,flux_data,err,cmessage)
   ! error control
   if (err/=0) then; message=trim(message)//trim(cmessage); return; end if
  end subroutine finalize_groundwatr

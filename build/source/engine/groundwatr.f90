@@ -105,8 +105,11 @@ subroutine groundwatr(&
   character(len=256)                     :: cmessage          ! error message
   ! ***************************************************************************************
   ! associate variables in data structures
-  allocate(out_groundwatr % mLayerBaseflow(in_groundwatr%nSoil),out_groundwatr % dBaseflow_dWat(in_groundwatr%nSoil,in_groundwatr%nSoil),&
-           out_groundwatr % dBaseflow_dTk(in_groundwatr%nSoil,in_groundwatr%nSoil)) ! allocate intent(out) data structure components
+  allocate(out_groundwatr % mLayerBaseflow(in_groundwatr%nSoil))
+  if (in_groundwatr % J_mass) then ! if computing mass Jacobian terms
+    allocate(out_groundwatr % dBaseflow_dWat(in_groundwatr%nSoil,in_groundwatr%nSoil),&
+             out_groundwatr % dBaseflow_dTk(in_groundwatr%nSoil,in_groundwatr%nSoil)) 
+  end if
   associate(&
     ! input: model control
     nSnow               => in_groundwatr % nSnow,                              & ! intent(in):    [i4b] number of snow layers
@@ -114,6 +117,7 @@ subroutine groundwatr(&
     nLayers             => in_groundwatr % nLayers,                            & ! intent(in):    [i4b] total number of layers
     getSatDepth         => in_groundwatr % firstFluxCall,                      & ! intent(in):    [lgt] logical flag to compute index of the lowest saturated layer
     ixRichards          => in_groundwatr % ixRichards,                         & ! intent(in):    [i4b] index of the form of Richards' equation
+    J_mass              => in_groundwatr % J_mass,                             & ! intent(in):    [lgt] flag for computing mass Jacobian terms
     ! input: diagnostic variables
     mLayerVolFracLiq    => in_groundwatr % mLayerVolFracLiqTrial,              & ! intent(in):    [dp] volumetric fraction of liquid water (-)
     mLayerVolFracIce    => in_groundwatr % mLayerVolFracIceTrial,              & ! intent(in):    [dp] volumetric fraction of ice (-)
@@ -159,8 +163,10 @@ subroutine groundwatr(&
       scalarExfiltration     = 0._rkind   ! exfiltration from the soil profile (m s-1)
       mLayerColumnOutflow(:) = 0._rkind   ! column outflow from each soil layer (m3 s-1)
       mLayerBaseflow(:)      = 0._rkind   ! baseflow from each soil layer (m s-1)
-      dBaseflow_dWat(:,:)    = 0._rkind   ! derivative in baseflow w.r.t. soil water characteristic
-      dBaseflow_dTk(:,:)     = 0._rkind   ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
+      if (J_mass) then ! if computing mass Jacobian terms
+        dBaseflow_dWat(:,:)    = 0._rkind   ! derivative in baseflow w.r.t. soil water characteristic
+        dBaseflow_dTk(:,:)     = 0._rkind   ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
+      end if
       return
     end if  ! if some layers are saturated
 
@@ -176,6 +182,7 @@ subroutine groundwatr(&
                           nLayers,                 & ! intent(in):    total number of layers
                           ixSaturation,            & ! intent(in):    index of upper-most "saturated" layer
                           ixRichards,              & ! intent(in):    index of the form of Richards' equation
+                          J_mass,                  & ! intent(in):    flag to compute mass Jacobian terms 
                           mLayerVolFracLiq,        & ! intent(in):    volumetric fraction of liquid water in each soil layer (-)
                           mLayerVolFracIce,        & ! intent(in):    volumetric fraction of ice in each soil layer (-)
                           ! input/output: data structures
@@ -209,6 +216,7 @@ subroutine computBaseflow(&
                           nLayers,                       & ! intent(in):    total number of layers
                           ixSaturation,                  & ! intent(in):    index of upper-most "saturated" layer
                           ixRichards,                    & ! intent(in):    index of the form of Richards' equation
+                          J_mass,                        & ! intent(in):    flag to compute mass Jacobian terms 
                           mLayerVolFracLiq,              & ! intent(in):    volumetric fraction of liquid water in each soil layer (-)
                           mLayerVolFracIce,              & ! intent(in):    volumetric fraction of ice in each soil layer (-)
                           ! input/output: data structures
@@ -236,6 +244,7 @@ subroutine computBaseflow(&
   integer(i4b),intent(in)          :: nLayers                 ! total number of layers
   integer(i4b),intent(in)          :: ixSaturation            ! index of upper-most "saturated" layer
   integer(i4b),intent(in)          :: ixRichards              ! index of the form of Richards' equation
+  logical(lgt),intent(in)          :: J_mass                  ! flag for computing mass Jacobian terms
   real(rkind),intent(in)           :: mLayerVolFracLiq(:)     ! volumetric fraction of liquid water (-)
   real(rkind),intent(in)           :: mLayerVolFracIce(:)     ! volumetric fraction of ice (-)
   ! input/output: data structures
@@ -357,14 +366,16 @@ subroutine computBaseflow(&
       expF = exp((availStorage - xCenter)/xWidth)
       logF = 1._rkind / (1._rkind + expF)
       ! compute the derivative in the logistic function w.r.t. volumetric water content in each soil layer, NOTE dLogFunc_dTemp = 0
-      select case (ixRichards)
-       case(moisture); dLogFunc_dWat(1:nSoil) = mLayerDepth(1:nSoil)*(expF/xWidth)/(1._rkind + expF)**2_i4b
-       case(mixdform); dLogFunc_dWat(1:nSoil) = mLayerDepth(1:nSoil)*(expF/xWidth)/(1._rkind + expF)**2_i4b * dVolTot_dPsi0(1:nSoil)
-       case default; err=20; message=trim(message)//'expect ixRichards to be moisture or mixdform'; return
-      end select
+      if (J_mass) then ! if computing mass Jacobian terms
+        select case (ixRichards)
+         case(moisture); dLogFunc_dWat(1:nSoil) = mLayerDepth(1:nSoil)*(expF/xWidth)/(1._rkind + expF)**2_i4b
+         case(mixdform); dLogFunc_dWat(1:nSoil) = mLayerDepth(1:nSoil)*(expF/xWidth)/(1._rkind + expF)**2_i4b * dVolTot_dPsi0(1:nSoil)
+         case default; err=20; message=trim(message)//'expect ixRichards to be moisture or mixdform'; return
+        end select
+      end if
     else
-      logF             = 0._rkind
-      dLogFunc_dWat(:) = 0._rkind
+      logF = 0._rkind
+      if (J_mass) dLogFunc_dWat(:) = 0._rkind
     end if
 
     ! compute the exfiltration (m s-1)
@@ -388,51 +399,55 @@ subroutine computBaseflow(&
     ! (2) compute the derivative in the baseflow flux w.r.t. volumetric liquid water content (m s-1)
     ! ***********************************************************************************************************************
 
-    ! initialize the derivative matrix
-    dBaseflow_dVolLiq(:,:) = 0._rkind
-    dBaseflow_dWat(:,:) = 0._rkind
-    dBaseflow_dTk(:,:) = 0._rkind
+    if (J_mass) then
 
-    ! compute ratio of hillslope width to hillslope area (m m-2)
-    length2area = tan_slope*contourLength/HRUarea
+      ! initialize the derivative matrix
+      dBaseflow_dVolLiq(:,:) = 0._rkind
+      dBaseflow_dWat(:,:) = 0._rkind
+      dBaseflow_dTk(:,:) = 0._rkind
 
-    ! compute the ratio of layer depth to maximum water holding capacity (-)
-    depth2capacity(1:nSoil) = mLayerDepth(1:nSoil)/(theta_sat(1:nSoil) - fieldCapacity)/soilDepth
-    do iLayer=1,nSoil
-      if (mLayerVolFracLiq(iLayer) <= fieldCapacity) depth2capacity(iLayer) = 0._rkind
-    end do
+      ! compute ratio of hillslope width to hillslope area (m m-2)
+      length2area = tan_slope*contourLength/HRUarea
 
-    ! compute the change in dimensionless flux w.r.t. change in dimensionless storage (-)
-    dXdS(1:nSoil) = zScale_TOPMODEL*(zActive(1:nSoil)/soilDepth)**(zScale_TOPMODEL - 1._rkind)
-
-    ! loop through soil layers
-    do iLayer=1,nSoil
-      ! compute diagonal terms (s-1)
-      dBaseflow_dVolLiq(iLayer,iLayer) = tran0*dXdS(iLayer)*depth2capacity(iLayer)*length2area
-      select case (ixRichards)
-       case(moisture); dBaseflow_dWat(iLayer,iLayer) = dBaseflow_dVolLiq(iLayer,iLayer)
-       case(mixdform); dBaseflow_dWat(iLayer,iLayer) = dBaseflow_dVolLiq(iLayer,iLayer)*mLayerdTheta_dPsi(iLayer)
-      end select
-      dBaseflow_dTk(iLayer,iLayer) = dBaseflow_dVolLiq(iLayer,iLayer)*mLayerdTheta_dTk(iLayer)
-      ! compute off-diagonal terms
-      do jLayer=iLayer+1,nSoil  ! only dependent on layers below
-        dBaseflow_dVolLiq(iLayer,jLayer) = tran0*(dXdS(iLayer) - dXdS(iLayer+1))*depth2capacity(jLayer)*length2area
-        select case (ixRichards)
-         case(moisture); dBaseflow_dWat(iLayer,jLayer) = dBaseflow_dVolLiq(iLayer,jLayer)
-         case(mixdform); dBaseflow_dWat(iLayer,jLayer) = dBaseflow_dVolLiq(iLayer,jLayer)*mLayerdTheta_dPsi(jLayer)
-         end select
-        dBaseflow_dTk(iLayer,jLayer) = dBaseflow_dVolLiq(iLayer,jLayer)*mLayerdTheta_dTk(jLayer)
-      end do  ! end looping through soil layers
-    end do  ! end looping through soil layers
-
-    ! compute the derivative in the exfiltration flux and add to the baseflow derivative matrix
-    if (totalColumnInflow > totalColumnOutflow .and. logF > tiny(1._rkind)) then
+      ! compute the ratio of layer depth to maximum water holding capacity (-)
+      depth2capacity(1:nSoil) = mLayerDepth(1:nSoil)/(theta_sat(1:nSoil) - fieldCapacity)/soilDepth
       do iLayer=1,nSoil
-        dExfiltrate_dWat(iLayer) = -sum(dBaseflow_dWat(1:nSoil,iLayer))*logF - dLogFunc_dWat(iLayer)*qbTotal
-        dExfiltrate_dTk(iLayer) = -sum(dBaseflow_dTk(1:nSoil,iLayer))*logF
+        if (mLayerVolFracLiq(iLayer) <= fieldCapacity) depth2capacity(iLayer) = 0._rkind
+      end do
+
+      ! compute the change in dimensionless flux w.r.t. change in dimensionless storage (-)
+      dXdS(1:nSoil) = zScale_TOPMODEL*(zActive(1:nSoil)/soilDepth)**(zScale_TOPMODEL - 1._rkind)
+
+      ! loop through soil layers
+      do iLayer=1,nSoil
+        ! compute diagonal terms (s-1)
+        dBaseflow_dVolLiq(iLayer,iLayer) = tran0*dXdS(iLayer)*depth2capacity(iLayer)*length2area
+        select case (ixRichards)
+         case(moisture); dBaseflow_dWat(iLayer,iLayer) = dBaseflow_dVolLiq(iLayer,iLayer)
+         case(mixdform); dBaseflow_dWat(iLayer,iLayer) = dBaseflow_dVolLiq(iLayer,iLayer)*mLayerdTheta_dPsi(iLayer)
+        end select
+        dBaseflow_dTk(iLayer,iLayer) = dBaseflow_dVolLiq(iLayer,iLayer)*mLayerdTheta_dTk(iLayer)
+        ! compute off-diagonal terms
+        do jLayer=iLayer+1,nSoil  ! only dependent on layers below
+          dBaseflow_dVolLiq(iLayer,jLayer) = tran0*(dXdS(iLayer) - dXdS(iLayer+1))*depth2capacity(jLayer)*length2area
+          select case (ixRichards)
+           case(moisture); dBaseflow_dWat(iLayer,jLayer) = dBaseflow_dVolLiq(iLayer,jLayer)
+           case(mixdform); dBaseflow_dWat(iLayer,jLayer) = dBaseflow_dVolLiq(iLayer,jLayer)*mLayerdTheta_dPsi(jLayer)
+           end select
+          dBaseflow_dTk(iLayer,jLayer) = dBaseflow_dVolLiq(iLayer,jLayer)*mLayerdTheta_dTk(jLayer)
+        end do  ! end looping through soil layers
       end do  ! end looping through soil layers
-      dBaseflow_dWat(1,1:nSoil) = dBaseflow_dWat(1,1:nSoil) + dExfiltrate_dWat(1:nSoil)
-      dBaseflow_dTk(1,1:nSoil) = dBaseflow_dTk(1,1:nSoil) + dExfiltrate_dTk(1:nSoil)
+
+      ! compute the derivative in the exfiltration flux and add to the baseflow derivative matrix
+      if (totalColumnInflow > totalColumnOutflow .and. logF > tiny(1._rkind)) then
+        do iLayer=1,nSoil
+          dExfiltrate_dWat(iLayer) = -sum(dBaseflow_dWat(1:nSoil,iLayer))*logF - dLogFunc_dWat(iLayer)*qbTotal
+          dExfiltrate_dTk(iLayer) = -sum(dBaseflow_dTk(1:nSoil,iLayer))*logF
+        end do  ! end looping through soil layers
+        dBaseflow_dWat(1,1:nSoil) = dBaseflow_dWat(1,1:nSoil) + dExfiltrate_dWat(1:nSoil)
+        dBaseflow_dTk(1,1:nSoil) = dBaseflow_dTk(1,1:nSoil) + dExfiltrate_dTk(1:nSoil)
+      end if
+
     end if
 
   end associate ! end association to data in structures

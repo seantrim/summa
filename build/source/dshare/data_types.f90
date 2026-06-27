@@ -1511,12 +1511,13 @@ contains
  ! **** end soilLiqFlux ****
 
  ! **** groundwatr ****
- subroutine initialize_in_groundwatr(in_groundwatr,nSnow,nSoil,nLayers,firstFluxCall,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,deriv_data,model_decisions)
+ subroutine initialize_in_groundwatr(in_groundwatr,nSnow,nSoil,nLayers,firstFluxCall,J_mass,mLayerVolFracLiqTrial,mLayerVolFracIceTrial,deriv_data,model_decisions)
   class(in_type_groundwatr),intent(out) :: in_groundwatr               ! class object for intent(in) groundwatr arguments
   integer(i4b),intent(in)               :: nSnow                       ! number of snow layers
   integer(i4b),intent(in)               :: nSoil                       ! number of soil layers
   integer(i4b),intent(in)               :: nLayers                     ! total number of layers
   logical(lgt),intent(in)               :: firstFluxCall               ! logical flag to compute index of the lowest saturated layer
+  logical(lgt),intent(in)               :: J_mass                      ! logical flag to compute mass Jacobian terms
   real(rkind),intent(in)                :: mLayerVolFracLiqTrial(:)    ! trial value for volumetric fraction of liquid water (-)
   real(rkind),intent(in)                :: mLayerVolFracIceTrial(:)    ! trial value for volumetric fraction of ice (-)
   type(var_dlength),intent(in)          :: deriv_data                  ! derivatives in model fluxes w.r.t. relevant state variables
@@ -1532,6 +1533,7 @@ contains
    in_groundwatr % nSoil                    = nSoil                                  ! intent(in):    number of soil layers
    in_groundwatr % nLayers                  = nLayers                                ! intent(in):    total number of layers
    in_groundwatr % firstFluxCall            = firstFluxCall                          ! intent(in):    logical flag to compute index of the lowest saturated layer
+   in_groundwatr % J_mass                   = J_mass                                 ! intent(in):    logical flag to compute mass Jacobian terms 
    in_groundwatr % ixRichards               = ixRichards                             ! intent(in):    index of the form of Richards' equation
    in_groundwatr % dVolTot_dPsi0            = dVolTot_dPsi0                          ! intent(in):    derivative in total volumetric water content w.r.t. matric head (m-1)
    in_groundwatr % mLayerdTheta_dPsi        = mLayerdTheta_dPsi                      ! intent(in):    derivative in liquid water content w.r.t. matric potential (m-1)
@@ -1555,8 +1557,9 @@ contains
   ixSaturation = io_groundwatr % ixSaturation ! intent(inout): index of lowest saturated layer (NOTE: only computed on the first iteration)
  end subroutine finalize_io_groundwatr
 
- subroutine finalize_out_groundwatr(out_groundwatr,dBaseflow_dWat,dBaseflow_dTk,flux_data,err,cmessage)
+ subroutine finalize_out_groundwatr(out_groundwatr,J_mass,dBaseflow_dWat,dBaseflow_dTk,flux_data,err,cmessage)
   class(out_type_groundwatr),intent(in) :: out_groundwatr          ! class object for intent(out) groundwatr arguments
+  logical(lgt),intent(in)               :: J_mass                  ! flag to compute mass Jacobian terms
   real(rkind),intent(out)               :: dBaseflow_dWat(:,:)     ! derivative in baseflow w.r.t. soil water characteristic
   real(rkind),intent(out)               :: dBaseflow_dTk(:,:)      ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
   type(var_dlength),intent(inout)       :: flux_data               ! model fluxes for a local HRU
@@ -1566,8 +1569,10 @@ contains
    mLayerBaseflow => flux_data%var(iLookFLUX%mLayerBaseflow)%dat ) ! intent(out): [dp(:)]  baseflow from each soil layer (m s-1)
    ! intent(out) arguments
    mLayerBaseflow = out_groundwatr % mLayerBaseflow                ! intent(out):   baseflow from each soil layer (m s-1)
-   dBaseflow_dWat = out_groundwatr % dBaseflow_dWat                ! intent(out):   derivative in baseflow w.r.t. soil water characteristic
-   dBaseflow_dTk  = out_groundwatr % dBaseflow_dTk                 ! intent(out):   derivative in baseflow w.r.t. temperature (m s-1 K-1)
+   if (J_mass) then
+     dBaseflow_dWat = out_groundwatr % dBaseflow_dWat                ! intent(out):   derivative in baseflow w.r.t. soil water characteristic
+     dBaseflow_dTk  = out_groundwatr % dBaseflow_dTk                 ! intent(out):   derivative in baseflow w.r.t. temperature (m s-1 K-1)
+   end if
    err            = out_groundwatr % err                           ! intent(out):   error code
    cmessage       = out_groundwatr % cmessage                      ! intent(out):   error message
   end associate
