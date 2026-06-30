@@ -70,7 +70,7 @@ module Newton_functions
    real(r8b),pointer        :: x0(:)                      ! guess vector for vector algorithms -- must be associated with vector allocated in external program 
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
    real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
-   real(r8b),allocatable    :: xk1(:),xk2(:) ! solutions used for computing convergence order for dynamic mode
+   real(r8b),allocatable    :: xk_0(:),xk_1(:) ! solutions used for computing convergence order for dynamic mode
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
@@ -247,12 +247,13 @@ contains
     allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
     if (f_obj % dynamic) then
-     allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
+     !allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
      allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
     end if
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
    end if
+   allocate(f_obj % xk_0(1:n),f_obj % xk_1(1:n)) ! solutions used to compute convergence order
   end associate
 
   ! * allocate LAPACK arrays *

@@ -382,8 +382,9 @@ contains
    if (f_obj % nested) then
     if (f_obj % dynamic) then
      if (f_obj % dynamic_classical) then
-      call check_dynamic_mode(f_obj % xkp1) ! classical algorithm used
+      call check_dynamic_mode ! classical algorithm used
       if (return_flag) return  ! return if switching from classical to nested iterations
+      call convergence_order_cutoff; if (return_flag) return ! end classical or outer iterations early if convergence order is not satisfactory by 10 iterations
      end if
     end if
    end if
@@ -467,60 +468,17 @@ contains
     end do
    end subroutine compute_relative_residual
 
-   subroutine check_dynamic_mode(xkp1)
+   subroutine check_dynamic_mode
     ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    real(r8b),intent(in) :: xkp1(:)             ! current classical iteration guess
-    real(r8b)            :: xk3m2,xk2m1,xk1m0   ! absolute differences used in convergence order calculation for dynamic mode
-    real(r8b)            :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
-    real(r8b)            :: order               ! approximate convergence order
     logical              :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
     
     if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
      if (f_obj % k == 0_i4b) then
-      f_obj % xk1(:) = xkp1(:) ! x1
-     else if (f_obj % k == 1_i4b) then
-      f_obj % xk2(:) = xkp1(:) ! x2
-     else if (f_obj % k == 2_i4b) then ! check convergence rate for third classical iteration
+      f_obj % xk_1(:) = xkp1(:) ! x1
+     else if (f_obj % k == 2_i4b) then ! check convergence order for third classical iteration
 
-      f_obj % dynamic_revert = .false. ! initialize initial condition reversion flag
-      do i=1,f_obj % n
-
-       ! initialize acceptance flag
-       if (ieee_is_finite(xkp1(i))) then ! check for normal finite ieee value (e.g., not infinity or NaN)
-        accept(i) = .true.
-       else
-        accept(i) = .false.
-        f_obj % dynamic_classical = .false.
-        f_obj % dynamic_revert = .true. ! cannot use classical iteration solution as initial condition
-        exit ! no need to check remaining solution values because we are reverting to the original solution
-       end if
-
-       ! cases where classical iterations have converged to machine precision
-       if (f_obj % xk1(i) == f_obj % x0(i)) cycle
-       if (f_obj % xk2(i) == f_obj % xk1(i)) cycle
-       if (xkp1(i) == f_obj % xk2(i)) cycle
-
-       ! compute absolute differences
-       xk1m0 = f_obj % xk1(i) - f_obj % x0(i)
-       xk2m1 = f_obj % xk2(i) - f_obj % xk1(i)
-       xk3m2 = xkp1(i) - f_obj % xk2(i)
-
-       ! compute arguments for comvergence order formula
-       num_arg = abs(xk3m2/xk2m1) ! numerator argument (error ratio of k=3 and k=2)
-       den_arg = abs(xk2m1/xk1m0) ! denominator argument (error ratio of k=2 and k=1)
-       if ((num_arg == 1._r8b).or.(den_arg == 1._r8b)) then ! if errors did not improve over classical iterations, used nested
-        accept(i) = .false. ! do not accept solution for nested initial guess
-        f_obj % dynamic_classical = .false.
-       end if
-
-       ! compute estimate of convergence order
-       order = log( num_arg ) / log( den_arg )
-       if (order < f_obj % order_min) then ! if convergence rate is not sufficiently high with classical go to nested
-        accept(i) = .false. ! do not accept solution for nested initial guess
-        f_obj % dynamic_classical = .false.
-       end if
-
-      end do
+      call check_convergence_order(f_obj % order_min,f_obj % x0,f_obj % xk_1,xk,xkp1,&
+                                  &accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
 
       ! go to nested iterations if needed 
       if (.not.f_obj % dynamic_classical) then
@@ -534,6 +492,81 @@ contains
      end if
     end if
    end subroutine check_dynamic_mode
+
+   subroutine convergence_order_cutoff
+    ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
+    logical              :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
+    logical              :: revert    ! does solution vector need to be completely reverted to original guess before starting nested iterations?
+    logical              :: success   ! is the convergence order threshold successfully met for all solution vector elements?
+    real(r8b),parameter       :: order_min=0._r8b    
+    integer(i4b),parameter    :: k_cutoff=20_i4b
+
+    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
+     if (f_obj % k == k_cutoff-2_i4b) then
+      f_obj % xk_0(:) = xk(:)   ! x0
+      f_obj % xk_1(:) = xkp1(:) ! x1
+     else if (f_obj % k == k_cutoff) then ! check convergence order for third classical iteration
+
+      call check_convergence_order(order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,accept,revert,success)
+
+      if (.not.success) return_flag = .true.
+
+     end if
+    end if
+   end subroutine convergence_order_cutoff
+
+   subroutine check_convergence_order(order_min,x0,x1,x2,x3,accept,revert,success)
+    real(r8b),intent(in) :: order_min
+    real(r8b),intent(in) :: x0(:),x1(:),x2(:),x3(:)
+    real(r8b)            :: x3m2,x2m1,x1m0   ! absolute differences used in convergence order calculation for dynamic mode
+    real(r8b)            :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
+    real(r8b)            :: order               ! approximate convergence order
+    logical,intent(out)  :: accept(:) ! accept classical guess element as initial guess element for nested iterations in dynamic mode?
+    logical,intent(out)  :: revert    ! does solution vector need to be completely reverted to original guess before starting nested iterations?
+    logical,intent(out)  :: success   ! is the convergence order threshold successfully met for all solution vector elements?
+
+      success = .true.
+      revert = .false. ! initialize initial condition reversion flag
+      do i=1,f_obj % n
+
+       ! initialize acceptance flag
+       if (ieee_is_finite(x3(i))) then ! check for normal finite ieee value (e.g., not infinity or NaN)
+        accept(i) = .true.
+       else
+        accept(i) = .false.
+        success = .false.
+        revert = .true. ! cannot use classical iteration solution as initial condition
+        exit ! no need to check remaining solution values because we are reverting to the original solution
+       end if
+
+       ! cases where classical iterations have converged to machine precision
+       if (x1(i) == x0(i)) cycle
+       if (x2(i) == x1(i)) cycle
+       if (x3(i) == x2(i)) cycle
+
+       ! compute absolute differences
+       x1m0 = x1(i) - x0(i)
+       x2m1 = x2(i) - x1(i)
+       x3m2 = x3(i) - x2(i)
+
+       ! compute arguments for comvergence order formula
+       num_arg = abs(x3m2/x2m1) ! numerator argument (error ratio of k=3 and k=2)
+       den_arg = abs(x2m1/x1m0) ! denominator argument (error ratio of k=2 and k=1)
+       if ((num_arg == 1._r8b).or.(den_arg == 1._r8b)) then ! if errors did not improve over classical iterations, used nested
+        accept(i) = .false. ! do not accept solution for nested initial guess
+        success = .false.
+       end if
+
+       ! compute estimate of convergence order
+       order = log( num_arg ) / log( den_arg )
+       if (order < order_min) then ! if convergence rate is not sufficiently high with classical go to nested
+        accept(i) = .false. ! do not accept solution for nested initial guess
+        success = .false.
+       end if
+
+      end do
+
+   end subroutine check_convergence_order
 
  end subroutine check_residual_vector
 
