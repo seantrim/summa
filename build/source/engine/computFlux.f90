@@ -516,7 +516,7 @@ contains
 
  ! **** snowLiqFlux ****
  subroutine initialize_snowLiqFlux
-  call in_snowLiqFlux%initialize(nSnow,firstFluxCall,scalarSolution,mLayerVolFracLiqTrial,flux_data)
+  call in_snowLiqFlux%initialize(nSnow,J_mass,firstFluxCall,scalarSolution,mLayerVolFracLiqTrial,flux_data)
   call io_snowLiqFlux%initialize(flux_data,deriv_data)
  end subroutine initialize_snowLiqFlux
 

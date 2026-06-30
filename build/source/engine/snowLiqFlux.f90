@@ -92,6 +92,7 @@ subroutine snowLiqFlux(&
   nSnow=in_snowLiqFlux % nSnow ! get number of snow layers
   associate(&
     ! input: model control
+    J_mass                  => in_snowLiqFlux % J_mass,                  & ! intent(in): flag to compute mass Jacobian terms
     firstFluxCall           => in_snowLiqFlux % firstFluxCall,           & ! intent(in): the first flux call
     scalarSolution          => in_snowLiqFlux % scalarSolution,          & ! intent(in): flag to denote if implementing the scalar solution
     ! input: forcing for the snow domain
@@ -150,7 +151,7 @@ subroutine snowLiqFlux(&
 
     ! define the liquid flux at the upper boundary (m s-1)
     iLayerLiqFluxSnow(0)      = (scalarThroughfallRain + scalarCanopyLiqDrainage)/iden_water
-    iLayerLiqFluxSnowDeriv(0) = 0._rkind !computed inside computJacob
+    if (J_mass) iLayerLiqFluxSnowDeriv(0) = 0._rkind !computed inside computJacob
 
     ! compute properties fixed over the time step
     if (firstFluxCall) then
@@ -169,14 +170,14 @@ subroutine snowLiqFlux(&
         availCap  = mLayerPoreSpace(iLayer) - mLayerThetaResid(iLayer)                 ! available capacity
         relSaturn = (mLayerVolFracLiqTrial(iLayer) - mLayerThetaResid(iLayer)) / availCap    ! relative saturation
         iLayerLiqFluxSnow(iLayer)      = k_snow*relSaturn**mw_exp
-        iLayerLiqFluxSnowDeriv(iLayer) = ( (k_snow*mw_exp)/availCap ) * relSaturn**(mw_exp - 1._rkind)
+        if (J_mass) iLayerLiqFluxSnowDeriv(iLayer) = ( (k_snow*mw_exp)/availCap ) * relSaturn**(mw_exp - 1._rkind)
         if (mLayerVolFracIce(iLayer) > maxVolIceContent) then ! NOTE: use start-of-step ice content, to avoid convergence problems
           ! ** allow liquid water to pass through under very high ice density
           iLayerLiqFluxSnow(iLayer) = iLayerLiqFluxSnow(iLayer) + iLayerLiqFluxSnow(iLayer-1)
         end if
       else  ! flow does not occur
         iLayerLiqFluxSnow(iLayer)      = 0._rkind
-        iLayerLiqFluxSnowDeriv(iLayer) = 0._rkind
+        if (J_mass) iLayerLiqFluxSnowDeriv(iLayer) = 0._rkind
       end if  ! storage above residual content
     end do  ! end loop through snow layers
 

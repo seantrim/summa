@@ -436,6 +436,7 @@ MODULE data_types
  ! ** snowLiqFlux
  type, public :: in_type_snowLiqFlux ! class for intent(in) arguments in snowLiqFlux call
    integer(i4b)             :: nSnow                             ! intent(in):    number of snow layers
+   logical(lgt)             :: J_mass                            ! intent(in):    flag to compute mass Jacobian terms  
    logical(lgt)             :: firstFluxCall                     ! intent(in):    the first flux call (compute variables that are constant over the iterations)
    logical(lgt)             :: scalarSolution                    ! intent(in):    flag to indicate the scalar solution
    real(rkind)              :: scalarThroughfallRain             ! intent(in):    rain that reaches the snow surface without ever touching vegetation (kg m-2 s-1)
@@ -1229,9 +1230,10 @@ contains
  ! **** end vegLiqFlux ****
 
  ! **** snowLiqFlux ****
- subroutine initialize_in_snowLiqFlux(in_snowLiqFlux,nSnow,firstFluxCall,scalarSolution,mLayerVolFracLiqTrial,flux_data)
+ subroutine initialize_in_snowLiqFlux(in_snowLiqFlux,nSnow,J_mass,firstFluxCall,scalarSolution,mLayerVolFracLiqTrial,flux_data)
   class(in_type_snowLiqFlux),intent(out)  :: in_snowLiqFlux              ! class object for intent(in) snowLiqFlux arguments            
   integer(i4b),intent(in)                 :: nSnow                       ! number of snow layers
+  logical(lgt),intent(in)                 :: J_mass                      ! flag to compute mass Jacobian terms  
   logical(lgt),intent(in)                 :: firstFluxCall               ! flag to indicate if we are processing the first flux call
   logical(lgt),intent(in)                 :: scalarSolution              ! flag to denote if implementing the scalar solution
   real(rkind),intent(in)                  :: mLayerVolFracLiqTrial(:)    ! trial value for volumetric fraction of liquid water (-)
@@ -1241,6 +1243,7 @@ contains
    scalarCanopyLiqDrainage      => flux_data%var(iLookFLUX%scalarCanopyLiqDrainage)%dat(1))  ! intent(out): [dp] drainage of liquid water from the vegetation canopy (kg m-2 s-1)
   ! intent(in) arguments
   in_snowLiqFlux % nSnow                  =nSnow                          ! intent(in): number of snow layers
+  in_snowLiqFlux % J_mass                 =J_mass                         ! intent(in): flag to compute mass Jacobian terms
   in_snowLiqFlux % firstFluxCall          =firstFluxCall                  ! intent(in): the first flux call (compute variables that are constant over the iterations)
   in_snowLiqFlux % scalarSolution         =(scalarSolution .and. .not.firstFluxCall) ! intent(in): flag to indicate the scalar solution
   in_snowLiqFlux % scalarThroughfallRain  =scalarThroughfallRain          ! intent(in): rain that reaches the snow surface without ever touching vegetation (kg m-2 s-1)
