@@ -76,6 +76,7 @@ subroutine bigAquifer(&
   ! make association between local variables and the information in the data structures
   associate(&
     ! input: state variables, fluxes, and parameters
+    J_mass                    => in_bigAquifer % J_mass,                      & ! intent(in): [lgt] flag for computing mass Jacobian
     scalarAquiferStorageTrial => in_bigAquifer % scalarAquiferStorageTrial,   & ! intent(in): [dp] trial value of aquifer storage (m)
     scalarCanopyTranspiration => in_bigAquifer % scalarCanopyTranspiration,   & ! intent(in): [dp] canopy transpiration (kg m-2 s-1)
     scalarSoilDrainage        => in_bigAquifer % scalarSoilDrainage,          & ! intent(in): [dp] soil drainage (m s-1)
@@ -112,10 +113,12 @@ subroutine bigAquifer(&
     aquiferTranspireFrac   = scalarAquiferRootFrac*scalarTranspireLimAqfr/scalarTranspireLim   ! fraction of total transpiration that comes from the aquifer (-)
     scalarAquiferTranspire = aquiferTranspireFrac*scalarCanopyTranspiration/iden_water         ! aquifer transpiration (kg m-2 s-1 --> m s-1)
     ! derivatives in transpiration w.r.t. canopy state variables
-    dAquiferTrans_dCanWat  = aquiferTranspireFrac*dCanopyTrans_dCanWat /iden_water
-    dAquiferTrans_dTCanair = aquiferTranspireFrac*dCanopyTrans_dTCanair/iden_water
-    dAquiferTrans_dTCanopy = aquiferTranspireFrac*dCanopyTrans_dTCanopy/iden_water
-    dAquiferTrans_dTGround = aquiferTranspireFrac*dCanopyTrans_dTGround/iden_water
+    if (J_mass) then ! if computing mass Jacobian terms
+      dAquiferTrans_dCanWat  = aquiferTranspireFrac*dCanopyTrans_dCanWat /iden_water
+      dAquiferTrans_dTCanair = aquiferTranspireFrac*dCanopyTrans_dTCanair/iden_water
+      dAquiferTrans_dTCanopy = aquiferTranspireFrac*dCanopyTrans_dTCanopy/iden_water
+      dAquiferTrans_dTGround = aquiferTranspireFrac*dCanopyTrans_dTGround/iden_water
+    end if
 
     ! compute aquifer recharge (transfer variables -- included for generality for basin-wide aquifer)
     scalarAquiferRecharge = scalarSoilDrainage ! m s-1
@@ -126,7 +129,7 @@ subroutine bigAquifer(&
     scalarAquiferBaseflow = aquiferBaseflowRate*(xTemp**aquiferBaseflowExp)
 
     ! compute the derivative in the net aquifer flux
-    dBaseflow_dAquifer    = -(aquiferBaseflowExp*aquiferBaseflowRate*(xTemp**(aquiferBaseflowExp - 1._rkind)))/aquiferScaleFactor
+    if (J_mass) dBaseflow_dAquifer    = -(aquiferBaseflowExp*aquiferBaseflowRate*(xTemp**(aquiferBaseflowExp - 1._rkind)))/aquiferScaleFactor
 
   end associate ! end association to data in structure
 

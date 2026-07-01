@@ -563,6 +563,7 @@ MODULE data_types
 
  ! ** bigAquifer
  type, public :: in_type_bigAquifer  ! class for intent(in) arguments in bigAquifer call
+   logical(lgt)             :: J_mass                            ! intent(in):    flag for computing mass Jacobian terms
    real(rkind)              :: scalarAquiferStorageTrial         ! intent(in):    trial value of aquifer storage (m)
    real(rkind)              :: scalarCanopyTranspiration         ! intent(in):    canopy transpiration (kg m-2 s-1)
    real(rkind)              :: scalarSoilDrainage                ! intent(in):    soil drainage (m s-1)
@@ -1583,8 +1584,9 @@ contains
  ! **** end groundwatr ****
 
  ! **** bigAquifer ****
- subroutine initialize_in_bigAquifer(in_bigAquifer,scalarAquiferStorageTrial,flux_data,deriv_data)
+ subroutine initialize_in_bigAquifer(in_bigAquifer,J_mass,scalarAquiferStorageTrial,flux_data,deriv_data)
   class(in_type_bigAquifer),intent(out) :: in_bigAquifer             ! class object for intent(in) bigAquifer arguments
+  logical(lgt),intent(in)               :: J_mass                    ! flag for computing mass Jacobian terms
   real(rkind),intent(in)                :: scalarAquiferStorageTrial ! trial value of aquifer storage (m)
   type(var_dlength),intent(in)          :: flux_data                 ! model fluxes for a local HRU
   type(var_dlength),intent(in)          :: deriv_data                ! derivatives in model fluxes w.r.t. relevant state variables
@@ -1596,6 +1598,7 @@ contains
    dCanopyTrans_dTCanopy        => deriv_data%var(iLookDERIV%dCanopyTrans_dTCanopy)%dat(1),   &  ! intent(out): [dp] derivative in canopy transpiration w.r.t. canopy temperature (kg m-2 s-1 K-1)
    dCanopyTrans_dTGround        => deriv_data%var(iLookDERIV%dCanopyTrans_dTGround)%dat(1) )     ! intent(out): [dp] derivative in canopy transpiration w.r.t. ground temperature (kg m-2 s-1 K-1)
    ! intent(in) arguments
+   in_bigAquifer % J_mass                    = J_mass                    ! intent(in): flag for computing mass Jacobian terms
    in_bigAquifer % scalarAquiferStorageTrial = scalarAquiferStorageTrial ! intent(in): trial value of aquifer storage (m)
    in_bigAquifer % scalarCanopyTranspiration = scalarCanopyTranspiration ! intent(in): canopy transpiration (kg m-2 s-1)
    in_bigAquifer % scalarSoilDrainage        = scalarSoilDrainage        ! intent(in): soil drainage (m s-1)

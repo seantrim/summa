@@ -606,7 +606,7 @@ contains
 
  ! **** bigAquifer ****
  subroutine initialize_bigAquifer
-  call in_bigAquifer%initialize(scalarAquiferStorageTrial,flux_data,deriv_data)
+  call in_bigAquifer%initialize(J_mass,scalarAquiferStorageTrial,flux_data,deriv_data)
   call io_bigAquifer%initialize(deriv_data)
  end subroutine initialize_bigAquifer
 

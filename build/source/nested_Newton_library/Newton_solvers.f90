@@ -384,7 +384,7 @@ contains
      if (f_obj % dynamic_classical) then
       call check_dynamic_mode ! classical algorithm used
       if (return_flag) return  ! return if switching from classical to nested iterations
-      call convergence_order_cutoff; if (return_flag) return ! end classical or outer iterations early if convergence order is not satisfactory by 10 iterations
+      !call convergence_order_cutoff; if (return_flag) return ! end classical or outer iterations early if convergence order is not satisfactory by 10 iterations
      end if
     end if
    end if
