@@ -470,15 +470,19 @@ contains
 
    subroutine check_dynamic_mode
     ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    logical              :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
+    logical                :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
+    integer(i4b),parameter :: k_check=10_i4b ! k_check=2_i4b is the minimum
     
     if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
-     if (f_obj % k == 0_i4b) then
+     if (f_obj % k == k_check - 2_i4b) then
+      f_obj % xk_0(:) = xk(:)   ! x0
       f_obj % xk_1(:) = xkp1(:) ! x1
-     else if (f_obj % k == 2_i4b) then ! check convergence order for third classical iteration
+     else if (f_obj % k == k_check) then ! check convergence order for third classical iteration
 
-      call check_convergence_order(f_obj % order_min,f_obj % x0,f_obj % xk_1,xk,xkp1,&
+      call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
                                   &accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
+      !call check_convergence_order(f_obj % order_min,f_obj % x0,f_obj % xk_1,xk,xkp1,&
+      !                            &accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
 
       ! go to nested iterations if needed 
       if (.not.f_obj % dynamic_classical) then

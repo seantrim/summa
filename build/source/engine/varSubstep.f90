@@ -741,7 +741,7 @@ contains
       nested_Newton % convergence_inner = custom ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 1_i4b 
+      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 2_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
