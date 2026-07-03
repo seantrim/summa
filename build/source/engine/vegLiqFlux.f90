@@ -69,6 +69,7 @@ subroutine vegLiqFlux(&
   ! ------------------------------------------------------------------------------------------------------------------------------------------------------
   ! make association of local variables with information in the data structures
   associate(&
+    J_mass               => in_vegLiqFlux % J_mass,               & ! intent(in): flag to compute mass Jacobian terms
     computeVegFlux       => in_vegLiqFlux % computeVegFlux,       & ! intent(in): flag to indicate if we are computing fluxes over vegetation (.false. means veg is buried with snow)
     scalarCanopyLiqTrial => in_vegLiqFlux % scalarCanopyLiqTrial, & ! intent(in): trial mass of liquid water on the vegetation canopy at the current iteration (kg m-2)
     scalarRainfall       => in_vegLiqFlux % scalarRainfall,       & ! intent(in): rainfall (kg m-2 s-1)
@@ -91,8 +92,10 @@ subroutine vegLiqFlux(&
     if (.not.computeVegFlux) then
       scalarThroughfallRain        = scalarRainfall
       scalarCanopyLiqDrainage      = 0._rkind
-      scalarThroughfallRainDeriv   = 0._rkind
-      scalarCanopyLiqDrainageDeriv = 0._rkind
+      if (J_mass) then ! if computing mass Jacobian terms
+        scalarThroughfallRainDeriv   = 0._rkind
+        scalarCanopyLiqDrainageDeriv = 0._rkind
+      end if
       return
     end if
 
@@ -102,21 +105,21 @@ subroutine vegLiqFlux(&
       ! NOTE: this could be done with scalarThroughfallScaleRain=0, though requires setting scalarThroughfallScaleRain in all test cases
       case(unDefined)
         scalarThroughfallRain      = 0._rkind
-        scalarThroughfallRainDeriv = 0._rkind
+        if (J_mass) scalarThroughfallRainDeriv = 0._rkind
       ! fraction of rainfall hits the ground without ever touching the canopy
       case(sparseCanopy)
         scalarThroughfallRain      = scalarThroughfallScaleRain*scalarRainfall
-        scalarThroughfallRainDeriv = 0._rkind
+        if (J_mass) scalarThroughfallRainDeriv = 0._rkind
       ! throughfall a function of canopy storage
       case(storageFunc)
         ! throughfall during wetting-up phase
         if(scalarCanopyLiqTrial < scalarCanopyLiqMax)then
           scalarThroughfallRain      = scalarRainfall*(scalarCanopyLiqTrial/scalarCanopyLiqMax)
-          scalarThroughfallRainDeriv = scalarRainfall/scalarCanopyLiqMax
+          if (J_mass) scalarThroughfallRainDeriv = scalarRainfall/scalarCanopyLiqMax
         ! all rain falls through the canopy when the canopy is at capacity
         else
           scalarThroughfallRain      = scalarRainfall
-          scalarThroughfallRainDeriv = 0._rkind
+          if (J_mass) scalarThroughfallRainDeriv = 0._rkind
         end if
       case default; err=20; message=trim(message)//'unable to identify option for canopy interception'; return
     end select ! (option for canopy interception)
@@ -124,10 +127,10 @@ subroutine vegLiqFlux(&
     ! compute canopy drainage
     if(scalarCanopyLiqTrial > scalarCanopyLiqMax)then
       scalarCanopyLiqDrainage       = scalarCanopyDrainageCoeff*(scalarCanopyLiqTrial - scalarCanopyLiqMax)
-      scalarCanopyLiqDrainageDeriv  = scalarCanopyDrainageCoeff
+      if (J_mass) scalarCanopyLiqDrainageDeriv  = scalarCanopyDrainageCoeff
     else
       scalarCanopyLiqDrainage       = 0._rkind
-      scalarCanopyLiqDrainageDeriv  = 0._rkind
+      if (J_mass) scalarCanopyLiqDrainageDeriv  = 0._rkind
     end if
 
   end associate ! end association of local variables with information in the data structures

@@ -414,6 +414,7 @@ MODULE data_types
 
  ! ** vegLiqFlux
  type, public :: in_type_vegLiqFlux ! class for intent(in) arguments in vegLiqFlux call
+   logical(lgt)             :: J_mass                            ! intent(in): flag to compute mass Jacobian terms
    logical(lgt)             :: computeVegFlux                    ! intent(in): flag to denote if computing energy flux over vegetation
    real(rkind)              :: scalarCanopyLiqTrial              ! intent(in): trial mass of liquid water on the vegetation canopy at the current iteration (kg m-2)
    real(rkind)              :: scalarRainfall                    ! intent(in): rainfall rate (kg m-2 s-1)
@@ -1195,13 +1196,15 @@ contains
  ! **** end snowSoilNrgFlux ****
  
  ! **** vegLiqFlux ****
- subroutine initialize_in_vegLiqFlux(in_vegLiqFlux,computeVegFlux,scalarCanopyLiqTrial,flux_data)
+ subroutine initialize_in_vegLiqFlux(in_vegLiqFlux,J_mass,computeVegFlux,scalarCanopyLiqTrial,flux_data)
   class(in_type_vegLiqFlux),intent(out)   :: in_vegLiqFlux               ! class object for intent(in) vegLiqFlux arguments
+  logical(lgt),intent(in)                 :: J_mass                      ! flag to compute mass Jacobian terms
   logical(lgt),intent(in)                 :: computeVegFlux              ! flag to indicate if computing fluxes over vegetation
   real(rkind),intent(in)                  :: scalarCanopyLiqTrial        ! trial value for mass of liquid water on the vegetation canopy (kg m-2)
   type(var_dlength),intent(in)            :: flux_data                   ! model fluxes for a local HRU
   associate(scalarRainfall => flux_data%var(iLookFLUX%scalarRainfall)%dat(1)) ! intent(in): [dp] rainfall rate (kg m-2 s-1)
   ! intent(in) arguments
+  in_vegLiqFlux % J_mass              =J_mass                ! intent(in): flag to compute mass Jacobian terms
   in_vegLiqFlux % computeVegFlux      =computeVegFlux        ! intent(in): flag to denote if computing energy flux over vegetation
   in_vegLiqFlux % scalarCanopyLiqTrial=scalarCanopyLiqTrial  ! intent(in): trial mass of liquid water on the vegetation canopy at the current iteration (kg m-2)
   in_vegLiqFlux % scalarRainfall      =scalarRainfall        ! intent(in): rainfall rate (kg m-2 s-1)

@@ -471,7 +471,7 @@ contains
    subroutine check_dynamic_mode
     ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
     logical                :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
-    integer(i4b),parameter :: k_check=10_i4b ! k_check=2_i4b is the minimum
+    integer(i4b),parameter :: k_check=5_i4b ! k_check=2_i4b is the minimum
     
     if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
      if (f_obj % k == k_check - 2_i4b) then

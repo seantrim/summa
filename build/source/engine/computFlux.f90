@@ -490,7 +490,7 @@ contains
 
  ! **** vegLiqFlux ****
  subroutine initialize_vegLiqFlux
-  call in_vegLiqFlux%initialize(computeVegFlux,scalarCanopyLiqTrial,flux_data)
+  call in_vegLiqFlux%initialize(J_mass,computeVegFlux,scalarCanopyLiqTrial,flux_data)
  end subroutine initialize_vegLiqFlux
  
  subroutine finalize_vegLiqFlux
