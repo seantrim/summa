@@ -365,7 +365,6 @@ contains
 
    ! if doing line search for inner iterations and inner iterate has not changed much, ensure that one more inner iteration is performed using the outer line search scheme
    ! note: this eliminates unproductive inner iterations
-   !if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
    if (f_obj % refinement) then
     if (f_obj % inner) then
      if (f_obj % l < f_obj % lmax_loop) then
@@ -382,9 +381,10 @@ contains
    if (f_obj % nested) then
     if (f_obj % dynamic) then
      if (f_obj % dynamic_classical) then
-      call check_dynamic_mode ! classical algorithm used
-      if (return_flag) return  ! return if switching from classical to nested iterations
-      !call convergence_order_cutoff; if (return_flag) return ! end classical or outer iterations early if convergence order is not satisfactory by 10 iterations
+      if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
+       call check_dynamic_mode ! classical algorithm used
+       if (return_flag) return ! return if switching from classical to nested iterations
+      end if
      end if
     end if
    end if
@@ -470,30 +470,26 @@ contains
 
    subroutine check_dynamic_mode
     ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    logical                :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
-    integer(i4b),parameter :: k_check=5_i4b ! k_check=2_i4b is the minimum
+    !logical                :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
+    integer(i4b),parameter :: k_check=20_i4b ! k_check=2_i4b is the minimum
     
-    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
-     if (f_obj % k == k_check - 2_i4b) then
-      f_obj % xk_0(:) = xk(:)   ! x0
-      f_obj % xk_1(:) = xkp1(:) ! x1
-     else if (f_obj % k == k_check) then ! check convergence order for third classical iteration
+    if (f_obj % k == k_check - 2_i4b) then
+     f_obj % xk_0(:) = xk(:)   ! x0
+     f_obj % xk_1(:) = xkp1(:) ! x1
+    else if (f_obj % k == k_check) then ! check convergence order for third classical iteration
 
-      call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
-                                  &accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
-      !call check_convergence_order(f_obj % order_min,f_obj % x0,f_obj % xk_1,xk,xkp1,&
-      !                            &accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
+     call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
+                                 &f_obj % accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
 
-      ! go to nested iterations if needed 
-      if (.not.f_obj % dynamic_classical) then
-       if (.not.f_obj % dynamic_revert) then
-        f_obj % x0(:) = merge(xkp1,f_obj % x0,accept) ! use accepted classical guess vector components for nested initial guess
-       end if
-       return_flag = .true.
-       return 
+     ! go to nested iterations if needed 
+     if (.not.f_obj % dynamic_classical) then
+      if (.not.f_obj % dynamic_revert) then
+       f_obj % x0(:) = merge(xkp1,f_obj % x0,f_obj % accept) ! use accepted classical guess vector components for nested initial guess
       end if
-
+      return_flag = .true.
+      return 
      end if
+
     end if
    end subroutine check_dynamic_mode
 
