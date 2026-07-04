@@ -1441,7 +1441,6 @@ contains
                &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
                &f_obj % J2)
 
-  !f_obj % J2(:,:) = -f_obj % J2(:,:) !-------- note: negative sign applied (standard LAPACK solver assumed)
   call flip_sign(f_obj % nrow, f_obj % n,f_obj % J2) ! apply negative sign to J2 entries (so that J = J1 - J2)
 
  contains
