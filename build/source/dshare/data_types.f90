@@ -379,6 +379,7 @@ MODULE data_types
 
  ! ** snowSoilNrgFlux
  type, public :: in_type_snowSoilNrgFlux ! class for intent(in) arguments in snowSoilNrgFlux call
+   logical(lgt)             :: J_energy                          ! flag to compute energy Jacobian terms
    logical(lgt)             :: scalarSolution                    ! intent(in): flag to denote if implementing the scalar solution
    real(rkind)              :: scalarGroundNetNrgFlux            ! intent(in): net energy flux for the ground surface (W m-2)
    real(rkind), allocatable :: iLayerLiqFluxSnow(:)              ! intent(in): liquid flux at the interface of each snow layer (m s-1)
@@ -1123,8 +1124,9 @@ contains
  ! **** end vegNrgFlux ****
 
  ! **** snowSoilNrgFlux ****
- subroutine initialize_in_snowSoilNrgFlux(in_snowSoilNrgFlux,scalarSolution,firstFluxCall,mLayerTempTrial,flux_data,deriv_data)
+ subroutine initialize_in_snowSoilNrgFlux(in_snowSoilNrgFlux,J_energy,scalarSolution,firstFluxCall,mLayerTempTrial,flux_data,deriv_data)
   class(in_type_snowSoilNrgFlux),intent(out) :: in_snowSoilNrgFlux               ! class object for intent(in) snowSoilNrgFlux arguments
+  logical(lgt),intent(in)               :: J_energy                    ! flag to compute energy Jacobian terms
   logical(lgt),intent(in)               :: scalarSolution              ! flag to denote if implementing the scalar solution
   logical(lgt),intent(in)               :: firstFluxCall               ! flag to indicate if we are processing the first flux call
   real(rkind),intent(in)                :: mLayerTempTrial(:)          ! trial value for temperature of each snow/soil layer (K)
@@ -1139,6 +1141,7 @@ contains
    dThermalC_dTempAbove         => deriv_data%var(iLookDERIV%dThermalC_dTempAbove)%dat,    & ! intent(in):  [dp(:)] derivative in the thermal conductivity w.r.t. energy state in the layer above
    dThermalC_dTempBelow         => deriv_data%var(iLookDERIV%dThermalC_dTempBelow)%dat     ) ! intent(in):  [dp(:)] derivative in the thermal conductivity w.r.t. energy state in the layer above
    ! intent(in) arguments
+   in_snowSoilNrgFlux % J_energy=J_energy                                      ! intent(in): flag to compute energy Jacobian terms
    in_snowSoilNrgFlux % scalarSolution=scalarSolution .and. .not.firstFluxCall ! intent(in): flag to denote if implementing the scalar solution
    in_snowSoilNrgFlux % scalarGroundNetNrgFlux=scalarGroundNetNrgFlux          ! intent(in): net energy flux for the ground surface (W m-2)
    in_snowSoilNrgFlux % iLayerLiqFluxSnow=iLayerLiqFluxSnow                    ! intent(in): liquid flux at the interface of each snow layer (m s-1)

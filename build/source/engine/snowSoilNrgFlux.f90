@@ -120,6 +120,7 @@ subroutine snowSoilNrgFlux(&
   ! make association of local variables with information in the data structures
   associate(&
     ! input: model control
+    J_energy                   => in_snowSoilNrgFlux % J_energy,                   & ! intent(in):    flag to compute energy Jacobian terms
     scalarSolution             => in_snowSoilNrgFlux % scalarSolution,             & ! intent(in):    flag to denote if implementing the scalar solution
     ! input: fluxes and derivatives at the upper boundary
     groundNetFlux              => in_snowSoilNrgFlux % scalarGroundNetNrgFlux,     & ! intent(in):    net energy flux for the ground surface (W m-2)
@@ -222,63 +223,67 @@ subroutine snowSoilNrgFlux(&
     ! ***** compute the derivative in fluxes at layer interfaces w.r.t state in the layer above and the layer below *****
     ! -------------------------------------------------------------------------------------------------------------------
 
-    ! initialize un-used elements
-    ! ***** the upper boundary
-    dFlux_dTempAbove(0) = 0._rkind ! this will be in canopy
-    dFlux_dWatAbove(0) = 0._rkind ! this will be in canopy
+    if (J_energy) then
 
-    ! ***** the lower boundary
-    dFlux_dTempBelow(nLayers) = -huge(lowerBoundTemp)  ! don't expect this to be used, so deliberately set to a ridiculous value to cause problems
-    dFlux_dWatBelow(nLayers) = -huge(lowerBoundTemp)  ! don't expect this to be used, so deliberately set to a ridiculous value to cause problems
+      ! initialize un-used elements
+      ! ***** the upper boundary
+      dFlux_dTempAbove(0) = 0._rkind ! this will be in canopy
+      dFlux_dWatAbove(0) = 0._rkind ! this will be in canopy
 
-    ! ***** the upper boundary, always do
-    select case(ix_bcUpprTdyn)
-
-      ! * prescribed temperature at the upper boundary
-      case(prescribedTemp)
-        dz = mLayerHeight(1)*0.5_rkind
-        dFlux_dWatBelow(0)  = -dThermalC_dWatBelow(0) * ( mLayerTempTrial(1) - upperBoundTemp )/dz
-        dFlux_dTempBelow(0) = -dThermalC_dTempBelow(0) * ( mLayerTempTrial(1) - upperBoundTemp )/dz - iLayerThermalC(0)/dz
-
-      ! * zero flux at the upper boundary
-      case(zeroFlux)
-        dFlux_dWatBelow(0) = 0._rkind
-        dFlux_dTempBelow(0) = 0._rkind
-
-      ! * compute flux inside vegetation energy flux routine, use here
-      case(energyFlux)
-        dFlux_dWatBelow(0) = 0._rkind
-        dFlux_dTempBelow(0) = dGroundNetFlux_dGroundTemp
-
-      case default; err=20; message=trim(message)//'unable to identify upper boundary condition for thermodynamics'; return
-
-    end select  ! end identifying the upper boundary condition for thermodynamics
-    dGroundNetFlux_dGroundTemp = dFlux_dTempBelow(0) ! may need this in vegNrgFlux
-
-    ! loop through INTERFACES...
-    do iLayer=ixTop,ixBot
       ! ***** the lower boundary
-      if (iLayer==nLayers) then  ! if lower boundary
-        ! identify the lower boundary condition
-        select case(ix_bcLowrTdyn) ! prescribed temperature at the lower boundary
-          case(prescribedTemp)
-            dz = mLayerDepth(iLayer)*0.5_rkind
-            dFlux_dWatAbove(iLayer)  = -dThermalC_dWatAbove(iLayer) * ( lowerBoundTemp - mLayerTempTrial(iLayer) )/dz
-            dFlux_dTempAbove(iLayer) = -dThermalC_dTempAbove(iLayer) * ( lowerBoundTemp - mLayerTempTrial(iLayer) )/dz + iLayerThermalC(iLayer)/dz
-          case(zeroFlux)  ! zero flux at the lower boundary
-            dFlux_dWatAbove(iLayer) = 0._rkind
-            dFlux_dTempAbove(iLayer) = 0._rkind
-          case default; err=20; message=trim(message)//'unable to identify lower boundary condition for thermodynamics'; return
-        end select  ! end identifying the lower boundary condition for thermodynamics
-      ! ***** internal layers
-      else
-        dz = (mLayerHeight(iLayer+1) - mLayerHeight(iLayer))
-        dFlux_dWatAbove(iLayer)  = -dThermalC_dWatAbove(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz
-        dFlux_dWatBelow(iLayer)  = -dThermalC_dWatBelow(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz
-        dFlux_dTempAbove(iLayer) = -dThermalC_dTempAbove(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz + iLayerThermalC(iLayer)/dz
-        dFlux_dTempBelow(iLayer) = -dThermalC_dTempBelow(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz - iLayerThermalC(iLayer)/dz
-      end if  ! type of layer (upper, internal, or lower)
-    end do  ! end looping through layers
+      dFlux_dTempBelow(nLayers) = -huge(lowerBoundTemp)  ! don't expect this to be used, so deliberately set to a ridiculous value to cause problems
+      dFlux_dWatBelow(nLayers) = -huge(lowerBoundTemp)  ! don't expect this to be used, so deliberately set to a ridiculous value to cause problems
+
+      ! ***** the upper boundary, always do
+      select case(ix_bcUpprTdyn)
+
+        ! * prescribed temperature at the upper boundary
+        case(prescribedTemp)
+          dz = mLayerHeight(1)*0.5_rkind
+          dFlux_dWatBelow(0)  = -dThermalC_dWatBelow(0) * ( mLayerTempTrial(1) - upperBoundTemp )/dz
+          dFlux_dTempBelow(0) = -dThermalC_dTempBelow(0) * ( mLayerTempTrial(1) - upperBoundTemp )/dz - iLayerThermalC(0)/dz
+
+        ! * zero flux at the upper boundary
+        case(zeroFlux)
+          dFlux_dWatBelow(0) = 0._rkind
+          dFlux_dTempBelow(0) = 0._rkind
+
+        ! * compute flux inside vegetation energy flux routine, use here
+        case(energyFlux)
+          dFlux_dWatBelow(0) = 0._rkind
+          dFlux_dTempBelow(0) = dGroundNetFlux_dGroundTemp
+
+        case default; err=20; message=trim(message)//'unable to identify upper boundary condition for thermodynamics'; return
+
+      end select  ! end identifying the upper boundary condition for thermodynamics
+      dGroundNetFlux_dGroundTemp = dFlux_dTempBelow(0) ! may need this in vegNrgFlux
+
+      ! loop through INTERFACES...
+      do iLayer=ixTop,ixBot
+        ! ***** the lower boundary
+        if (iLayer==nLayers) then  ! if lower boundary
+          ! identify the lower boundary condition
+          select case(ix_bcLowrTdyn) ! prescribed temperature at the lower boundary
+            case(prescribedTemp)
+              dz = mLayerDepth(iLayer)*0.5_rkind
+              dFlux_dWatAbove(iLayer)  = -dThermalC_dWatAbove(iLayer) * ( lowerBoundTemp - mLayerTempTrial(iLayer) )/dz
+              dFlux_dTempAbove(iLayer) = -dThermalC_dTempAbove(iLayer) * ( lowerBoundTemp - mLayerTempTrial(iLayer) )/dz + iLayerThermalC(iLayer)/dz
+            case(zeroFlux)  ! zero flux at the lower boundary
+              dFlux_dWatAbove(iLayer) = 0._rkind
+              dFlux_dTempAbove(iLayer) = 0._rkind
+            case default; err=20; message=trim(message)//'unable to identify lower boundary condition for thermodynamics'; return
+          end select  ! end identifying the lower boundary condition for thermodynamics
+        ! ***** internal layers
+        else
+          dz = (mLayerHeight(iLayer+1) - mLayerHeight(iLayer))
+          dFlux_dWatAbove(iLayer)  = -dThermalC_dWatAbove(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz
+          dFlux_dWatBelow(iLayer)  = -dThermalC_dWatBelow(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz
+          dFlux_dTempAbove(iLayer) = -dThermalC_dTempAbove(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz + iLayerThermalC(iLayer)/dz
+          dFlux_dTempBelow(iLayer) = -dThermalC_dTempBelow(iLayer) * ( mLayerTempTrial(iLayer+1) - mLayerTempTrial(iLayer) )/dz - iLayerThermalC(iLayer)/dz
+        end if  ! type of layer (upper, internal, or lower)
+      end do  ! end looping through layers
+
+    end if
 
   end associate ! end association of local variables with information in the data structures
 

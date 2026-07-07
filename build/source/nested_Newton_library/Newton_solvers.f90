@@ -56,7 +56,7 @@ contains
   logical      :: exit_flag                      ! exit flag
   logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
-  real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
+  !real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
 
   ! initialize error flag
   f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
@@ -87,26 +87,26 @@ contains
    ! obtain RHS vector
    if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
     do concurrent (i = 1:f_obj % n)
-     B(i,1) = -f_obj % f_vec(i) ! initialize right-side vector used by LAPACK
+     f_obj % B(i,1) = -f_obj % f_vec(i) ! initialize right-side vector used by LAPACK
     end do
    else ! get scaled RHS from previous line search call or initial value
     do concurrent (i = 1:f_obj % n)
-     B(i,1) = -f_obj % rVecScaled(i)
+     f_obj % B(i,1) = -f_obj % rVecScaled(i)
     end do
    end if
 
    ! solve for Newton step
    if (f_obj % J_eval_flag) call f_obj % J_eval(f_obj % xk) ! compute Jacobian (f_obj % J)
    f_obj % AF(:,:) = f_obj % J(:,:) ! load matrix used for LU factors
-   call linear_solve(f_obj,B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
+   call linear_solve(f_obj,f_obj % B,f_obj % tol) ! Solve Jx=B -- x stored in B on output
    if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
 
    ! Newton step refinement and update guess
    if (f_obj % refinement) then
-    call f_obj % apply_nested_line_search(LS_C,.false.,B(:,1)); if (f_obj % f_error) return
+    call f_obj % apply_nested_line_search(LS_C,.false.,f_obj % B(:,1)); if (f_obj % f_error) return
    else
     do concurrent (i = 1:f_obj % n)
-     f_obj % xkp1(i) = f_obj % xk(i) + B(i,1) ! update guess based on unrefined Newton step
+     f_obj % xkp1(i) = f_obj % xk(i) + f_obj % B(i,1) ! update guess based on unrefined Newton step
     end do
    end if
 
@@ -161,7 +161,7 @@ contains
   logical      :: exit_outer,exit_inner          ! exit flags for outer and inner loops
   logical      :: return_flag                    ! return flag for early return from Newton solver call
   ! LAPACK Variables
-  real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
+  !real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
 
   ! initialize error flag
   f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
@@ -222,13 +222,13 @@ contains
 
     ! obtain RHS vector
     if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
-      B(:,1) = f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
+      f_obj % B(:,1) = f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
      do concurrent (i = 1:f_obj % n)
-      B(i,1) = -(f_obj % f1_vec(i) - f_obj % f2_vec(i)) + B(i,1)
+      f_obj % B(i,1) = -(f_obj % f1_vec(i) - f_obj % f2_vec(i)) + f_obj % B(i,1)
      end do
     else ! get scaled RHS from previous line search call or initial value
      do concurrent (i = 1:f_obj % n)
-      B(i,1) = -f_obj % rVecScaled(i)
+      f_obj % B(i,1) = -f_obj % rVecScaled(i)
      end do
     end if
 
@@ -236,23 +236,23 @@ contains
     do concurrent (i = 1:f_obj % nrow, j = 1:f_obj % n)
      f_obj % AF(i,j) = f_obj % J1(i,j) - f_obj % J2(i,j) ! difference of Jacobians (formerly Jdiff)
     end do
-    call linear_solve(f_obj,B,f_obj % tol) ! Solve AF*x_step_inner=B -- inner Newton step stored in B on output
+    call linear_solve(f_obj,f_obj % B,f_obj % tol) ! Solve AF*x_step_inner=B -- inner Newton step stored in B on output
     if (f_obj % LAPACK_error) return ! check for LAPACK errors to allow recovery (if supported by the external driver)
 
     ! apply Newton step refinement and update guess
     if (f_obj % refinement) then
      if (f_obj % line_search_option == LS_O) then
       do concurrent (i = 1:f_obj % n) ! compute search direction for outer line search scheme
-       B(i,1) = f_obj % xkp1l(i) + B(i,1) - f_obj % xk0(i)
+       f_obj % B(i,1) = f_obj % xkp1l(i) + f_obj % B(i,1) - f_obj % xk0(i)
       end do
-      !call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
+      !call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + f_obj % B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
      !else
-     ! call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
+     ! call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % B(:,1)); if (f_obj % f_error) return
      end if
-     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,B(:,1)); if (f_obj % f_error) return
+     call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % B(:,1)); if (f_obj % f_error) return
     else
      do concurrent (i = 1:f_obj % n)
-      f_obj % xkp1lp1(i)=f_obj % xkp1l(i)+B(i,1) ! update guess if no refinement
+      f_obj % xkp1lp1(i)=f_obj % xkp1l(i)+f_obj % B(i,1) ! update guess if no refinement
      end do
     end if
 
@@ -350,9 +350,8 @@ contains
   real(r8b),intent(out)    :: R_est               ! estimated R for current iteration (computed in the previous call)
   ! local variables
   real(r8b)                :: tol                 ! tolerance
-  real(r8b)                :: R(-1:1)             ! maximum residual array (two previous exact values and prediction for next iteration)
+  !real(r8b)                :: R(-1:1)             ! maximum residual array (two previous exact values and prediction for next iteration)
   integer(i4b)             :: i                   ! index for residual vector
-  real(r8b)                :: R_vec(1:f_obj % n)  ! residual vector
   real(r8b)                :: b                   ! exponent used for convergence error estimation 
   real(r8b),parameter      :: tol_inner_LS = 1.e-4_r8b ! 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
 
@@ -370,7 +369,7 @@ contains
      if (f_obj % l < f_obj % lmax_loop) then
       ! look for precise agreement within a tight tolerance
       call compute_relative_residual
-      if (all(R_vec < tol_inner_LS)) then
+      if (all(f_obj % R_vec < tol_inner_LS)) then
        f_obj % lmax_loop = f_obj % l + 1_i4b; return
       end if
      end if
@@ -405,23 +404,23 @@ contains
     if (f_obj % inner) then
      R_est=f_obj % R_inner(1) ! store previous estimate for reference
      f_obj % R_inner(-1)=f_obj % R_inner(0)
-     R(-1)=f_obj % R_inner(-1) ! exact residual for iteration-1
+     f_obj % R_work(-1)=f_obj % R_inner(-1) ! exact residual for iteration-1
     else
      R_est=f_obj % R(1) ! store previous estimate for reference
      f_obj % R(-1)=f_obj % R(0)
-     R(-1)=f_obj % R(-1)       ! exact residual for iteration-1
+     f_obj % R_work(-1)=f_obj % R(-1)       ! exact residual for iteration-1
     end if
    end if
 
-   R(0)=maxval(R_vec) ! actual worst case residual for input iteration
+   f_obj % R_work(0)=maxval(f_obj % R_vec) ! actual worst case residual for input iteration
    if ((convergence.eq.strict).or.(convergence.eq.custom_strict)) then ! strict estimate
-    R(1)=R(0) ! estimated residual for iteration+1
+    f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1
    else if ((convergence.eq.predictive).or.(convergence.eq.custom_predictive)) then
     if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
-     R(1)=R(0) ! estimated residual for iteration+1 
+     f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1 
     else ! compute prediction based on power function
-     b=log10(R(0)/R(-1)) ! exponent
-     R(1)=R(0)*10**b     ! power function -- estimated residual for iteration+1
+     b=log10(f_obj % R_work(0)/f_obj % R_work(-1)) ! exponent
+     f_obj % R_work(1)=f_obj % R_work(0)*10**b     ! power function -- estimated residual for iteration+1
     end if
    else ! method not valid
     if (f_obj % out_error) then
@@ -432,17 +431,17 @@ contains
 
    if (f_obj % inner) then ! inner iterations
     tol = f_obj % tol_inner   ! set tolerance
-    f_obj % R_inner(0) = R(0) ! store exact residual for current iteration
-    f_obj % R_inner(1) = R(1) ! store estimated residual for iteration+1
+    f_obj % R_inner(0) = f_obj % R_work(0) ! store exact residual for current iteration
+    f_obj % R_inner(1) = f_obj % R_work(1) ! store estimated residual for iteration+1
    else                    ! outer/classical iterations
     tol = f_obj % tol         ! set tolerance
-    f_obj % R(0) = R(0)       ! store exact residual for current iteration
-    f_obj % R(1) = R(1)       ! store estimated residual for iteration+1
+    f_obj % R(0) = f_obj % R_work(0)       ! store exact residual for current iteration
+    f_obj % R(1) = f_obj % R_work(1)       ! store estimated residual for iteration+1
    end if
-   if (iteration.eq.0) R_est=R(1) ! initialize R_est for iteration zero
+   if (iteration.eq.0) R_est=f_obj % R_work(1) ! initialize R_est for iteration zero
 
    ! check exact error from current iteration and estimated error for next iteration
-   if ((R(0).lt.tol).or.(R(1).lt.tol)) then
+   if ((f_obj % R_work(0).lt.tol).or.(f_obj % R_work(1).lt.tol)) then
     ! if doing line search for inner iterations, ensure that one more inner iteration is performed using the outer line search scheme
     if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
      f_obj % lmax_loop = f_obj % l + 1_i4b; return
@@ -459,11 +458,11 @@ contains
     ! ** compute current residual **
     do concurrent (i=1:f_obj % n)
      if (xk(i).ne.0._r8b) then
-      R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+      f_obj % R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
      else if (xkp1(i).ne.0._r8b) then
-      R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+      f_obj % R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
      else
-      R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+      f_obj % R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
      end if
     end do
    end subroutine compute_relative_residual
@@ -495,19 +494,18 @@ contains
 
    subroutine convergence_order_cutoff
     ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    logical              :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
     logical              :: revert    ! does solution vector need to be completely reverted to original guess before starting nested iterations?
     logical              :: success   ! is the convergence order threshold successfully met for all solution vector elements?
     real(r8b),parameter       :: order_min=0._r8b    
     integer(i4b),parameter    :: k_cutoff=20_i4b
 
-    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
+    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals ------------ may not need this check
      if (f_obj % k == k_cutoff-2_i4b) then
       f_obj % xk_0(:) = xk(:)   ! x0
       f_obj % xk_1(:) = xkp1(:) ! x1
      else if (f_obj % k == k_cutoff) then ! check convergence order for third classical iteration
 
-      call check_convergence_order(order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,accept,revert,success)
+      call check_convergence_order(order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,f_obj % accept,revert,success)
 
       if (.not.success) return_flag = .true.
 
@@ -583,12 +581,8 @@ contains
   character(1)           :: EQUED                  ! specifies equilibration type (no initial equilibration)
   integer(i4b),parameter :: NRHS = 1_i4b           ! # of right-hand-side vectors
   integer(i4b) :: INFO                             ! error code
-  !integer(i4b) :: IPIV(1:f_obj % n)                ! pivot index vector
-  !integer(i4b) :: IWORK(1:f_obj % n)               ! work integer array
-  !real(r8b) :: RA(1:f_obj % n),CA(1:f_obj % n)     ! row and column scale factors for A
   real(r8b) :: RCOND                               ! estimate of condition number reciprocal
-  !real(r8b) :: X(1:f_obj % n,1:1)                  ! solution to original (unscaled) system
-  real(r8b) :: FERR(1:1),BERR(1:1)                 ! forward and backward error estimates (single right-hand side assumed)
+  !real(r8b) :: FERR(1:1),BERR(1:1)                 ! forward and backward error estimates (single right-hand side assumed)
 
   ! initialize error flag (used to enable recoverable errors for external drivers)
   f_obj % LAPACK_error = .false.
@@ -618,10 +612,11 @@ contains
    EQUED='N' ! note: not a parameter because LAPACK may change this value on output
    if (f_obj % banded) then ! banded matrix storage ---------------- may need to update A argument in this call (tried a fix but not tested)
     call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF(f_obj % KL+1:,:),f_obj % LDA,f_obj % AF,f_obj % LDAF,&
-               &f_obj % IPIV,EQUED,f_obj % RA,f_obj % CA,B,f_obj % LDB,f_obj % X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,f_obj % IWORK,INFO)
+               &f_obj % IPIV,EQUED,f_obj % RA,f_obj % CA,B,f_obj % LDB,&
+               &f_obj % X,f_obj % LDX,RCOND,f_obj % FERR,f_obj % BERR,f_obj % WORK,f_obj % IWORK,INFO)
    else ! full matrix storage
     call DGESVX(FACT,TRANS,f_obj % n,NRHS,f_obj % AF,f_obj % LDA,f_obj % AF,f_obj % LDAF,f_obj % IPIV,EQUED,f_obj % RA,f_obj % CA,B,f_obj % LDB,&
-               &f_obj % X,f_obj % LDX,RCOND,FERR,BERR,f_obj % WORK,f_obj % IWORK,INFO)
+               &f_obj % X,f_obj % LDX,RCOND,f_obj % FERR,f_obj % BERR,f_obj % WORK,f_obj % IWORK,INFO)
    end if
    B(:,:)=f_obj % X(:,:) ! put solution in output vector
   end if
@@ -653,8 +648,8 @@ contains
     end if
    end if
    if (f_obj % out_warning) then
-    if ((FERR(1).gt.tol).or.(BERR(1).gt.tol)) then ! print error information if tolerance is not met
-      write(f_obj % unit,*) "LAPACK Warning -- tolerance not met using expert solver:",RCOND,FERR,BERR 
+    if ((f_obj % FERR(1).gt.tol).or.(f_obj % BERR(1).gt.tol)) then ! print error information if tolerance is not met
+      write(f_obj % unit,*) "LAPACK Warning -- tolerance not met using expert solver:",RCOND,f_obj % FERR,f_obj % BERR 
     end if
    end if
   else

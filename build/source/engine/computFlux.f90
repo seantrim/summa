@@ -467,7 +467,7 @@ contains
 
  ! **** snowSoilNrgFlux ****
  subroutine initialize_snowSoilNrgFlux
-  call in_snowSoilNrgFlux%initialize(scalarSolution,firstFluxCall,mLayerTempTrial,flux_data,deriv_data)
+  call in_snowSoilNrgFlux%initialize(J_energy,scalarSolution,firstFluxCall,mLayerTempTrial,flux_data,deriv_data)
   call io_snowSoilNrgFlux%initialize(deriv_data)
  end subroutine initialize_snowSoilNrgFlux
 

@@ -66,7 +66,8 @@ module Newton_functions
    integer(i4b) :: LDA,LDAF,LDX,LDB  ! leading dimensions of A, AF, X, and B LAPACK arrays
    integer(i4b) :: KL,KU             ! # of subdiagonals and superdiagonals for LAPACK
    integer(i4b),allocatable :: IPIV(:),IWORK(:)                              ! LAPACK arrays
-   real(r8b),allocatable    :: WORK(:),RA(:),CA(:),X(:,:),AF(:,:)            ! LAPACK arrays
+   real(r8b),allocatable    :: WORK(:),RA(:),CA(:),B(:,:),X(:,:),AF(:,:)            ! LAPACK arrays
+   real(r8b)                :: FERR(1:1),BERR(1:1)        ! forward and backward error estimates (single right-hand side assumed)
    real(r8b),pointer        :: x0(:)                      ! guess vector for vector algorithms -- must be associated with vector allocated in external program 
    real(r8b),allocatable    :: xk(:),xkp1(:)              ! intermediate root estimates for classical iterations
    real(r8b),allocatable    :: xk0(:),xkp1l(:),xkp1lp1(:) ! intermediate root estimates for nested iterations
@@ -81,8 +82,10 @@ module Newton_functions
    logical,allocatable      :: accept(:)     ! logical mask for accepting guess vector entries for switch to nested iterations in dynamic mode
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
-   real(r8b)                :: R(-1:1)       ! max residual computed for iterations j-1, j, and j+1 (estimated)  
-   real(r8b)                :: R_inner(-1:1) ! exact max residual computed for iterations j-1, j, and j+1 (estimated) 
+   real(r8b)                :: R_work(-1:1)  ! work array for max residual computations 
+   real(r8b)                :: R(-1:1)       ! max residual computed for outer/classical iterations j-1, j, and j+1 (estimated)  
+   real(r8b)                :: R_inner(-1:1) ! max residual computed for inner iterations j-1, j, and j+1 (estimated) 
+   real(r8b),allocatable    :: R_vec(:)      ! residual vector
    integer(i4b)             :: convergence          ! string for convergence control option for outer/classical iterations
    integer(i4b)             :: convergence_inner    ! string for convergence control option for inner iterations
    integer(i4b)             :: linear_system_solver ! option for selecting solver for linear systems
@@ -256,6 +259,7 @@ contains
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
    end if
    allocate(f_obj % xk_0(1:n),f_obj % xk_1(1:n)) ! solutions used to compute convergence order
+   allocate(f_obj % R_vec(1:n)) ! residual vector
   end associate
 
   ! * allocate LAPACK arrays *
@@ -264,6 +268,7 @@ contains
   f_obj % LDX=f_obj % n; f_obj % LDB=f_obj % n ! leading dimensions for RHS arrays
 
   ! allocate memory and set LAPACK parameters for choice of matrix storage
+  allocate(f_obj % B(1:f_obj % n,1:1))                            ! RHS vector (and solution following solver call)
   if (f_obj % banded) then ! banded storage
    f_obj % KL = f_obj % subdiag; f_obj % KU = f_obj % superdiag
    f_obj % LDA = f_obj % KL + f_obj % KU + 1_i4b; f_obj % LDAF = f_obj % LDA + f_obj % KL
