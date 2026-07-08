@@ -79,6 +79,11 @@ module Newton_functions
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
+   real(r8b),allocatable    :: initial_solution(:) ! intial solution vector for line search
+   real(r8b),allocatable    :: updated_solution(:) ! updated solution vector for line search
+   real(r8b),allocatable    :: p_scaled(:)         ! search direction (scaled) for line search
+   real(r8b),allocatable    :: grad_L(:)           ! gradient of objective function L for line search
+   real(r8b),allocatable    :: f_temp(:)           ! temporary storage of f1 for 'L' scheme for line search
    logical,allocatable      :: accept(:)     ! logical mask for accepting guess vector entries for switch to nested iterations in dynamic mode
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
@@ -260,6 +265,10 @@ contains
    end if
    allocate(f_obj % xk_0(1:n),f_obj % xk_1(1:n)) ! solutions used to compute convergence order
    allocate(f_obj % R_vec(1:n)) ! residual vector
+   if (f_obj % refinement) then ! arrays for line search
+    allocate(f_obj % initial_solution(1:n),f_obj % updated_solution(1:n),f_obj % p_scaled(1:n),f_obj % grad_L(1:n),&
+            &f_obj % f_temp(1:n))          
+   end if
   end associate
 
   ! * allocate LAPACK arrays *
@@ -496,10 +505,6 @@ contains
   ! local
   real(r8b) :: L0,L1 ! objective function values
   real(r8b) :: L1_prev ! objective function value from previous line search iteration
-  real(r8b) :: initial_solution(1:f_obj % n) ! intial solution vector
-  real(r8b) :: updated_solution(1:f_obj % n) ! updated solution vector
-  real(r8b) :: p_scaled(1:f_obj % n)         ! search direction (scaled)
-  real(r8b) :: grad_L(1:f_obj % n)           ! gradient of objective function L
   real(r8b)            :: m ! local slope
   real(r8b), parameter :: c=1.e-4_r8b   ! objective function check control parameter
   real(r8b)            :: c_m ! c times m
@@ -516,19 +521,18 @@ contains
   integer(i4b)   :: err      ! SUMMA error code
   character(256) :: cmessage ! error message from SUMMA
   logical, parameter :: debug_output=.false.
-  real(r8b) :: f_temp(1:f_obj % n) ! temporary storage of f1 for 'L' scheme
 
   ! working options: LS_I for inner iterations, LS_O for last inner iteration (outer scheme), LS_C for classical (lmax=0)
 
   ! initial solutions and option validation
   if (option == LS_I) then ! inner case
-   initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
+   f_obj % initial_solution(:) = f_obj % xkp1l(:) ! previous inner iteration
   else if ((option == LS_O).or.(option == LS_C)) then ! last inner iteration (LS_O) or classical (LS_C)
    !if (f_obj % nested) then
    if (nested_algorithm) then
-    initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
+    f_obj % initial_solution(:) = f_obj % xk0(:)   ! previous outer iteration
    else
-    initial_solution(:) = f_obj % xk(:)   ! previous outer iteration
+    f_obj % initial_solution(:) = f_obj % xk(:)   ! previous outer iteration
    end if
   else
    print *, "Error in SUMMA_nested_line_search: option is not supported"
@@ -537,11 +541,11 @@ contains
 
   ! get initial objective function (scaled)
   if (option == LS_O) then
-   f_temp(:) = f_obj % f1_vec(:) ! save value of f1 for scaled residual calculations in objective function procedure
-   call f_obj % line_search_objective(nested_algorithm,.true.,.true.,option,initial_solution,f_temp,L0) ! need to compute when switching to outer scheme
+   f_obj % f_temp(:) = f_obj % f1_vec(:) ! save value of f1 for scaled residual calculations in objective function procedure
+   call f_obj % line_search_objective(nested_algorithm,.true.,.true.,option,f_obj % initial_solution,f_obj % f_temp,L0) ! need to compute when switching to outer scheme
   else if (f_obj % evaluate_B) then
    if (option == LS_I) then
-    call f_obj % line_search_objective(nested_algorithm,.false.,.false.,option,initial_solution,f_temp,L0) ! can reuse f, J, and rVecScaled values
+    call f_obj % line_search_objective(nested_algorithm,.false.,.false.,option,f_obj % initial_solution,f_obj % f_temp,L0) ! can reuse f, J, and rVecScaled values
    end if
   else
    L0 = f_obj % L0 ! reuse from systemSolv or previous Newton iteration (classical and inner schemes)
@@ -549,14 +553,14 @@ contains
 
   ! compute gradient of objective function (scaled)
   ! note: uses scaled Jacobian from LAPACK system (J for classical, Jdiff=J1-J2 for nested)
-  call SUMMA_computeGradient(f_obj,f_obj % aJacScaled,f_obj % rVecScaled,grad_L)
+  call SUMMA_computeGradient(f_obj,f_obj % aJacScaled,f_obj % rVecScaled,f_obj % grad_L)
 
   ! compute local slope (use scaled values)
   ! note: descaled search direction p computed from LAPACK solve
   do concurrent (i = 1:f_obj % n)
-   p_scaled(i) = p(i)/f_obj % xScale(i)
+   f_obj % p_scaled(i) = p(i)/f_obj % xScale(i)
   end do
-  m = dot_product(grad_L,p_scaled) ! confirmed against homegrown line search
+  m = dot_product(f_obj % grad_L,f_obj % p_scaled) ! confirmed against homegrown line search
   c_m = c*m ! control parameter times local slope
 
   ! check that local slope is negative (needed to reduce the line search objective function)
@@ -583,14 +587,14 @@ contains
   alpha = 1._r8b ! initialize line search step size
   line_search: do i=1_i4b,i_max+1_i4b
    do concurrent (j = 1:f_obj % n)
-    updated_solution(j) = initial_solution(j) + alpha*p(j)
+    f_obj % updated_solution(j) = f_obj % initial_solution(j) + alpha*p(j)
    end do
 
    ! impose constraints (calls SUMMA's imposeConstraints routine)
-   call f_obj % apply_constraints(initial_solution,updated_solution)
+   call f_obj % apply_constraints(f_obj % initial_solution,f_obj % updated_solution)
 
    ! compute objective function
-   call f_obj % line_search_objective(nested_algorithm,.true.,.true.,option,updated_solution,f_temp,L1)
+   call f_obj % line_search_objective(nested_algorithm,.true.,.true.,option,f_obj % updated_solution,f_obj % f_temp,L1)
 
    !! check SUMMA's feasibility flag ------------------ turn this into a recoverable error
    !if (.not.(f_obj % feasible)) then
@@ -602,7 +606,7 @@ contains
    !if (option == LS_I) then
    ! converged = .false.
    !else
-    converged = SUMMA_checkConv(f_obj,p,updated_solution)
+    converged = SUMMA_checkConv(f_obj,p,f_obj % updated_solution)
    !end if   
 
    if (debug_output) then
@@ -697,9 +701,9 @@ contains
    ! update solution in nested Newton algorithm
    !if (f_obj % nested) then
    if (nested_algorithm) then
-    f_obj % xkp1lp1(:) = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
+    f_obj % xkp1lp1(:) = f_obj % updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    else
-    f_obj % xkp1(:)    = updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
+    f_obj % xkp1(:)    = f_obj % updated_solution(:) ! apply updated solution (all cases -- to be used in case of early loop exit)
    end if
 
    if (.not.converged) then ! if outer/classical iterations not converged, prep for next Newton iteration (if applicable)
@@ -713,15 +717,15 @@ contains
        ! have f -- need f1, J1, f2, and J2
        !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f - now obtained directly from eval8summa
        !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec) ! get f2 from total f - now obtained directly from eval8summa
-       !call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
-       call f_obj % J1_eval(updated_solution) ! get J1 based on previous eval8summa call (used to compute f)
-       call f_obj % J2_eval(updated_solution) ! get J2 based on previous eval8summa call (used to compute f)
+       !call f_obj % J1_J2_eval(f_obj % updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f)
+       call f_obj % J1_eval(f_obj % updated_solution) ! get J1 based on previous eval8summa call (used to compute f)
+       call f_obj % J2_eval(f_obj % updated_solution) ! get J2 based on previous eval8summa call (used to compute f)
        f_obj % L0 = L1 ! store previous objective function value
       end if
      else
       if (f_obj % k < f_obj % kmax_classical) then ! not required for last outer iteration
        ! have f -- need J
-       call f_obj % J_eval(updated_solution)
+       call f_obj % J_eval(f_obj % updated_solution)
        f_obj % L0 = L1 ! store previous objective function value
       end if 
      end if
@@ -737,9 +741,9 @@ contains
       else ! if l is odd
        evaluate_J1 = .true. ! evaluate J1 to be used for next even l value
       end if
-      if (evaluate_J1) call f_obj % J1_eval(updated_solution)   
+      if (evaluate_J1) call f_obj % J1_eval(f_obj % updated_solution)   
      else ! evaluate J1 on every inner iteration
-      call f_obj % J1_eval(updated_solution)   ! get J1 based on eval8summa call for total f 
+      call f_obj % J1_eval(f_obj % updated_solution)   ! get J1 based on eval8summa call for total f 
      end if 
 
      f_obj % L0 = L1 ! store previous inner scheme objective function value (does not apply if switching to outer line search scheme)
@@ -749,9 +753,9 @@ contains
      if (f_obj % k < f_obj % kmax) then ! not required for last outer iteration
       ! have f and f2 -- need J2, f1, J1
       !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec) ! get f1 from total f - now obtained directly from eval8summa
-      !call f_obj % J1_J2_eval(updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
-      call f_obj % J1_eval(updated_solution) ! get J1 based on previous eval8summa call (used to compute f2)
-      call f_obj % J2_eval(updated_solution) ! get J2 based on previous eval8summa call (used to compute f2)
+      !call f_obj % J1_J2_eval(f_obj % updated_solution) ! get J1 and J2 based on previous eval8summa call (used to compute f2)
+      call f_obj % J1_eval(f_obj % updated_solution) ! get J1 based on previous eval8summa call (used to compute f2)
+      call f_obj % J2_eval(f_obj % updated_solution) ! get J2 based on previous eval8summa call (used to compute f2)
      end if
 
     else
