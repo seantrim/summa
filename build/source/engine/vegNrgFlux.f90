@@ -242,10 +242,11 @@ subroutine vegNrgFlux(&
   ! ---------------------------------------------------------------------------------------
   associate(&
     ! input: model control
-    firstSubStep                    => in_vegNrgFlux % firstSubStep,          & ! intent(in): [dp] flag to indicate if we are processing the first sub-step
-    firstFluxCall                   => in_vegNrgFlux % firstFluxCall,         & ! intent(in): [dp] flag to indicate if we are processing the first flux call
-    computeVegFlux                  => in_vegNrgFlux % computeVegFlux,        & ! intent(in): [dp] flag to indicate if computing fluxes over vegetation
-    checkLWBalance                  => in_vegNrgFlux % checkLWBalance,        & ! intent(in): [dp] flag to check longwave balance
+    J_energy                        => in_vegNrgFlux % J_energy,              & ! intent(in): [lgt] flag to compute energy Jacobian terms
+    firstSubStep                    => in_vegNrgFlux % firstSubStep,          & ! intent(in): [lgt] flag to indicate if we are processing the first sub-step
+    firstFluxCall                   => in_vegNrgFlux % firstFluxCall,         & ! intent(in): [lgt] flag to indicate if we are processing the first flux call
+    computeVegFlux                  => in_vegNrgFlux % computeVegFlux,        & ! intent(in): [lgt] flag to indicate if computing fluxes over vegetation
+    checkLWBalance                  => in_vegNrgFlux % checkLWBalance,        & ! intent(in): [lgt] flag to check longwave balance
     ! input: model state variables
     upperBoundTemp                  => in_vegNrgFlux % upperBoundTemp,        & ! intent(in): [dp] temperature of the upper boundary (K) --> NOTE: use air temperature
     canairTempTrial                 => in_vegNrgFlux % scalarCanairTempTrial, & ! intent(in): [dp] trial value of canopy air space temperature (K)
@@ -444,7 +445,7 @@ subroutine vegNrgFlux(&
     dCanopyTrans_dTGround => out_vegNrgFlux % dCanopyTrans_dTGround,         & ! intent(out): [dp] derivative in canopy transpiration w.r.t. ground temperature (kg m-2 s-1 K-1)
     ! output: cross derivative terms
     dCanopyNetFlux_dCanWat => out_vegNrgFlux % dCanopyNetFlux_dCanWat,       & ! intent(out): [dp] derivative in net canopy fluxes w.r.t. canopy total water content (J kg-1 s-1)
-    dGroundNetFlux_dCanWat =>out_vegNrgFlux % dGroundNetFlux_dCanWat,        & ! intent(out): [dp] derivative in net ground fluxes w.r.t. canopy total water content (J kg-1 s-1)
+    dGroundNetFlux_dCanWat => out_vegNrgFlux % dGroundNetFlux_dCanWat,       & ! intent(out): [dp] derivative in net ground fluxes w.r.t. canopy total water content (J kg-1 s-1)
     ! output: error control
     err     => out_vegNrgFlux % err,                       & ! intent(out): [i4b] error code
     message => out_vegNrgFlux % cmessage                   & ! intent(out): [character] error message
@@ -819,6 +820,7 @@ subroutine vegNrgFlux(&
         ! compute turbulent heat fluxes
         call turbFluxes(&
                         ! input: model control
+                        J_energy,                             & ! intent(in):  logical flag to compute energy Jacobian terms
                         computeVegFlux,                       & ! intent(in):  logical flag to compute vegetation fluxes (.false. if veg buried by snow)
                         ! input: above-canopy forcing data
                         airtemp,                              & ! intent(in):  air temperature of the air above the vegetation canopy (K)
@@ -964,53 +966,57 @@ subroutine vegNrgFlux(&
         canopyNetFlux = scalarCanopyAbsorbedSolar + scalarLWNetCanopy + turbFluxCanopy + scalarCanopyAdvectiveHeatFlux
         groundNetFlux = scalarGroundAbsorbedSolar + scalarLWNetGround + turbFluxGround + scalarGroundAdvectiveHeatFlux
 
-        ! compute the energy derivatives
-        dCanairNetFlux_dCanairTemp = dTurbFluxCanair_dTCanair
-        dCanairNetFlux_dCanopyTemp = dTurbFluxCanair_dTCanopy
-        dCanairNetFlux_dGroundTemp = dTurbFluxCanair_dTGround
-        dCanopyNetFlux_dCanairTemp = dTurbFluxCanopy_dTCanair
-        dCanopyNetFlux_dCanopyTemp = dLWNetCanopy_dTCanopy + dTurbFluxCanopy_dTCanopy - Cp_water*(scalarRainfall - scalarThroughfallRain) - Cp_ice*(scalarSnowfall - scalarThroughfallSnow)
-        dCanopyNetFlux_dGroundTemp = dLWNetCanopy_dTGround + dTurbFluxCanopy_dTGround
-        dGroundNetFlux_dCanairTemp = dTurbFluxGround_dTCanair
-        dGroundNetFlux_dCanopyTemp = dLWNetGround_dTCanopy + dTurbFluxGround_dTCanopy
-        dGroundNetFlux_dGroundTemp = dLWNetGround_dTGround + dTurbFluxGround_dTGround - Cp_water*scalarThroughfallRain - Cp_ice*scalarThroughfallSnow
+        if (J_energy) then ! if computing energy Jacobian terms
+ 
+          ! compute the energy derivatives
+          dCanairNetFlux_dCanairTemp = dTurbFluxCanair_dTCanair
+          dCanairNetFlux_dCanopyTemp = dTurbFluxCanair_dTCanopy
+          dCanairNetFlux_dGroundTemp = dTurbFluxCanair_dTGround
+          dCanopyNetFlux_dCanairTemp = dTurbFluxCanopy_dTCanair
+          dCanopyNetFlux_dCanopyTemp = dLWNetCanopy_dTCanopy + dTurbFluxCanopy_dTCanopy - Cp_water*(scalarRainfall - scalarThroughfallRain) - Cp_ice*(scalarSnowfall - scalarThroughfallSnow)
+          dCanopyNetFlux_dGroundTemp = dLWNetCanopy_dTGround + dTurbFluxCanopy_dTGround
+          dGroundNetFlux_dCanairTemp = dTurbFluxGround_dTCanair
+          dGroundNetFlux_dCanopyTemp = dLWNetGround_dTCanopy + dTurbFluxGround_dTCanopy
+          dGroundNetFlux_dGroundTemp = dLWNetGround_dTGround + dTurbFluxGround_dTGround - Cp_water*scalarThroughfallRain - Cp_ice*scalarThroughfallSnow
 
-        ! check if evaporation or sublimation
-        if (scalarLatHeatSubVapCanopy < LH_vap+verySmall) then ! evaporation
-          ! compute the liquid water derivatives
-          dCanopyEvaporation_dCanWat  = dLatHeatCanopyEvap_dCanWat/LH_vap    ! (s-1)
-          dCanopyEvaporation_dTCanair = dLatHeatCanopyEvap_dTCanair/LH_vap   ! (kg m-2 s-1 K-1)
-          dCanopyEvaporation_dTCanopy = dLatHeatCanopyEvap_dTCanopy/LH_vap   ! (kg m-2 s-1 K-1)
-          dCanopyEvaporation_dTGround = dLatHeatCanopyEvap_dTGround/LH_vap   ! (kg m-2 s-1 K-1)
-        else ! sublimation
-          dCanopyEvaporation_dCanWat  = 0._rkind  ! (s-1)
-          dCanopyEvaporation_dTCanair = 0._rkind  ! (kg m-2 s-1 K-1)
-          dCanopyEvaporation_dTCanopy = 0._rkind  ! (kg m-2 s-1 K-1)
-          dCanopyEvaporation_dTGround = 0._rkind  ! (kg m-2 s-1 K-1)
+          ! check if evaporation or sublimation
+          if (scalarLatHeatSubVapCanopy < LH_vap+verySmall) then ! evaporation
+            ! compute the liquid water derivatives
+            dCanopyEvaporation_dCanWat  = dLatHeatCanopyEvap_dCanWat/LH_vap    ! (s-1)
+            dCanopyEvaporation_dTCanair = dLatHeatCanopyEvap_dTCanair/LH_vap   ! (kg m-2 s-1 K-1)
+            dCanopyEvaporation_dTCanopy = dLatHeatCanopyEvap_dTCanopy/LH_vap   ! (kg m-2 s-1 K-1)
+            dCanopyEvaporation_dTGround = dLatHeatCanopyEvap_dTGround/LH_vap   ! (kg m-2 s-1 K-1)
+          else ! sublimation
+            dCanopyEvaporation_dCanWat  = 0._rkind  ! (s-1)
+            dCanopyEvaporation_dTCanair = 0._rkind  ! (kg m-2 s-1 K-1)
+            dCanopyEvaporation_dTCanopy = 0._rkind  ! (kg m-2 s-1 K-1)
+            dCanopyEvaporation_dTGround = 0._rkind  ! (kg m-2 s-1 K-1)
+          end if
+
+          ! transpiration
+          if (scalarLatHeatCanopyTrans > 0._rkind) then ! flux directed towards the veg
+            dCanopyTrans_dCanWat = 0._rkind
+            dCanopyTrans_dTCanair= 0._rkind
+            dCanopyTrans_dTCanopy= 0._rkind
+            dCanopyTrans_dTGround= 0._rkind
+          else
+            dCanopyTrans_dCanWat=  dLatHeatCanopyTrans_dCanWat/LH_vap  ! transpiration is always vapor
+            dCanopyTrans_dTCanair= dLatHeatCanopyTrans_dTCanair/LH_vap
+            dCanopyTrans_dTCanopy= dLatHeatCanopyTrans_dTCanopy/LH_vap
+            dCanopyTrans_dTGround= dLatHeatCanopyTrans_dTGround/LH_vap
+          end if
+
+          ! compute the liquid water derivatives (ground evap)
+          dGroundEvaporation_dCanWat  = dLatHeatGroundEvap_dCanWat/LH_vap    ! (s-1)
+          dGroundEvaporation_dTCanair = dLatHeatGroundEvap_dTCanair/LH_vap   ! (kg m-2 s-1 K-1)
+          dGroundEvaporation_dTCanopy = dLatHeatGroundEvap_dTCanopy/LH_vap   ! (kg m-2 s-1 K-1)
+          dGroundEvaporation_dTGround = dLatHeatGroundEvap_dTGround/LH_vap   ! (kg m-2 s-1 K-1)
+
+          ! compute the cross derivative terms (only related to turbulent fluxes; specifically canopy evaporation and transpiration)
+          dCanopyNetFlux_dCanWat = dTurbFluxCanopy_dCanWat  ! derivative in net canopy fluxes w.r.t. canopy total water content (J kg-1 s-1)
+          dGroundNetFlux_dCanWat = dTurbFluxGround_dCanWat  ! derivative in net ground fluxes w.r.t. canopy total water content (J kg-1 s-1)
+
         end if
-
-        ! transpiration
-        if (scalarLatHeatCanopyTrans > 0._rkind) then ! flux directed towards the veg
-          dCanopyTrans_dCanWat = 0._rkind
-          dCanopyTrans_dTCanair= 0._rkind
-          dCanopyTrans_dTCanopy= 0._rkind
-          dCanopyTrans_dTGround= 0._rkind
-        else
-          dCanopyTrans_dCanWat=  dLatHeatCanopyTrans_dCanWat/LH_vap  ! transpiration is always vapor
-          dCanopyTrans_dTCanair= dLatHeatCanopyTrans_dTCanair/LH_vap
-          dCanopyTrans_dTCanopy= dLatHeatCanopyTrans_dTCanopy/LH_vap
-          dCanopyTrans_dTGround= dLatHeatCanopyTrans_dTGround/LH_vap
-        end if
-
-        ! compute the liquid water derivatives (ground evap)
-        dGroundEvaporation_dCanWat  = dLatHeatGroundEvap_dCanWat/LH_vap    ! (s-1)
-        dGroundEvaporation_dTCanair = dLatHeatGroundEvap_dTCanair/LH_vap   ! (kg m-2 s-1 K-1)
-        dGroundEvaporation_dTCanopy = dLatHeatGroundEvap_dTCanopy/LH_vap   ! (kg m-2 s-1 K-1)
-        dGroundEvaporation_dTGround = dLatHeatGroundEvap_dTGround/LH_vap   ! (kg m-2 s-1 K-1)
-
-        ! compute the cross derivative terms (only related to turbulent fluxes; specifically canopy evaporation and transpiration)
-        dCanopyNetFlux_dCanWat = dTurbFluxCanopy_dCanWat  ! derivative in net canopy fluxes w.r.t. canopy total water content (J kg-1 s-1)
-        dGroundNetFlux_dCanWat = dTurbFluxGround_dCanWat  ! derivative in net ground fluxes w.r.t. canopy total water content (J kg-1 s-1)
 
       ! * check upper boundary condition
       case default; err=10; message=trim(message)//'unable to identify upper boundary condition for thermodynamics'; return
@@ -1890,6 +1896,7 @@ end subroutine soilResist
 ! ********************************************************************************
 subroutine turbFluxes(&
                       ! input: model control
+                      J_energy,                      & ! intent(in): logical flag to compute energy Jacobian terms
                       computeVegFlux,                & ! intent(in): logical flag to compute vegetation fluxes (.false. if veg buried by snow)
                       ! input: above-canopy forcing data
                       airtemp,                       & ! intent(in): air temperature of the air above the vegetation canopy (K)
@@ -1985,6 +1992,7 @@ subroutine turbFluxes(&
   ! -----------------------------------------------------------------------------------------------------------------------------------------
   implicit none
   ! input: model control
+  logical(lgt),intent(in)          :: J_energy                ! logical flag to compute energy Jacobian terms
   logical(lgt),intent(in)          :: computeVegFlux          ! logical flag to compute vegetation fluxes (.false. if veg buried by snow)
    ! input: above-canopy forcing data
   real(rkind),intent(in)           :: airtemp                 ! air temperature of the air above the vegetation canopy (K)
@@ -2403,24 +2411,29 @@ subroutine turbFluxes(&
   turbFluxGround = senHeatGround + latHeatGround                           ! net turbulent flux at the ground surface (W m-2)
 
   ! * compute derivatives
-  ! energy derivatives
-  dTurbFluxCanair_dTCanair = dSenHeatTotal_dTCanair - dSenHeatCanopy_dTCanair - dSenHeatGround_dTCanair            ! derivative in net canopy air space fluxes w.r.t. canopy air temperature (W m-2 K-1)
-  dTurbFluxCanair_dTCanopy = dSenHeatTotal_dTCanopy - dSenHeatCanopy_dTCanopy - dSenHeatGround_dTCanopy            ! derivative in net canopy air space fluxes w.r.t. canopy temperature (W m-2 K-1)
-  dTurbFluxCanair_dTGround = dSenHeatTotal_dTGround - dSenHeatCanopy_dTGround - dSenHeatGround_dTGround            ! derivative in net canopy air space fluxes w.r.t. ground temperature (W m-2 K-1)
-  dTurbFluxCanopy_dTCanair = dSenHeatCanopy_dTCanair + dLatHeatCanopyEvap_dTCanair + dLatHeatCanopyTrans_dTCanair  ! derivative in net canopy turbulent fluxes w.r.t. canopy air temperature (W m-2 K-1)
-  dTurbFluxCanopy_dTCanopy = dSenHeatCanopy_dTCanopy + dLatHeatCanopyEvap_dTCanopy + dLatHeatCanopyTrans_dTCanopy  ! derivative in net canopy turbulent fluxes w.r.t. canopy temperature (W m-2 K-1)
-  dTurbFluxCanopy_dTGround = dSenHeatCanopy_dTGround + dLatHeatCanopyEvap_dTGround + dLatHeatCanopyTrans_dTGround  ! derivative in net canopy turbulent fluxes w.r.t. ground temperature (W m-2 K-1)
-  dTurbFluxGround_dTCanair = dSenHeatGround_dTCanair + dLatHeatGroundEvap_dTCanair                                 ! derivative in net ground turbulent fluxes w.r.t. canopy air temperature (W m-2 K-1)
-  dTurbFluxGround_dTCanopy = dSenHeatGround_dTCanopy + dLatHeatGroundEvap_dTCanopy                                 ! derivative in net ground turbulent fluxes w.r.t. canopy temperature (W m-2 K-1)
-  dTurbFluxGround_dTGround = dSenHeatGround_dTGround + dLatHeatGroundEvap_dTGround                                 ! derivative in net ground turbulent fluxes w.r.t. ground temperature (W m-2 K-1)
+  if (J_energy) then ! if computing energy Jacobian terms
+    ! energy derivatives
+    dTurbFluxCanair_dTCanair = dSenHeatTotal_dTCanair - dSenHeatCanopy_dTCanair - dSenHeatGround_dTCanair            ! derivative in net canopy air space fluxes w.r.t. canopy air temperature (W m-2 K-1)
+    dTurbFluxCanair_dTCanopy = dSenHeatTotal_dTCanopy - dSenHeatCanopy_dTCanopy - dSenHeatGround_dTCanopy            ! derivative in net canopy air space fluxes w.r.t. canopy temperature (W m-2 K-1)
+    dTurbFluxCanair_dTGround = dSenHeatTotal_dTGround - dSenHeatCanopy_dTGround - dSenHeatGround_dTGround            ! derivative in net canopy air space fluxes w.r.t. ground temperature (W m-2 K-1)
+    dTurbFluxCanopy_dTCanair = dSenHeatCanopy_dTCanair + dLatHeatCanopyEvap_dTCanair + dLatHeatCanopyTrans_dTCanair  ! derivative in net canopy turbulent fluxes w.r.t. canopy air temperature (W m-2 K-1)
+    dTurbFluxCanopy_dTCanopy = dSenHeatCanopy_dTCanopy + dLatHeatCanopyEvap_dTCanopy + dLatHeatCanopyTrans_dTCanopy  ! derivative in net canopy turbulent fluxes w.r.t. canopy temperature (W m-2 K-1)
+    dTurbFluxCanopy_dTGround = dSenHeatCanopy_dTGround + dLatHeatCanopyEvap_dTGround + dLatHeatCanopyTrans_dTGround  ! derivative in net canopy turbulent fluxes w.r.t. ground temperature (W m-2 K-1)
+    dTurbFluxGround_dTCanair = dSenHeatGround_dTCanair + dLatHeatGroundEvap_dTCanair                                 ! derivative in net ground turbulent fluxes w.r.t. canopy air temperature (W m-2 K-1)
+    dTurbFluxGround_dTCanopy = dSenHeatGround_dTCanopy + dLatHeatGroundEvap_dTCanopy                                 ! derivative in net ground turbulent fluxes w.r.t. canopy temperature (W m-2 K-1)
+    dTurbFluxGround_dTGround = dSenHeatGround_dTGround + dLatHeatGroundEvap_dTGround                                 ! derivative in net ground turbulent fluxes w.r.t. ground temperature (W m-2 K-1)
+  !end if
+    ! liquid water derivatives
+    dLatHeatCanopyEvap_dCanWat = dLatHeatCanopyEvap_dWetFrac*dCanopyWetFraction_dWat                                 ! derivative in latent heat of canopy evaporation w.r.t. canopy total water (W kg-1)
+    ! cross derivatives
+    dTurbFluxCanair_dCanWat  = 0._rkind                                                                              ! derivative in net canopy air space fluxes w.r.t. canopy total water content (J kg-1 s-1)
+  end if
+
   ! liquid water derivatives
-  dLatHeatCanopyEvap_dCanWat = dLatHeatCanopyEvap_dWetFrac*dCanopyWetFraction_dWat                                 ! derivative in latent heat of canopy evaporation w.r.t. canopy total water (W kg-1)
   dLatHeatGroundEvap_dCanWat = latHeatSubVapGround*latentHeatConstant*groundConductanceLH*dVPCanopyAir_dCanWat     ! derivative in latent heat of ground evaporation w.r.t. canopy total water (J kg-1 s-1)
   ! cross derivatives
-  dTurbFluxCanair_dCanWat  = 0._rkind                                                                              ! derivative in net canopy air space fluxes w.r.t. canopy total water content (J kg-1 s-1)
   dTurbFluxCanopy_dCanWat  = dLatHeatCanopyEvap_dCanWat + dLatHeatCanopyTrans_dCanWat                              ! derivative in net canopy turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
   dTurbFluxGround_dCanWat  = dLatHeatGroundEvap_dCanWat                                                            ! derivative in net ground turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
-
 end subroutine turbFluxes
 
 ! *******************************************************************************************************

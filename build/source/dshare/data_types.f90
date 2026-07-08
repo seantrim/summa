@@ -325,6 +325,7 @@ MODULE data_types
  ! Note: class procedures are located in the contains block of this (data_types) module
  ! ** vegNrgFlux
  type, public :: in_type_vegNrgFlux ! class for intent(in) arguments in vegNrgFlux call
+   logical(lgt)             :: J_energy                          ! intent(in): flag to compute energy Jacobian terms
    logical(lgt)             :: firstSubStep                      ! intent(in): flag to indicate if we are processing the first sub-step
    logical(lgt)             :: firstFluxCall                     ! intent(in): flag to indicate if we are processing the first flux call
    logical(lgt)             :: computeVegFlux                    ! intent(in): flag to indicate if we need to compute fluxes over vegetation
@@ -1003,10 +1004,11 @@ MODULE data_types
 contains
  
  ! **** vegNrgFlux ****
- subroutine initialize_in_vegNrgFlux(in_vegNrgFlux,firstSubStep,firstFluxCall,computeVegFlux,checkLWBalance,&
+ subroutine initialize_in_vegNrgFlux(in_vegNrgFlux,J_energy,firstSubStep,firstFluxCall,computeVegFlux,checkLWBalance,&
                                      scalarCanairTempTrial,scalarCanopyTempTrial,mLayerTempTrial,scalarCanopyIceTrial,&
                                      scalarCanopyLiqTrial,forc_data,deriv_data)
   class(in_type_vegNrgFlux),intent(out) :: in_vegNrgFlux               ! class object for intent(in) vegNrgFlux arguments
+  logical(lgt),intent(in)               :: J_energy                    ! flag to compute energy Jacobian terms
   logical(lgt),intent(in)               :: firstSubStep                ! flag to indicate if we are processing the first sub-step
   logical(lgt),intent(in)               :: firstFluxCall               ! flag to indicate if we are processing the first flux call
   logical(lgt),intent(in)               :: computeVegFlux              ! flag to indicate if computing fluxes over vegetation
@@ -1022,6 +1024,7 @@ contains
    upperBoundTemp               => forc_data%var(iLookFORCE%airtemp),                 & ! intent(in): [dp]     temperature of the upper boundary of the snow and soil domains (K)
    dCanLiq_dTcanopy             => deriv_data%var(iLookDERIV%dCanLiq_dTcanopy)%dat(1) ) ! intent(out): [dp] derivative of canopy liquid storage w.r.t. temperature
    ! intent(in) arguments
+   in_vegNrgFlux % J_energy=J_energy                              ! intent(in): flag to compute energy Jacobian terms
    in_vegNrgFlux % firstSubStep=firstSubStep                      ! intent(in): flag to indicate if we are processing the first sub-step
    in_vegNrgFlux % firstFluxCall=firstFluxCall                    ! intent(in): flag to indicate if we are processing the first flux call
    in_vegNrgFlux % computeVegFlux=computeVegFlux                  ! intent(in): flag to indicate if we need to compute fluxes over vegetation

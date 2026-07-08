@@ -453,7 +453,7 @@ contains
 
    dCanLiq_dTcanopy = dTheta_dTkCanopy*iden_water*canopyDepth     ! derivative in canopy liquid storage w.r.t. canopy temperature (kg m-2 K-1)
   end associate
-  call in_vegNrgFlux % initialize(firstSubStep,firstFluxCall,computeVegFlux,checkLWBalance,&
+  call in_vegNrgFlux % initialize(J_energy,firstSubStep,firstFluxCall,computeVegFlux,checkLWBalance,&
                                   scalarCanairTempTrial,scalarCanopyTempTrial,mLayerTempTrial,scalarCanopyIceTrial,&
                                   scalarCanopyLiqTrial,forc_data,deriv_data)
  end subroutine initialize_vegNrgFlux
