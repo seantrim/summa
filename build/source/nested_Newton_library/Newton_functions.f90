@@ -84,6 +84,7 @@ module Newton_functions
    real(r8b),allocatable    :: p_scaled(:)         ! search direction (scaled) for line search
    real(r8b),allocatable    :: grad_L(:)           ! gradient of objective function L for line search
    real(r8b),allocatable    :: f_temp(:)           ! temporary storage of f1 for 'L' scheme for line search
+   real(r8b),allocatable    :: vector(:)           ! array for temporary vector output 
    logical,allocatable      :: accept(:)     ! logical mask for accepting guess vector entries for switch to nested iterations in dynamic mode
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
@@ -198,7 +199,7 @@ module Newton_functions
    procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
    procedure :: custom_scaling     => SUMMA_scaling  
    procedure :: custom_descaling   => SUMMA_descaling  
-   procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
+   !procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
    procedure :: get_f1_f2_flags => get_SUMMA_f1_f2_flags
    procedure :: f_state_SUMMA_vec_full
 
@@ -269,6 +270,7 @@ contains
     allocate(f_obj % initial_solution(1:n),f_obj % updated_solution(1:n),f_obj % p_scaled(1:n),f_obj % grad_L(1:n),&
             &f_obj % f_temp(1:n))          
    end if
+   allocate(f_obj % vector(1:n)) ! output vector (e.g., for matrix-vector products)
   end associate
 
   ! * allocate LAPACK arrays *
@@ -419,15 +421,15 @@ contains
 !  end if
 ! end subroutine f_initial_guess
 
- function matrix_vector_product(f_obj,A,x) result(y)
+ subroutine matrix_vector_product(f_obj,A,x,y)
   ! *** Compute matrix vector product y=A*x ***
   ! input
-  class(f_obj_base),intent(in) :: f_obj              ! class object containing solver options
-  real(r8b),intent(in) :: A(:,:)                     ! input matrix 
-  real(r8b),intent(in) :: x(:)                       ! input vector
+  class(f_obj_base),intent(inout) :: f_obj              ! class object containing solver options (intent(inout) so that y may be a component of f_obj)
+  real(r8b),intent(in),contiguous :: A(:,:)             ! input matrix 
+  real(r8b),intent(in),contiguous :: x(:)               ! input vector
     
   ! output
-  real(r8b) :: y(f_obj % n)                          ! product vector
+  real(r8b),intent(out),contiguous :: y(:)              ! product vector
     
   ! local variables
   character(1),parameter :: TRANS='N'                ! option for matrix transposition
@@ -435,23 +437,19 @@ contains
   real(r8b),parameter    :: ALPHA=1._r8b,BETA=0._r8b ! scalars used in LAPACK solvers
 
   if (f_obj % banded) then ! banded storage
-   !KL=f_obj % subdiag; KU=f_obj % superdiag
-   !LDA=KL + KU + 1
-   associate(KL => f_obj % subdiag,KU => f_obj % superdiag,LDA => f_obj % subdiag + f_obj % superdiag + 1_i4b)
+   associate(KL => f_obj % subdiag,KU => f_obj % superdiag,LDA => f_obj % LDA)
     if (f_obj % linear_system_solver == LAPACK_standard) then
-     !!!f_obj % AF(1:f_obj % KL,:)=0._r8b; f_obj % AF(f_obj % KL+1:f_obj % LDAF,:)=A(1:f_obj % LDA,:)
      call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A(KL+1:f_obj % LDAF,:),LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses different banded storage scheme compared to standard solver
     else if (f_obj % linear_system_solver == LAPACK_expert) then
      call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses same banded storage scheme as expert solver
     end if
    end associate
   else ! full matrix storage
-   !LDA=f_obj % n
-   associate(LDA => f_obj % n)
+   associate(LDA => f_obj % LDA)
     call DGEMV(TRANS,f_obj % n,f_obj % n,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS
    end associate
   end if
- end function matrix_vector_product
+ end subroutine matrix_vector_product
 
  !! ******************************* SUMMA procedures below ******************************* !!
 
@@ -500,7 +498,7 @@ contains
   class(f_obj_type),intent(inout) :: f_obj            ! nested Newton object
   integer(i4b)     ,intent(in)    :: option           ! line search scheme option
   logical          ,intent(in)    :: nested_algorithm ! flag for nested algorithm (takes dynamic Newton iteration type selection mode into account)
-  real(r8b)        ,intent(in)    :: p(:) ! search direction
+  real(r8b)        ,intent(in),contiguous :: p(:) ! search direction
 
   ! local
   real(r8b) :: L0,L1 ! objective function values
@@ -776,8 +774,8 @@ contains
   logical          ,intent(in)    :: evaluate_f ! perform evaluations for f, f1, or f2? (if not, use stored values)
   logical          ,intent(in)    :: evaluate_rVecScaled ! perform evaluations for rVecScaled (if not, use stored values)
   integer(i4b)     ,intent(in)    :: option ! line search option
-  real(r8b)        ,intent(in)    :: solution(:) ! updated solution vector
-  real(r8b)        ,intent(in)    :: f_temp(:) ! storage vector for f1 for 'L' scheme
+  real(r8b)        ,intent(in),contiguous :: solution(:) ! updated solution vector
+  real(r8b)        ,intent(in),contiguous :: f_temp(:) ! storage vector for f1 for 'L' scheme
   real(r8b)        ,intent(out)   :: L ! objective function value
   ! local
   integer(i4b) :: i ! loop index
@@ -797,9 +795,9 @@ contains
    if (evaluate_f) call f_obj % f1_vec_eval(solution) ! update f1 (and f)
    if (evaluate_rVecScaled) then
     do concurrent (i = 1:f_obj % n)
-     f_obj % rVecScaled(i) = solution(i) - f_obj % xk0(i)
+     f_obj % vector(i) = solution(i) - f_obj % xk0(i)
     end do
-    f_obj % rVecScaled(:) = f_obj % matrix_vector_product(f_obj % J2,f_obj % rVecScaled) 
+    call f_obj % matrix_vector_product(f_obj % J2,f_obj % vector,f_obj % rVecScaled) 
     do concurrent (i = 1:f_obj % n)
      f_obj % rVecScaled(i) = f_obj % fScale(i) * ( f_obj % f1_vec(i) &
                          & - ( f_obj % f2_vec(i) + f_obj % rVecScaled(i) )&
@@ -826,9 +824,9 @@ contains
     if (evaluate_f) call f_obj % f1_f2_vec_eval(solution) ! update f2 (also f which is used for checkConv and f1 for next iteration)
     if (evaluate_rVecScaled) then ! f1 stored within f_temp because f1_vec is overwritten
      do concurrent (i = 1:f_obj % n)
-      f_obj % rVecScaled(i) = solution(i) - f_obj % xkp1l(i)
+      f_obj % vector(i) = solution(i) - f_obj % xkp1l(i)
      end do
-     f_obj % rVecScaled(:) = f_obj % matrix_vector_product(f_obj % J1,f_obj % rVecScaled)
+     call f_obj % matrix_vector_product(f_obj % J1,f_obj % vector,f_obj % rVecScaled)
      do concurrent (i = 1:f_obj % n)
       f_obj % rVecScaled(i) = f_obj % fScale(i) * ( f_temp(i) &
                           & + f_obj % rVecScaled(i) - f_obj % f2_vec(i)&
@@ -842,9 +840,9 @@ contains
     if (evaluate_f) call f_obj % f2_vec_eval(solution) ! update f2 (and f which is used for checkConv)
     if (evaluate_rVecScaled) then 
      do concurrent (i = 1:f_obj % n)
-      f_obj % rVecScaled(i) = solution(i) - f_obj % xkp1l(i)
+      f_obj % vector(i) = solution(i) - f_obj % xkp1l(i)
      end do
-     f_obj % rVecScaled(:) = f_obj % matrix_vector_product(f_obj % J1,f_obj % rVecScaled)
+     call f_obj % matrix_vector_product(f_obj % J1,f_obj % vector,f_obj % rVecScaled)
      do concurrent (i = 1:f_obj % n)
       f_obj % rVecScaled(i) = f_obj % fScale(i) * ( f_obj % f1_vec(i) &
                           & + f_obj % rVecScaled(i) - f_obj % f2_vec(i)&
@@ -867,9 +865,9 @@ contains
   ! arguments
   type(f_obj_type),intent(in) :: f_obj ! nested Newton object
   !real(rkind),intent(in) :: aJacScaled(f_obj % in_SS4HG % nLeadDim,f_obj % in_SS4HG % nState) ! scaled SUMMA Jacobian matrix
-  real(rkind),intent(in) :: aJacScaled(:,:) ! scaled SUMMA Jacobian matrix
-  real(r8b),intent(in)   :: rVecScaled(:) ! gradient of objective function L
-  real(r8b),intent(out)  :: gradScaled(:) ! gradient of objective function L
+  real(rkind),intent(in),contiguous :: aJacScaled(:,:) ! scaled SUMMA Jacobian matrix
+  real(r8b),intent(in)  ,contiguous :: rVecScaled(:) ! gradient of objective function L
+  real(r8b),intent(out) ,contiguous :: gradScaled(:) ! gradient of objective function L
 
   ! local
   integer(i4b)   :: err      ! SUMMA error code
@@ -891,7 +889,7 @@ contains
   class(f_obj_type),intent(inout) :: f_obj ! nested Newton object
 
   ! input-output
-  real(r8b),intent(inout) :: B(:,:) ! right-hand side vector
+  real(r8b),intent(inout),contiguous :: B(:,:) ! right-hand side vector
 
   ! local
   integer(i4b)   :: i
@@ -932,7 +930,7 @@ contains
   class(f_obj_type),intent(in) :: f_obj ! nested Newton object
 
   ! input-output
-  real(r8b),intent(inout) :: B(:,:) ! solution side vector
+  real(r8b),intent(inout),contiguous :: B(:,:) ! solution side vector
 
   ! local
   integer(i4b)   :: i
@@ -961,8 +959,8 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   !real(r8b),intent(in)            :: step(1:f_obj % n)  ! Newton step (iteration increment)
   !real(r8b),intent(in)            :: xvec1(1:f_obj % n) ! updated solution vector
-  real(r8b),intent(in)            :: step(:)  ! Newton step (iteration increment)
-  real(r8b),intent(in)            :: xvec1(:) ! updated solution vector
+  real(r8b),intent(in),contiguous  :: step(:)  ! Newton step (iteration increment)
+  real(r8b),intent(in),contiguous  :: xvec1(:) ! updated solution vector
 
   ! output
   logical :: converged
@@ -980,11 +978,11 @@ contains
 
  subroutine SUMMA_imposeConstraints(f_obj,xvec0,xvec1)
   ! ** interface for SUMMA's imposeConstraints subroutine **
-  class(f_obj_type),intent(inout)   :: f_obj
+  class(f_obj_type),intent(inout)    :: f_obj
   !real(r8b),intent(in)              :: xvec0(1:f_obj % n) ! previous guess vector
   !real(r8b),intent(inout)           :: xvec1(1:f_obj % n) ! current guess vector
-  real(r8b),intent(in)              :: xvec0(:) ! previous guess vector
-  real(r8b),intent(inout)           :: xvec1(:) ! current guess vector
+  real(r8b),intent(in)   ,contiguous :: xvec0(:) ! previous guess vector
+  real(r8b),intent(inout),contiguous :: xvec1(:) ! current guess vector
 
   ! increment the proposed iteration for simple error control if needed
   associate(&
@@ -1008,7 +1006,7 @@ contains
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
   class(f_obj_inputs),intent(inout) :: f_obj
-  real(r8b),intent(in)              :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous   :: xvec(:) ! current guess
   logical,parameter :: mass_flag=.true.,energy_flag=.true.
 
   ! update
@@ -1094,11 +1092,11 @@ contains
   type(var_dlength),intent(in)      :: diag_data              ! diagnostic variables for a local HRU
   type(var_dlength),intent(in)      :: flux_data              ! flux data
   type(var_dlength),intent(in)      :: deriv_data             ! derivative data
-  real(rkind)      ,intent(in)      :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
-  !real(rkind)      ,intent(in)      :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
-  real(rkind)      ,intent(in)      :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
-  real(rkind)      ,intent(in)      :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
-  real(rkind)      ,intent(out)     :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
+  real(rkind)      ,intent(in) ,contiguous :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
+  !real(rkind)      ,intent(in),contiguous  :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
+  real(rkind)      ,intent(in) ,contiguous :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
+  real(rkind)      ,intent(in) ,contiguous :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
+  real(rkind)      ,intent(out),contiguous :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
 
   ! local variables
   type(in_type_computJacob)  :: in_computJacob  ! computJacob input object
@@ -1245,8 +1243,8 @@ contains
   ! arguments
   logical         ,intent(in)    :: negative      ! apply a negative sign to f_filter?
   logical(lgt)    ,intent(in)    :: stateMask(:)  ! logical mask for filtering
-  real(r8b)       ,intent(in)    :: f_total(:)  ! total f in nested Newton solver
-  real(r8b)       ,intent(out)   :: f_filter(:) ! filtered f in nested Newton solver 
+  real(r8b)       ,intent(in) ,contiguous :: f_total(:)  ! total f in nested Newton solver
+  real(r8b)       ,intent(out),contiguous :: f_filter(:) ! filtered f in nested Newton solver 
 
   ! assign non-zero function values based on logical mask
   f_filter(:)=0._r8b
@@ -1262,10 +1260,10 @@ contains
   ! arguments
   type(f_obj_type),intent(inout) :: f_obj         ! nested Newton object
   logical         ,intent(in)    :: negative      ! apply a negative sign to J_filter?
-  logical(lgt)    ,intent(in)    :: stateMask(:)  ! logical mask for filtering
-  real(rkind)     ,intent(inout) :: aJac(:,:)     ! total Jacobian from SUMMA
-  real(r8b)       ,intent(out)   :: J_total(:,:)  ! total Jacobian in nested Newton solver storage scheme
-  real(r8b)       ,intent(out)   :: J_filter(:,:) ! filtered Jacobian in nested Newton solver storage scheme 
+  logical(lgt)    ,intent(in)   ,contiguous :: stateMask(:)  ! logical mask for filtering
+  real(rkind)     ,intent(inout),contiguous :: aJac(:,:)     ! total Jacobian from SUMMA
+  real(r8b)       ,intent(out)  ,contiguous :: J_total(:,:)  ! total Jacobian in nested Newton solver storage scheme
+  real(r8b)       ,intent(out)  ,contiguous :: J_filter(:,:) ! filtered Jacobian in nested Newton solver storage scheme 
 
   ! local variables
   integer(i4b) :: i,j,k  ! loop indices
@@ -1314,7 +1312,7 @@ contains
   ! evaluate f anf f1 based on stateMask1
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1340,7 +1338,7 @@ contains
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess (needed for interface)
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
 
   call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
@@ -1354,7 +1352,7 @@ contains
   ! evaluates f2 and f using stateMask2
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1380,7 +1378,7 @@ contains
   ! evaluates f1 using f1_mass_flag and f1_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
 
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
@@ -1398,7 +1396,7 @@ contains
   ! evaluates f2 using f2_mass_flag and f2_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
 
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
@@ -1415,7 +1413,7 @@ contains
   ! *** Compute mass and energy non-linear functions --- use fully-coupled eval8summa call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1443,7 +1441,7 @@ contains
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess (needed for interface)
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
 
   call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
@@ -1510,17 +1508,17 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   logical,intent(in)              :: mass_flag,energy_flag ! flags to compute mass and energy terms 
   logical,intent(in)              :: f1_flag,f2_flag ! flags to f1 and f2 
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
 
   type(var_ilength),intent(inout) :: indx_data            ! indices defining model states and layers for selected split 
   type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout) :: flux_data            ! flux data
   type(var_dlength),intent(inout) :: deriv_data           ! derivative data
-  real(qp)         ,intent(inout) :: sMul(:)              ! state vector multipliers
-  !real(rkind)      ,intent(out)   :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
-  real(rkind)      ,intent(out)   :: dBaseflow_dWat(:,:)         ! derivative in baseflow w.r.t. soil water characteristic
-  real(rkind)      ,intent(out)   :: dBaseflow_dTk(:,:)          ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
-  real(qp)         ,intent(out)   :: resVec(:)            ! residual vector
+  real(qp)         ,intent(inout),contiguous :: sMul(:)              ! state vector multipliers
+  !real(rkind)      ,intent(out) ,contiguous  :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
+  real(rkind)      ,intent(out)  ,contiguous :: dBaseflow_dWat(:,:)  ! derivative in baseflow w.r.t. soil water characteristic
+  real(rkind)      ,intent(out)  ,contiguous :: dBaseflow_dTk(:,:)   ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
+  real(qp)         ,intent(out)  ,contiguous :: resVec(:)            ! residual vector
 
   ! local
   logical :: f1_mass,f1_energy,f2_mass,f2_energy
@@ -1603,7 +1601,7 @@ contains
  subroutine f_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function ***
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:)  ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:)  ! current guess
 
   ! compute SUMMA residual (taken to be the non-linear function) based on current guess
   ! note: - eval8summa may contain extraneous computations not needed for the residual
@@ -1618,7 +1616,7 @@ contains
   ! ** Compute SUMMA's Jacobian **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in)            :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
   ! local variables
   logical,parameter :: mass_flag = .true.,energy_flag = .true.
 

@@ -222,9 +222,13 @@ contains
 
     ! obtain RHS vector
     if (f_obj % evaluate_B) then ! compute (unscaled) RHS if using the 'L' scheme or not doing the line search
-      f_obj % B(:,1) = f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
+      !f_obj % B(:,1) = f_obj % matrix_vector_product(f_obj % J2,f_obj % xkp1l - f_obj % xk0)
      do concurrent (i = 1:f_obj % n)
-      f_obj % B(i,1) = -(f_obj % f1_vec(i) - f_obj % f2_vec(i)) + f_obj % B(i,1)
+      f_obj % B(i,1) = f_obj % xkp1l(i) - f_obj % xk0(i)
+     end do
+     call f_obj % matrix_vector_product(f_obj % J2,f_obj % B(:,1),f_obj % vector)
+     do concurrent (i = 1:f_obj % n)
+      f_obj % B(i,1) = -(f_obj % f1_vec(i) - f_obj % f2_vec(i)) + f_obj % vector(i)
      end do
     else ! get scaled RHS from previous line search call or initial value
      do concurrent (i = 1:f_obj % n)
@@ -340,19 +344,18 @@ contains
   ! *** Check residual vector for potential loop exit ***
   use,intrinsic :: ieee_arithmetic,only: ieee_is_finite
   use Newton_functions,only: custom,custom_strict,strict,custom_predictive,predictive ! convergence options 
-  type(f_obj_type),intent(inout) :: f_obj 
-  integer(i4b),intent(in)  :: convergence         ! convergence option string that adapts to inner and outer/classical iterations
-  integer(i4b),intent(in)  :: iteration           ! interation count
-  real(r8b),intent(in)     :: xkp1(:)   ! current root estimate
-  real(r8b),intent(in)     :: xk(:)     ! previous root estimate
-  logical,intent(inout)    :: exit_flag           ! exit flag
-  logical,intent(out)      :: return_flag         ! return flag for early return from Newton solver call
-  real(r8b),intent(out)    :: R_est               ! estimated R for current iteration (computed in the previous call)
+  type(f_obj_type),intent(inout)  :: f_obj 
+  integer(i4b),intent(in)         :: convergence ! convergence option string that adapts to inner and outer/classical iterations
+  integer(i4b),intent(in)         :: iteration   ! interation count
+  real(r8b),intent(in),contiguous :: xkp1(:)     ! current root estimate
+  real(r8b),intent(in),contiguous :: xk(:)       ! previous root estimate
+  logical,intent(inout)           :: exit_flag   ! exit flag
+  logical,intent(out)             :: return_flag ! return flag for early return from Newton solver call
+  real(r8b),intent(out)           :: R_est       ! estimated R for current iteration (computed in the previous call)
   ! local variables
-  real(r8b)                :: tol                 ! tolerance
-  !real(r8b)                :: R(-1:1)             ! maximum residual array (two previous exact values and prediction for next iteration)
-  integer(i4b)             :: i                   ! index for residual vector
-  real(r8b)                :: b                   ! exponent used for convergence error estimation 
+  real(r8b)                :: tol                ! tolerance
+  integer(i4b)             :: i                  ! index for residual vector
+  real(r8b)                :: b                  ! exponent used for convergence error estimation 
   real(r8b),parameter      :: tol_inner_LS = 1.e-4_r8b ! 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
 
   return_flag = .false. ! initialize return flag
@@ -515,7 +518,7 @@ contains
 
    subroutine check_convergence_order(order_min,x0,x1,x2,x3,accept,revert,success)
     real(r8b),intent(in) :: order_min
-    real(r8b),intent(in) :: x0(:),x1(:),x2(:),x3(:)
+    real(r8b),intent(in),contiguous :: x0(:),x1(:),x2(:),x3(:)
     real(r8b)            :: x3m2,x2m1,x1m0   ! absolute differences used in convergence order calculation for dynamic mode
     real(r8b)            :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
     real(r8b)            :: order               ! approximate convergence order
@@ -573,7 +576,7 @@ contains
   ! *** Solve Ax=B -- x stored in B on output *** 
   type(f_obj_type),intent(inout) :: f_obj          ! nested Newton object
   ! LAPACK Variables
-  real(r8b),intent(inout) :: B(:,:)                ! right-hand side / solution vector
+  real(r8b),intent(inout),contiguous :: B(:,:)                ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
   character(1),parameter :: FACT='E'               ! option for matrix factoring (equilibrate matrix prior to factoring)
@@ -582,7 +585,6 @@ contains
   integer(i4b),parameter :: NRHS = 1_i4b           ! # of right-hand-side vectors
   integer(i4b) :: INFO                             ! error code
   real(r8b) :: RCOND                               ! estimate of condition number reciprocal
-  !real(r8b) :: FERR(1:1),BERR(1:1)                 ! forward and backward error estimates (single right-hand side assumed)
 
   ! initialize error flag (used to enable recoverable errors for external drivers)
   f_obj % LAPACK_error = .false.
