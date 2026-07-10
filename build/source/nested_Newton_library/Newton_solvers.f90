@@ -470,7 +470,6 @@ contains
 
    subroutine check_dynamic_mode
     ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    !logical                :: accept(1:f_obj % n) ! accept classical guess as initial guess for nested iterations in dynamic mode?
     integer(i4b),parameter :: k_check=20_i4b ! k_check=2_i4b is the minimum
     
     if (f_obj % k == k_check - 2_i4b) then
@@ -520,7 +519,7 @@ contains
     real(r8b)            :: x3m2,x2m1,x1m0   ! absolute differences used in convergence order calculation for dynamic mode
     real(r8b)            :: num_arg,den_arg     ! arguments for numerator and denominator of convergence order formula
     real(r8b)            :: order               ! approximate convergence order
-    logical,intent(out)  :: accept(:) ! accept classical guess element as initial guess element for nested iterations in dynamic mode?
+    logical,intent(out),contiguous  :: accept(:) ! accept classical guess element as initial guess element for nested iterations in dynamic mode?
     logical,intent(out)  :: revert    ! does solution vector need to be completely reverted to original guess before starting nested iterations?
     logical,intent(out)  :: success   ! is the convergence order threshold successfully met for all solution vector elements?
 
@@ -574,7 +573,7 @@ contains
   ! *** Solve Ax=B -- x stored in B on output *** 
   type(f_obj_type),intent(inout) :: f_obj          ! nested Newton object
   ! LAPACK Variables
-  real(r8b),intent(inout),contiguous :: B(:,:)                ! right-hand side / solution vector
+  real(r8b),intent(inout),contiguous :: B(:,:)     ! right-hand side / solution vector
   real(r8b),intent(in)    :: tol                   ! tolerance value used by the calling routine
   ! local variables
   character(1),parameter :: FACT='E'               ! option for matrix factoring (equilibrate matrix prior to factoring)
@@ -611,6 +610,7 @@ contains
    end if
    EQUED='N' ! note: not a parameter because LAPACK may change this value on output
    if (f_obj % banded) then ! banded matrix storage ---------------- may need to update A argument in this call (tried a fix but not tested)
+    ! ***** Note: f_obj % AF(f_obj % KL+1:,:) creates temporary array copy which needs to be resolved (may be able to pass AF by reference) *****
     call DGBSVX(FACT,TRANS,f_obj % n,f_obj % KL,f_obj % KU,NRHS,f_obj % AF(f_obj % KL+1:,:),f_obj % LDA,f_obj % AF,f_obj % LDAF,&
                &f_obj % IPIV,EQUED,f_obj % RA,f_obj % CA,B,f_obj % LDB,&
                &f_obj % X,f_obj % LDX,RCOND,f_obj % FERR,f_obj % BERR,f_obj % WORK,f_obj % IWORK,INFO)

@@ -437,11 +437,14 @@ contains
   real(r8b),parameter    :: ALPHA=1._r8b,BETA=0._r8b ! scalars used in LAPACK solvers
 
   if (f_obj % banded) then ! banded storage
-   associate(KL => f_obj % subdiag,KU => f_obj % superdiag,LDA => f_obj % LDA)
+   ! note: we are passing the banded matrix A by reference to it's first element to avoid temporary array copies from the compiler
+   associate(KL => f_obj % subdiag,KU => f_obj % superdiag)
     if (f_obj % linear_system_solver == LAPACK_standard) then
-     call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A(KL+1:f_obj % LDAF,:),LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses different banded storage scheme compared to standard solver
+     !call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A(KL+1:f_obj % LDAF,:),f_obj % LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses different banded storage scheme compared to standard solver (works but creates temporary arrays)
+     call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A(KL+1,1),f_obj % LDAF,x,INCX,BETA,y,INCY) ! BLAS -- pass A by reference because A uses difference banded storage scheme compared to standard solver (avoids temporary arrays)
     else if (f_obj % linear_system_solver == LAPACK_expert) then
-     call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses same banded storage scheme as expert solver
+     !call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A,LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses same banded storage scheme as expert solver
+     call DGBMV(TRANS,f_obj % n,f_obj % n,KL,KU,ALPHA,A(1,1),f_obj % LDA,x,INCX,BETA,y,INCY) ! BLAS -- DGBMV uses same banded storage scheme as expert solver (pass A by refeence to be consistent with LAPACK_standard option above)
     end if
    end associate
   else ! full matrix storage
@@ -1006,7 +1009,8 @@ contains
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
   class(f_obj_inputs),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous   :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous   :: xvec(:) ! current guess
+  real(r8b),intent(in)   :: xvec(:) ! current guess
   logical,parameter :: mass_flag=.true.,energy_flag=.true.
 
   ! update
@@ -1092,11 +1096,14 @@ contains
   type(var_dlength),intent(in)      :: diag_data              ! diagnostic variables for a local HRU
   type(var_dlength),intent(in)      :: flux_data              ! flux data
   type(var_dlength),intent(in)      :: deriv_data             ! derivative data
-  real(rkind)      ,intent(in) ,contiguous :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
-  !real(rkind)      ,intent(in),contiguous  :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
-  real(rkind)      ,intent(in) ,contiguous :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
-  real(rkind)      ,intent(in) ,contiguous :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
-  real(rkind)      ,intent(out),contiguous :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
+  !real(rkind)      ,intent(in) ,contiguous :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
+  !real(rkind)      ,intent(in) ,contiguous :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
+  !real(rkind)      ,intent(in) ,contiguous :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
+  !real(rkind)      ,intent(out),contiguous :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
+  real(rkind)      ,intent(in)  :: dMat(:)          ! diagonal matrix (no flux derivatives) for split
+  real(rkind)      ,intent(in)  :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
+  real(rkind)      ,intent(in)  :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
+  real(rkind)      ,intent(out) :: aJac(:,:) ! SUMMA's unscaled Jacobian matrix
 
   ! local variables
   type(in_type_computJacob)  :: in_computJacob  ! computJacob input object
@@ -1312,7 +1319,8 @@ contains
   ! evaluate f anf f1 based on stateMask1
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  real(r8b),intent(in) :: xvec(:) ! current guess
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1338,7 +1346,8 @@ contains
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
+  real(r8b),intent(in) :: xvec(:) ! current guess (needed for interface)
 
   call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
@@ -1352,7 +1361,8 @@ contains
   ! evaluates f2 and f using stateMask2
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  real(r8b),intent(in) :: xvec(:) ! current guess
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1378,7 +1388,8 @@ contains
   ! evaluates f1 using f1_mass_flag and f1_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  real(r8b),intent(in) :: xvec(:) ! current guess
 
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
@@ -1396,7 +1407,8 @@ contains
   ! evaluates f2 using f2_mass_flag and f2_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  real(r8b),intent(in) :: xvec(:) ! current guess
 
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
@@ -1413,7 +1425,8 @@ contains
   ! *** Compute mass and energy non-linear functions --- use fully-coupled eval8summa call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  real(r8b),intent(in) :: xvec(:) ! current guess
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1441,7 +1454,8 @@ contains
   ! NOTE: assumes appropriate eval8summa call has already been made to get the fluxes
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
+  real(r8b),intent(in) :: xvec(:) ! current guess (needed for interface)
 
   call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
@@ -1514,11 +1528,14 @@ contains
   type(var_dlength),intent(inout) :: diag_data            ! diagnostic variables for a local HRU
   type(var_dlength),intent(inout) :: flux_data            ! flux data
   type(var_dlength),intent(inout) :: deriv_data           ! derivative data
-  real(qp)         ,intent(inout),contiguous :: sMul(:)              ! state vector multipliers
-  !real(rkind)      ,intent(out) ,contiguous  :: dBaseflow_dMatric(:,:) ! baseflow derivative matrix w.r.t pressure head
-  real(rkind)      ,intent(out)  ,contiguous :: dBaseflow_dWat(:,:)  ! derivative in baseflow w.r.t. soil water characteristic
-  real(rkind)      ,intent(out)  ,contiguous :: dBaseflow_dTk(:,:)   ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
-  real(qp)         ,intent(out)  ,contiguous :: resVec(:)            ! residual vector
+  !real(qp)         ,intent(inout),contiguous :: sMul(:)              ! state vector multipliers
+  !real(rkind)      ,intent(out)  ,contiguous :: dBaseflow_dWat(:,:)  ! derivative in baseflow w.r.t. soil water characteristic
+  !real(rkind)      ,intent(out)  ,contiguous :: dBaseflow_dTk(:,:)   ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
+  !real(qp)         ,intent(out)  ,contiguous :: resVec(:)            ! residual vector
+  real(qp)         ,intent(inout) :: sMul(:)              ! state vector multipliers
+  real(rkind)      ,intent(out)   :: dBaseflow_dWat(:,:)  ! derivative in baseflow w.r.t. soil water characteristic
+  real(rkind)      ,intent(out)   :: dBaseflow_dTk(:,:)   ! derivative in baseflow w.r.t. temperature (m s-1 K-1)
+  real(qp)         ,intent(out)   :: resVec(:)            ! residual vector
 
   ! local
   logical :: f1_mass,f1_energy,f2_mass,f2_energy
@@ -1601,7 +1618,8 @@ contains
  subroutine f_SUMMA_vec(f_obj,xvec)
   ! *** Compute SUMMA's vector non-linear function ***
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:)  ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:)  ! current guess
+  real(r8b),intent(in) :: xvec(:)  ! current guess
 
   ! compute SUMMA residual (taken to be the non-linear function) based on current guess
   ! note: - eval8summa may contain extraneous computations not needed for the residual
@@ -1616,7 +1634,8 @@ contains
   ! ** Compute SUMMA's Jacobian **
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
+  real(r8b),intent(in) :: xvec(:) ! current guess
   ! local variables
   logical,parameter :: mass_flag = .true.,energy_flag = .true.
 
