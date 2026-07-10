@@ -55,8 +55,6 @@ contains
   integer(i4b) :: i                              ! loop index
   logical      :: exit_flag                      ! exit flag
   logical      :: return_flag                    ! return flag for early return from Newton solver call
-  ! LAPACK Variables
-  !real(r8b)    :: B(1:f_obj % n,1:1)             ! right-hand side / solution vector
 
   ! initialize error flag
   f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
