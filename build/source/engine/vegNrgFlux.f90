@@ -2267,139 +2267,143 @@ subroutine turbFluxes(&
   latHeatTotal = latHeatCanopyEvap + latHeatCanopyTrans + latHeatGround
 
   ! * compute derivatives
-  ! differentiate CANOPY fluxes
-  if (computeVegFlux) then
-    ! compute derivatives of vapor pressure in the canopy air space w.r.t. all state variables
-    ! derivative of vapor pressure in the canopy air space w.r.t. temperature of the canopy air space
-    dPart1 = dCanopyCond_dCanairTemp*VPair + dGroundCondLH_dCanairTemp*satVP_GroundTemp*soilRelHumidity
-    dPart2 = -(dCanopyCond_dCanairTemp + dGroundCondLH_dCanairTemp)/(totalConductanceLH**2_i4b)
-    dVPCanopyAir_dTCanair = dPart1/totalConductanceLH + fPart_VP*dPart2
-    ! derivative of vapor pressure in the canopy air space w.r.t. temperature of the canopy
-    dPart0 = (evapConductance + transConductance)*dSVPCanopy_dCanopyTemp + (dEvapCond_dCanopyTemp + dTransCond_dCanopyTemp)*satVP_CanopyTemp
-    dPart1 = dCanopyCond_dCanopyTemp*VPair + dPart0 + dGroundCondLH_dCanopyTemp*satVP_GroundTemp*soilRelHumidity
-    dPart2 = -(dCanopyCond_dCanopyTemp + dEvapCond_dCanopyTemp + dTransCond_dCanopyTemp + dGroundCondLH_dCanopyTemp)/(totalConductanceLH**2_i4b)
-    dVPCanopyAir_dTCanopy = dPart1/totalConductanceLH + fPart_VP*dPart2
-    ! derivative of vapor pressure in the canopy air space w.r.t. temperature of the ground
-    dPart1 = dGroundCondLH_dGroundTemp*satVP_GroundTemp*soilRelHumidity + groundConductanceLH*dSVPGround_dGroundTemp*soilRelHumidity
-    dPart2 = -dGroundCondLH_dGroundTemp/(totalConductanceLH**2_i4b)
-    dVPCanopyAir_dTGround = dPart1/totalConductanceLH + fPart_VP*dPart2
-    ! derivative of vapor pressure in the canopy air space w.r.t. wetted fraction of the canopy
-    dPart1 = (leafConductance - leafConductanceTr)*satVP_CanopyTemp
-    dPart2 = -(leafConductance - leafConductanceTr)/(totalConductanceLH**2_i4b)
-    dVPCanopyAir_dWetFrac = dPart1/totalConductanceLH + fPart_VP*dPart2
-    dVPCanopyAir_dCanWat  = dVPCanopyAir_dWetFrac*dCanopyWetFraction_dWat
+  if (J_energy) then ! if computing energy Jacobian terms
 
-    ! sensible heat from the canopy to the atmosphere
-    dSenHeatTotal_dTCanair       = -volHeatCapacityAir*canopyConductance - volHeatCapacityAir*dCanopyCond_dCanairTemp*(canairTemp - airtemp)
-    dSenHeatTotal_dTCanopy       = -volHeatCapacityAir*dCanopyCond_dCanopyTemp*(canairTemp - airtemp)
-    dSenHeatTotal_dTGround       = 0._rkind
-    if (canairTemp<0._rkind) then ! cap function to prevent blowing up
-      dSenHeatTotal_dTCanair = volHeatCapacityAir*dCanopyCond_dCanairTemp*airtemp
-      dSenHeatTotal_dTCanopy = volHeatCapacityAir*dCanopyCond_dCanopyTemp*airtemp
-    end if
+    ! differentiate CANOPY fluxes
+    if (computeVegFlux) then
+      ! compute derivatives of vapor pressure in the canopy air space w.r.t. all state variables
+      ! derivative of vapor pressure in the canopy air space w.r.t. temperature of the canopy air space
+      dPart1 = dCanopyCond_dCanairTemp*VPair + dGroundCondLH_dCanairTemp*satVP_GroundTemp*soilRelHumidity
+      dPart2 = -(dCanopyCond_dCanairTemp + dGroundCondLH_dCanairTemp)/(totalConductanceLH**2_i4b)
+      dVPCanopyAir_dTCanair = dPart1/totalConductanceLH + fPart_VP*dPart2
+      ! derivative of vapor pressure in the canopy air space w.r.t. temperature of the canopy
+      dPart0 = (evapConductance + transConductance)*dSVPCanopy_dCanopyTemp + (dEvapCond_dCanopyTemp + dTransCond_dCanopyTemp)*satVP_CanopyTemp
+      dPart1 = dCanopyCond_dCanopyTemp*VPair + dPart0 + dGroundCondLH_dCanopyTemp*satVP_GroundTemp*soilRelHumidity
+      dPart2 = -(dCanopyCond_dCanopyTemp + dEvapCond_dCanopyTemp + dTransCond_dCanopyTemp + dGroundCondLH_dCanopyTemp)/(totalConductanceLH**2_i4b)
+      dVPCanopyAir_dTCanopy = dPart1/totalConductanceLH + fPart_VP*dPart2
+      ! derivative of vapor pressure in the canopy air space w.r.t. temperature of the ground
+      dPart1 = dGroundCondLH_dGroundTemp*satVP_GroundTemp*soilRelHumidity + groundConductanceLH*dSVPGround_dGroundTemp*soilRelHumidity
+      dPart2 = -dGroundCondLH_dGroundTemp/(totalConductanceLH**2_i4b)
+      dVPCanopyAir_dTGround = dPart1/totalConductanceLH + fPart_VP*dPart2
+      ! derivative of vapor pressure in the canopy air space w.r.t. wetted fraction of the canopy
+      dPart1 = (leafConductance - leafConductanceTr)*satVP_CanopyTemp
+      dPart2 = -(leafConductance - leafConductanceTr)/(totalConductanceLH**2_i4b)
+      dVPCanopyAir_dWetFrac = dPart1/totalConductanceLH + fPart_VP*dPart2
+      dVPCanopyAir_dCanWat  = dVPCanopyAir_dWetFrac*dCanopyWetFraction_dWat
 
-    ! sensible heat from the canopy to the canopy air space
-    dSenHeatCanopy_dTCanair      =  volHeatCapacityAir*leafConductance
-    dSenHeatCanopy_dTCanopy      = -volHeatCapacityAir*leafConductance
-    dSenHeatCanopy_dTGround      = 0._rkind
-    if (canopyTemp<0._rkind) then ! cap function to prevent blowing up
-      dSenHeatCanopy_dTCanopy = 0._rkind
-      if (canairTemp<0._rkind) dSenHeatCanopy_dTCanair = 0._rkind
-    else if (canairTemp<0._rkind) then
-      dSenHeatCanopy_dTCanair = 0._rkind
-    end if
+      ! sensible heat from the canopy to the atmosphere
+      dSenHeatTotal_dTCanair       = -volHeatCapacityAir*canopyConductance - volHeatCapacityAir*dCanopyCond_dCanairTemp*(canairTemp - airtemp)
+      dSenHeatTotal_dTCanopy       = -volHeatCapacityAir*dCanopyCond_dCanopyTemp*(canairTemp - airtemp)
+      dSenHeatTotal_dTGround       = 0._rkind
+      if (canairTemp<0._rkind) then ! cap function to prevent blowing up
+        dSenHeatTotal_dTCanair = volHeatCapacityAir*dCanopyCond_dCanairTemp*airtemp
+        dSenHeatTotal_dTCanopy = volHeatCapacityAir*dCanopyCond_dCanopyTemp*airtemp
+      end if
 
-    ! sensible heat from the ground to the canopy air space
-    dSenHeatGround_dTCanair      = -volHeatCapacityAir*dGroundCondSH_dCanairTemp*(groundTemp - canairTemp) + volHeatCapacityAir*groundConductanceSH
-    dSenHeatGround_dTCanopy      = -volHeatCapacityAir*dGroundCondSH_dCanopyTemp*(groundTemp - canairTemp)
-    dSenHeatGround_dTGround      = -volHeatCapacityAir*dGroundCondSH_dGroundTemp*(groundTemp - canairTemp) - volHeatCapacityAir*groundConductanceSH
-    if (groundTemp<0._rkind) then ! cap function to prevent blowing up
-      dSenHeatGround_dTCanair = volHeatCapacityAir*dGroundCondSH_dCanairTemp*canairTemp + volHeatCapacityAir*groundConductanceSH
-      dSenHeatGround_dTCanopy = volHeatCapacityAir*dGroundCondSH_dCanopyTemp*canairTemp
-      dSenHeatGround_dTGround = volHeatCapacityAir*dGroundCondSH_dGroundTemp*canairTemp
-      if (canairTemp<0._rkind) then
-        dSenHeatGround_dTCanair = 0._rkind
-        dSenHeatGround_dTCanopy = 0._rkind
-        dSenHeatGround_dTGround = 0._rkind
-      endif
-    else if (canairTemp<0._rkind) then
-      dSenHeatGround_dTCanair = -volHeatCapacityAir*dGroundCondSH_dCanairTemp*groundTemp
-      dSenHeatGround_dTCanopy = -volHeatCapacityAir*dGroundCondSH_dCanopyTemp*groundTemp
-      dSenHeatGround_dTGround = -volHeatCapacityAir*dGroundCondSH_dGroundTemp*groundTemp - volHeatCapacityAir*groundConductanceSH
-    end if
+      ! sensible heat from the canopy to the canopy air space
+      dSenHeatCanopy_dTCanair      =  volHeatCapacityAir*leafConductance
+      dSenHeatCanopy_dTCanopy      = -volHeatCapacityAir*leafConductance
+      dSenHeatCanopy_dTGround      = 0._rkind
+      if (canopyTemp<0._rkind) then ! cap function to prevent blowing up
+        dSenHeatCanopy_dTCanopy = 0._rkind
+        if (canairTemp<0._rkind) dSenHeatCanopy_dTCanair = 0._rkind
+      else if (canairTemp<0._rkind) then
+        dSenHeatCanopy_dTCanair = 0._rkind
+      end if
 
-    ! latent heat associated with canopy evaporation
-    ! initial calculations
-    fPart1 = -latHeatSubVapCanopy*latentHeatConstant*evapConductance
-    dPart1 = -latHeatSubVapCanopy*latentHeatConstant*dEvapCond_dCanopyTemp
-    fPart2 = satVP_CanopyTemp - VP_CanopyAir
-    dPart2 = dSVPCanopy_dCanopyTemp - dVPCanopyAir_dTCanopy
-    ! derivatives
-    dLatHeatCanopyEvap_dTCanair  = fPart1*(-dVPCanopyAir_dTCanair)
-    dLatHeatCanopyEvap_dTCanopy  = fPart1*dpart2 + fPart2*dPart1
-    dLatHeatCanopyEvap_dTGround  = fPart1*(-dVPCanopyAir_dTGround)
+      ! sensible heat from the ground to the canopy air space
+      dSenHeatGround_dTCanair      = -volHeatCapacityAir*dGroundCondSH_dCanairTemp*(groundTemp - canairTemp) + volHeatCapacityAir*groundConductanceSH
+      dSenHeatGround_dTCanopy      = -volHeatCapacityAir*dGroundCondSH_dCanopyTemp*(groundTemp - canairTemp)
+      dSenHeatGround_dTGround      = -volHeatCapacityAir*dGroundCondSH_dGroundTemp*(groundTemp - canairTemp) - volHeatCapacityAir*groundConductanceSH
+      if (groundTemp<0._rkind) then ! cap function to prevent blowing up
+        dSenHeatGround_dTCanair = volHeatCapacityAir*dGroundCondSH_dCanairTemp*canairTemp + volHeatCapacityAir*groundConductanceSH
+        dSenHeatGround_dTCanopy = volHeatCapacityAir*dGroundCondSH_dCanopyTemp*canairTemp
+        dSenHeatGround_dTGround = volHeatCapacityAir*dGroundCondSH_dGroundTemp*canairTemp
+        if (canairTemp<0._rkind) then
+          dSenHeatGround_dTCanair = 0._rkind
+          dSenHeatGround_dTCanopy = 0._rkind
+          dSenHeatGround_dTGround = 0._rkind
+        endif
+      else if (canairTemp<0._rkind) then
+        dSenHeatGround_dTCanair = -volHeatCapacityAir*dGroundCondSH_dCanairTemp*groundTemp
+        dSenHeatGround_dTCanopy = -volHeatCapacityAir*dGroundCondSH_dCanopyTemp*groundTemp
+        dSenHeatGround_dTGround = -volHeatCapacityAir*dGroundCondSH_dGroundTemp*groundTemp - volHeatCapacityAir*groundConductanceSH
+      end if
 
-    ! latent heat associated with canopy transpiration
-    ! initial calculations
-    fPart1 = -LH_vap*latentHeatConstant*transConductance
-    dPart1 = -LH_vap*latentHeatConstant*dTransCond_dCanopyTemp
-    ! derivatives
-    dLatHeatCanopyTrans_dTCanair = fPart1*(-dVPCanopyAir_dTCanair)
-    dLatHeatCanopyTrans_dTCanopy = fPart1*dPart2 + fPart2*dPart1
-    dLatHeatCanopyTrans_dTGround = fPart1*(-dVPCanopyAir_dTGround)
+      ! latent heat associated with canopy evaporation
+      ! initial calculations
+      fPart1 = -latHeatSubVapCanopy*latentHeatConstant*evapConductance
+      dPart1 = -latHeatSubVapCanopy*latentHeatConstant*dEvapCond_dCanopyTemp
+      fPart2 = satVP_CanopyTemp - VP_CanopyAir
+      dPart2 = dSVPCanopy_dCanopyTemp - dVPCanopyAir_dTCanopy
+      ! derivatives
+      dLatHeatCanopyEvap_dTCanair  = fPart1*(-dVPCanopyAir_dTCanair)
+      dLatHeatCanopyEvap_dTCanopy  = fPart1*dpart2 + fPart2*dPart1
+      dLatHeatCanopyEvap_dTGround  = fPart1*(-dVPCanopyAir_dTGround)
 
-    ! latent heat flux from the ground
-    fPart1 = -latHeatSubVapGround*latentHeatConstant*groundConductanceLH       ! function of the first part
-    fPart2 = (satVP_GroundTemp*soilRelHumidity - VP_CanopyAir)                 ! function of the second part
-    dLatHeatGroundEvap_dTCanair = -latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dCanairTemp*fPart2 - dVPCanopyAir_dTCanair*fPart1
-    dLatHeatGroundEvap_dTCanopy = -latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dCanopyTemp*fPart2 - dVPCanopyAir_dTCanopy*fPart1
-    dLatHeatGroundEvap_dTGround = -latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dGroundTemp*fPart2 + (dSVPGround_dGroundTemp*soilRelHumidity - dVPCanopyAir_dTGround)*fPart1
+      ! latent heat associated with canopy transpiration
+      ! initial calculations
+      fPart1 = -LH_vap*latentHeatConstant*transConductance
+      dPart1 = -LH_vap*latentHeatConstant*dTransCond_dCanopyTemp
+      ! derivatives
+      dLatHeatCanopyTrans_dTCanair = fPart1*(-dVPCanopyAir_dTCanair)
+      dLatHeatCanopyTrans_dTCanopy = fPart1*dPart2 + fPart2*dPart1
+      dLatHeatCanopyTrans_dTGround = fPart1*(-dVPCanopyAir_dTGround)
 
-    ! latent heat associated with canopy evaporation w.r.t. wetted fraction of the canopy
-    dPart1 = -latHeatSubVapCanopy*latentHeatConstant*leafConductance
-    fPart1 = dPart1*canopyWetFraction
-    dLatHeatCanopyEvap_dWetFrac  = dPart1*(satVP_CanopyTemp - VP_CanopyAir) + fPart1*(-dVPCanopyAir_dWetFrac)
+      ! latent heat flux from the ground
+      fPart1 = -latHeatSubVapGround*latentHeatConstant*groundConductanceLH       ! function of the first part
+      fPart2 = (satVP_GroundTemp*soilRelHumidity - VP_CanopyAir)                 ! function of the second part
+      dLatHeatGroundEvap_dTCanair = -latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dCanairTemp*fPart2 - dVPCanopyAir_dTCanair*fPart1
+      dLatHeatGroundEvap_dTCanopy = -latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dCanopyTemp*fPart2 - dVPCanopyAir_dTCanopy*fPart1
+      dLatHeatGroundEvap_dTGround = -latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dGroundTemp*fPart2 + (dSVPGround_dGroundTemp*soilRelHumidity - dVPCanopyAir_dTGround)*fPart1
 
-    ! latent heat associated with canopy transpiration w.r.t. wetted fraction of the canopy
-    dPart1 = LH_vap*latentHeatConstant*leafConductanceTr  ! NOTE: positive, since (1 - wetFrac)
-    fPart1 = -dPart1*(1._rkind - canopyWetFraction)
-    dLatHeatCanopyTrans_dWetFrac = dPart1*(satVP_CanopyTemp - VP_CanopyAir) + fPart1*(-dVPCanopyAir_dWetFrac)
+      ! latent heat associated with canopy evaporation w.r.t. wetted fraction of the canopy
+      dPart1 = -latHeatSubVapCanopy*latentHeatConstant*leafConductance
+      fPart1 = dPart1*canopyWetFraction
+      dLatHeatCanopyEvap_dWetFrac  = dPart1*(satVP_CanopyTemp - VP_CanopyAir) + fPart1*(-dVPCanopyAir_dWetFrac)
 
-    ! latent heat associated with canopy transpiration w.r.t. canopy total water
-    dLatHeatCanopyTrans_dCanWat = dLatHeatCanopyTrans_dWetFrac*dCanopyWetFraction_dWat ! (J s-1 kg-1)
-  else  ! canopy is undefined
-    ! set derivatives for canopy fluxes to zero (no canopy, so fluxes are undefined)
-    dSenHeatTotal_dTCanair       = 0._rkind
-    dSenHeatTotal_dTCanopy       = 0._rkind
-    dSenHeatTotal_dTGround       = 0._rkind
-    dSenHeatCanopy_dTCanair      = 0._rkind
-    dSenHeatCanopy_dTCanopy      = 0._rkind
-    dSenHeatCanopy_dTGround      = 0._rkind
-    dLatHeatCanopyEvap_dTCanair  = 0._rkind
-    dLatHeatCanopyEvap_dTCanopy  = 0._rkind
-    dLatHeatCanopyEvap_dTGround  = 0._rkind
-    dLatHeatCanopyTrans_dTCanair = 0._rkind
-    dLatHeatCanopyTrans_dTCanopy = 0._rkind
-    dLatHeatCanopyTrans_dTGround = 0._rkind
+      ! latent heat associated with canopy transpiration w.r.t. wetted fraction of the canopy
+      dPart1 = LH_vap*latentHeatConstant*leafConductanceTr  ! NOTE: positive, since (1 - wetFrac)
+      fPart1 = -dPart1*(1._rkind - canopyWetFraction)
+      dLatHeatCanopyTrans_dWetFrac = dPart1*(satVP_CanopyTemp - VP_CanopyAir) + fPart1*(-dVPCanopyAir_dWetFrac)
 
-    ! set derivatives for wetted area and canopy transpiration to zero (no canopy, so fluxes are undefined)
-    dLatHeatCanopyEvap_dWetFrac  = 0._rkind
-    dLatHeatCanopyEvap_dCanWat   = 0._rkind
-    dLatHeatCanopyTrans_dCanWat  = 0._rkind
-    dVPCanopyAir_dCanWat         = 0._rkind
+      ! latent heat associated with canopy transpiration w.r.t. canopy total water
+      dLatHeatCanopyTrans_dCanWat = dLatHeatCanopyTrans_dWetFrac*dCanopyWetFraction_dWat ! (J s-1 kg-1)
+    else  ! canopy is undefined
+      ! set derivatives for canopy fluxes to zero (no canopy, so fluxes are undefined)
+      dSenHeatTotal_dTCanair       = 0._rkind
+      dSenHeatTotal_dTCanopy       = 0._rkind
+      dSenHeatTotal_dTGround       = 0._rkind
+      dSenHeatCanopy_dTCanair      = 0._rkind
+      dSenHeatCanopy_dTCanopy      = 0._rkind
+      dSenHeatCanopy_dTGround      = 0._rkind
+      dLatHeatCanopyEvap_dTCanair  = 0._rkind
+      dLatHeatCanopyEvap_dTCanopy  = 0._rkind
+      dLatHeatCanopyEvap_dTGround  = 0._rkind
+      dLatHeatCanopyTrans_dTCanair = 0._rkind
+      dLatHeatCanopyTrans_dTCanopy = 0._rkind
+      dLatHeatCanopyTrans_dTGround = 0._rkind
 
-    ! set derivatives for ground fluxes w.r.t canopy temperature to zero (no canopy, so fluxes are undefined)
-    dSenHeatGround_dTCanair      = 0._rkind
-    dSenHeatGround_dTCanopy      = 0._rkind
-    dLatHeatGroundEvap_dTCanair  = 0._rkind
-    dLatHeatGroundEvap_dTCanopy  = 0._rkind
+      ! set derivatives for wetted area and canopy transpiration to zero (no canopy, so fluxes are undefined)
+      dLatHeatCanopyEvap_dWetFrac  = 0._rkind
+      dLatHeatCanopyEvap_dCanWat   = 0._rkind
+      dLatHeatCanopyTrans_dCanWat  = 0._rkind
+      dVPCanopyAir_dCanWat         = 0._rkind
 
-    ! compute derivatives for the ground fluxes w.r.t. ground temperature
-    dSenHeatGround_dTGround     = (-volHeatCapacityAir*dGroundCondSH_dGroundTemp)*(groundTemp - airtemp) + &                                               ! d(ground sensible heat flux)/d(ground temp)
-                                  (-volHeatCapacityAir*groundConductanceSH)
-    dLatHeatGroundEvap_dTGround = (-latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dGroundTemp)*(satVP_GroundTemp*soilRelHumidity - VPair) + &       ! d(ground latent heat flux)/d(ground temp)
-                                  (-latHeatSubVapGround*latentHeatConstant*groundConductanceLH)*dSVPGround_dGroundTemp*soilRelHumidity
-  end if   ! end if canopy is defined
+      ! set derivatives for ground fluxes w.r.t canopy temperature to zero (no canopy, so fluxes are undefined)
+      dSenHeatGround_dTCanair      = 0._rkind
+      dSenHeatGround_dTCanopy      = 0._rkind
+      dLatHeatGroundEvap_dTCanair  = 0._rkind
+      dLatHeatGroundEvap_dTCanopy  = 0._rkind
+
+      ! compute derivatives for the ground fluxes w.r.t. ground temperature
+      dSenHeatGround_dTGround     = (-volHeatCapacityAir*dGroundCondSH_dGroundTemp)*(groundTemp - airtemp) + &                                               ! d(ground sensible heat flux)/d(ground temp)
+                                    (-volHeatCapacityAir*groundConductanceSH)
+      dLatHeatGroundEvap_dTGround = (-latHeatSubVapGround*latentHeatConstant*dGroundCondLH_dGroundTemp)*(satVP_GroundTemp*soilRelHumidity - VPair) + &       ! d(ground latent heat flux)/d(ground temp)
+                                    (-latHeatSubVapGround*latentHeatConstant*groundConductanceLH)*dSVPGround_dGroundTemp*soilRelHumidity
+    end if   ! end if canopy is defined
+
+  end if ! end if computing energy Jacobian terms 
 
   ! *****
   ! * compute net turbulent fluxes, and derivatives...
@@ -2429,11 +2433,19 @@ subroutine turbFluxes(&
     dTurbFluxCanair_dCanWat  = 0._rkind                                                                              ! derivative in net canopy air space fluxes w.r.t. canopy total water content (J kg-1 s-1)
   end if
 
-  ! liquid water derivatives
-  dLatHeatGroundEvap_dCanWat = latHeatSubVapGround*latentHeatConstant*groundConductanceLH*dVPCanopyAir_dCanWat     ! derivative in latent heat of ground evaporation w.r.t. canopy total water (J kg-1 s-1)
-  ! cross derivatives
-  dTurbFluxCanopy_dCanWat  = dLatHeatCanopyEvap_dCanWat + dLatHeatCanopyTrans_dCanWat                              ! derivative in net canopy turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
-  dTurbFluxGround_dCanWat  = dLatHeatGroundEvap_dCanWat                                                            ! derivative in net ground turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
+  if (J_energy) then ! if computing energy Jacobian terms
+    ! liquid water derivatives
+    dLatHeatGroundEvap_dCanWat = latHeatSubVapGround*latentHeatConstant*groundConductanceLH*dVPCanopyAir_dCanWat     ! derivative in latent heat of ground evaporation w.r.t. canopy total water (J kg-1 s-1)
+    ! cross derivatives
+    dTurbFluxCanopy_dCanWat  = dLatHeatCanopyEvap_dCanWat + dLatHeatCanopyTrans_dCanWat                              ! derivative in net canopy turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
+    dTurbFluxGround_dCanWat  = dLatHeatGroundEvap_dCanWat                                                            ! derivative in net ground turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
+  else ! need reasonable values to pass to derivative data structure even though we are not computing energy Jacobian terms
+    ! liquid water derivatives
+    dLatHeatGroundEvap_dCanWat = 0._rkind     ! derivative in latent heat of ground evaporation w.r.t. canopy total water (J kg-1 s-1)
+    ! cross derivatives
+    dTurbFluxCanopy_dCanWat  = 0._rkind                              ! derivative in net canopy turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
+    dTurbFluxGround_dCanWat  = 0._rkind                              ! derivative in net ground turbulent fluxes w.r.t. canopy total water content (J kg-1 s-1)
+  end if
 end subroutine turbFluxes
 
 ! *******************************************************************************************************
