@@ -22,11 +22,15 @@ contains
 
       ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
       ! note: guess vector elements from classical iterations are reused where possible
-      call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes scaled residual and computes line search objective function)
-      if (f_obj % f_error) return             ! check for function evaluation errors
-      f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
-      call f_obj % J1_eval(f_obj % x0)        ! get J1
-      call f_obj % J2_eval(f_obj % x0)        ! get J2
+      !call f_obj % f1_f2_vec_eval(f_obj % x0) ! get f1 and f2 (also initializes scaled residual and computes line search objective function) -- results is an array temporary
+      associate(x0 => f_obj % x0)
+        ! note: the actual argument syntax is x0(:) instead of x0 or f_obj % x0 or f_obj % x0(:) to avoid array temporaries (allows compiler to accept argument as contiguous)
+        call f_obj % f1_f2_vec_eval(x0(:)) ! get f1 and f2 (also initializes scaled residual and computes line search objective function)
+        if (f_obj % f_error) return             ! check for function evaluation errors
+        f_obj % L0 = f_obj % out_SS4HG % fNew   ! initialize line search objective function value based on computed value 
+        call f_obj % J1_eval(x0(:))        ! get J1
+        call f_obj % J2_eval(x0(:))        ! get J2
+      end associate
 
       call nested_Newton_vector(f_obj,f_obj % kmax,f_obj % lmax) ! nested iterations
 

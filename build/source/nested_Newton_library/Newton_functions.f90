@@ -1319,8 +1319,7 @@ contains
   ! evaluate f anf f1 based on stateMask1
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
-  real(r8b),intent(in) :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1331,13 +1330,6 @@ contains
                &mass_flag,energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
-  ! note: now obtained from computResid
-  !! store total non-linear function
-  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
-
-  !! assign non-zero function values based on logical mask
-  !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
 
  end subroutine f_f1_SUMMA_vec_full
 
@@ -1361,8 +1353,7 @@ contains
   ! evaluates f2 and f using stateMask2
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
-  real(r8b),intent(in) :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1374,13 +1365,6 @@ contains
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
-  ! note: now obtained from computResid
-  !! store total non-linear function
-  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
-
-  !! assign non-zero function values based on logical mask
-  !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
-
  end subroutine f_f2_SUMMA_vec_full
 
  subroutine f1_SUMMA_vec_full(f_obj,xvec)
@@ -1388,17 +1372,12 @@ contains
   ! evaluates f1 using f1_mass_flag and f1_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
-  real(r8b),intent(in) :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
-  ! note: now obtained from computResid
-  !! store total non-linear function
-  !f_obj % f1_vec(:) = real(f_obj % resVec(:),r8b)
 
  end subroutine f1_SUMMA_vec_full
 
@@ -1407,17 +1386,12 @@ contains
   ! evaluates f2 using f2_mass_flag and f2_energy_flag
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
-  real(r8b),intent(in) :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
   call f_obj % f_state_SUMMA_vec_full(&
                &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
-  ! note: now obtained from computResid
-  !! store total non-linear function
-  !f_obj % f2_vec(:) = -real(f_obj % resVec(:),r8b) ! negative sign so that f = f1 - f2
 
  end subroutine f2_SUMMA_vec_full
 
@@ -1425,8 +1399,7 @@ contains
   ! *** Compute mass and energy non-linear functions --- use fully-coupled eval8summa call and filter results ***
   ! arguments
   class(f_obj_type),intent(inout) :: f_obj
-  !real(r8b),intent(in),contiguous :: xvec(:) ! current guess
-  real(r8b),intent(in) :: xvec(:) ! current guess
+  real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
   ! local
   logical,parameter               :: mass_flag = .true.,energy_flag = .true. ! flags to compute mass and energy terms
@@ -1437,14 +1410,6 @@ contains
                &mass_flag,energy_flag,.true.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
-  ! note: now obtained from computResid
-  !! store total non-linear function
-  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b)
-
-  !! assign non-zero function values based on logical mask
-  !call filter_SUMMA_f(.false.,f_obj % stateMask1,f_obj % f_vec,f_obj % f1_vec)
-  !call filter_SUMMA_f(.true.,f_obj % stateMask2,f_obj % f_vec,f_obj % f2_vec)
 
  end subroutine f_f1_f2_SUMMA_vec_full   ! solver
 
