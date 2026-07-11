@@ -745,6 +745,7 @@ subroutine vegNrgFlux(&
         ! compute canopy longwave radiation balance
         call longwaveBal(&
                           ! input: model control
+                          J_energy,                          & ! intent(in):  logical flag to compute energy Jacobian terms
                           computeVegFlux,                    & ! intent(in):  flag to compute fluxes over vegetation
                           checkLWBalance,                    & ! intent(in):  flag to check longwave balance
                           ! input: canopy and ground temperature
@@ -1207,6 +1208,7 @@ end subroutine thetaSmoother
 ! *******************************************************************************************************
 subroutine longwaveBal(&
                       ! input: model control
+                      J_energy,                       & ! intent(in):  logical flag to compute energy Jacobian terms
                       computeVegFlux,                 & ! intent(in):  flag to compute fluxes over vegetation
                       checkLWBalance,                 & ! intent(in):  flag to check longwave balance
                       ! input: canopy and ground temperature
@@ -1243,6 +1245,7 @@ subroutine longwaveBal(&
   ! -----------------------------------------------------------------------------------------------------------------------------------------------
   implicit none
   ! input: model control
+  logical(lgt),intent(in)          :: J_energy                 ! logical flag to compute energy Jacobian terms
   logical(lgt),intent(in)          :: computeVegFlux           ! flag to indicate if computing fluxes over vegetation
   logical(lgt),intent(in)          :: checkLWBalance           ! flag to check longwave balance
   ! input: canopy and ground temperature
@@ -1342,19 +1345,20 @@ subroutine longwaveBal(&
   ! -------------------------------------------------------------------------------------
   ! compute derivatives
   ! -------------------------------------------------------------------------------------
-  ! compute initial derivatives
-  dLWRadCanopy_dTCanopy = 4._rkind*emc*sb*canopyTemp**3_i4b
-  dLWRadGround_dTGround = 4._rkind*emg*sb*groundTemp**3_i4b
-  ! cap function to prevent blowing up
-  if (canopyTemp<0) dLWRadCanopy_dTCanopy = 0._rkind
-  if (groundTemp<0) dLWRadGround_dTGround = 0._rkind
+  if (J_energy) then ! if computing energy Jacobian terms
+    ! compute initial derivatives
+    dLWRadCanopy_dTCanopy = 4._rkind*emc*sb*canopyTemp**3_i4b
+    dLWRadGround_dTGround = 4._rkind*emg*sb*groundTemp**3_i4b
+    ! cap function to prevent blowing up
+    if (canopyTemp<0) dLWRadCanopy_dTCanopy = 0._rkind
+    if (groundTemp<0) dLWRadGround_dTGround = 0._rkind
 
-  ! compute analytical derivatives
-  dLWNetCanopy_dTCanopy = (emc*(1._rkind - emg) - 2._rkind)*dLWRadCanopy_dTCanopy ! derivative in net canopy radiation w.r.t. canopy temperature (W m-2 K-1)
-  dLWNetGround_dTGround = -dLWRadGround_dTGround                                  ! derivative in net ground radiation w.r.t. ground temperature (W m-2 K-1)
-  dLWNetCanopy_dTGround = emc*dLWRadGround_dTGround                               ! derivative in net canopy radiation w.r.t. ground temperature (W m-2 K-1)
-  dLWNetGround_dTCanopy = emg*dLWRadCanopy_dTCanopy                               ! derivative in net ground radiation w.r.t. canopy temperature (W m-2 K-1)
-
+    ! compute analytical derivatives
+    dLWNetCanopy_dTCanopy = (emc*(1._rkind - emg) - 2._rkind)*dLWRadCanopy_dTCanopy ! derivative in net canopy radiation w.r.t. canopy temperature (W m-2 K-1)
+    dLWNetGround_dTGround = -dLWRadGround_dTGround                                  ! derivative in net ground radiation w.r.t. ground temperature (W m-2 K-1)
+    dLWNetCanopy_dTGround = emc*dLWRadGround_dTGround                               ! derivative in net canopy radiation w.r.t. ground temperature (W m-2 K-1)
+    dLWNetGround_dTCanopy = emg*dLWRadCanopy_dTCanopy                               ! derivative in net ground radiation w.r.t. canopy temperature (W m-2 K-1)
+  end if
 end subroutine longwaveBal
 
 ! *******************************************************************************************************
