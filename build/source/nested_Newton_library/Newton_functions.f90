@@ -23,6 +23,8 @@ module Newton_functions
  implicit none
  private
 
+ public :: f_obj_base,f_obj_inputs,f_obj_type
+
  ! option parameters
  integer(i4b),parameter,public :: LAPACK_expert = 0_i4b,LAPACK_standard = 1_i4b ! linear_system_solver options
  integer(i4b),parameter,public :: LS_C = 0_i4b, LS_I = 1_i4b, LS_O = 2_i4b ! line_search_option options
@@ -31,7 +33,7 @@ module Newton_functions
                                 & custom_predictive = 3_i4b, predictive = 4_i4b ! convergence criterion options
  
  ! ***** Parent Type ***** !
- type, public :: f_obj_base
+ type :: f_obj_base
    ! ** Default data components used by the Newton solvers ** !
    logical      :: banded            ! flag for banded Jacobians
    logical      :: nested            ! flag for nested algorithm
@@ -113,7 +115,7 @@ module Newton_functions
    procedure :: matrix_vector_product                ! compute matrix-vector product using matmul or BLAS
  end type f_obj_base
 
- type,extends(f_obj_base),public :: f_obj_inputs
+ type,extends(f_obj_base) :: f_obj_inputs
    ! * SUMMA data *
    !type(model_options),allocatable :: model_decisions(:) ! model decisions
    type(model_options),pointer :: model_decisions(:) => null() ! model decisions
@@ -178,30 +180,30 @@ module Newton_functions
 
  end type f_obj_inputs
 
- type,extends(f_obj_inputs),public :: f_obj_type
+ type,extends(f_obj_inputs) :: f_obj_type
    real(r8b) :: L0 ! initial line search objective function value
   contains
    ! *** these procedures take the procedures from f_obj_inputs type as input *** !
    ! vector routines
-   procedure :: f_vec_eval  => f_SUMMA_vec  ! solver -- f
-   procedure :: f1_vec_eval => f_f1_SUMMA_vec_full   ! solver -- f and f1
-   procedure :: f2_vec_eval => f_f2_SUMMA_vec_full   ! solver -- f and f2
-   procedure :: f1_vec_only_eval => f1_SUMMA_vec_full   ! solver --- f1 only
-   procedure :: f2_vec_only_eval => f2_SUMMA_vec_full   ! solver --- f2 only
-   procedure :: f1_f2_vec_eval => f_f1_f2_SUMMA_vec_full   ! solver -- f, f1, and f2
-   procedure :: J_eval  => J_SUMMA_vec       ! solver -- J
-   procedure :: J1_eval => J1_SUMMA_vec_full ! solver -- J1
-   procedure :: J2_eval => J2_SUMMA_vec_full ! solver -- J2
+   procedure, non_overridable :: f_vec_eval  => f_SUMMA_vec  ! solver -- f
+   procedure, non_overridable :: f1_vec_eval => f_f1_SUMMA_vec_full   ! solver -- f and f1
+   procedure, non_overridable :: f2_vec_eval => f_f2_SUMMA_vec_full   ! solver -- f and f2
+   procedure, non_overridable :: f1_vec_only_eval => f1_SUMMA_vec_full   ! solver --- f1 only
+   procedure, non_overridable :: f2_vec_only_eval => f2_SUMMA_vec_full   ! solver --- f2 only
+   procedure, non_overridable :: f1_f2_vec_eval => f_f1_f2_SUMMA_vec_full   ! solver -- f, f1, and f2
+   procedure, non_overridable :: J_eval  => J_SUMMA_vec       ! solver -- J
+   procedure, non_overridable :: J1_eval => J1_SUMMA_vec_full ! solver -- J1
+   procedure, non_overridable :: J2_eval => J2_SUMMA_vec_full ! solver -- J2
    !procedure :: J1_J2_eval => J_J1_J2_SUMMA_vec_full ! solver J, J1, and J2
-   procedure :: apply_constraints  => SUMMA_imposeConstraints
-   procedure :: apply_nested_line_search => SUMMA_nested_line_search
-   procedure :: line_search_objective => SUMMA_line_search_objective
-   procedure :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
-   procedure :: custom_scaling     => SUMMA_scaling  
-   procedure :: custom_descaling   => SUMMA_descaling  
+   procedure, non_overridable :: apply_constraints  => SUMMA_imposeConstraints
+   procedure, non_overridable :: apply_nested_line_search => SUMMA_nested_line_search
+   procedure, non_overridable :: line_search_objective => SUMMA_line_search_objective
+   procedure, non_overridable :: custom_convergence => SUMMA_check_convergence_flag !SUMMA_checkConv  
+   procedure, non_overridable :: custom_scaling     => SUMMA_scaling  
+   procedure, non_overridable :: custom_descaling   => SUMMA_descaling  
    !procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
-   procedure :: get_f1_f2_flags => get_SUMMA_f1_f2_flags
-   procedure :: f_state_SUMMA_vec_full
+   procedure, non_overridable :: get_f1_f2_flags => get_SUMMA_f1_f2_flags
+   procedure, non_overridable :: f_state_SUMMA_vec_full
 
  end type f_obj_type
 
