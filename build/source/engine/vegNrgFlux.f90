@@ -629,6 +629,7 @@ subroutine vegNrgFlux(&
         !       Mahat et al. (Below-canopy turbulence in a snowmelt model, WRR, 2012)
         call aeroResist(&
                         ! input: model control
+                        J_energy,                           & ! intent(in):  logical flag to compute energy Jacobian terms
                         computeVegFlux,                     & ! intent(in): logical flag to compute vegetation fluxes (.false. if veg buried by snow)
                         ix_veg_traits,                      & ! intent(in): choice of parameterization for vegetation roughness length and displacement height
                         ix_windPrfile,                      & ! intent(in): choice of canopy wind profile
@@ -1366,6 +1367,7 @@ end subroutine longwaveBal
 ! *******************************************************************************************************
 subroutine aeroResist(&
                       ! input: model control
+                      J_energy,                      & ! intent(in):  logical flag to compute energy Jacobian terms
                       computeVegFlux,                & ! intent(in):  logical flag to compute vegetation fluxes (.false. if veg buried by snow)
                       ixVegTraits,                   & ! intent(in):  choice of parameterization for vegetation roughness length and displacement height
                       ixWindProfile,                 & ! intent(in):  choice of canopy wind profile
@@ -1423,6 +1425,7 @@ subroutine aeroResist(&
   !       Mahat et al. (Below-canopy turbulence in a snowmelt model, WRR, 2012)
   implicit none
   ! input: model control
+  logical(lgt),intent(in)          :: J_energy                      ! intent(in):  logical flag to compute energy Jacobian terms
   logical(lgt),intent(in)          :: computeVegFlux                ! logical flag to compute vegetation fluxes (.false. if veg buried by snow)
   integer(i4b),intent(in)          :: ixVegTraits                   ! choice of parameterization for vegetation roughness length and displacement height
   integer(i4b),intent(in)          :: ixWindProfile                 ! choice of canopy wind profile
@@ -1608,6 +1611,7 @@ subroutine aeroResist(&
     ! compute the stability correction for resistance from canopy air space to air above the canopy (-)
     call aStability(&
                     ! input
+                    J_energy,                                         & ! input:  logical flag to compute energy Jacobian terms
                     ixStability,                                      & ! input:  choice of stability function
                     ! input: forcing data, diagnostic and state variables
                     mHeight - referenceHeight,                        & ! input:  height difference from measurement height to canopy air space (m)
@@ -1675,6 +1679,7 @@ subroutine aeroResist(&
     ! compute the stability correction for resistance from the ground to the canopy air space (-)
     call aStability(&
                     ! input
+                    J_energy,                                         & ! input:  logical flag to compute energy Jacobian terms
                     ixStability,                                      & ! input:  choice of stability function
                     ! input: forcing data, diagnostic and state variables
                     referenceHeight,                                  & ! input:  height difference from reference height to the ground (m)
@@ -1727,6 +1732,7 @@ subroutine aeroResist(&
     ! compute ground stability correction
     call aStability(&
                     ! input
+                    J_energy,                                         & ! input:  logical flag to compute energy Jacobian terms
                     ixStability,                                      & ! input:  choice of stability function
                     ! input: forcing data, diagnostic and state variables
                     heightAboveGround,                                & ! input:  height difference from measurement height to surface -- "surface" is either snow or ground (m)
@@ -1763,31 +1769,33 @@ subroutine aeroResist(&
   end if  ! end if no canopy
   
   ! derivatives for the vegetation canopy
-  if (computeVegFlux) then ! if vegetation is exposed
-    ! ***** compute derivatives w.r.t. canopy temperature
-    ! NOTE: derivatives are zero because using canopy air space temperature
-    dCanopyResistance_dTCanopy = 0._rkind ! derivative in canopy resistance w.r.t. canopy temperature (s m-1 K-1)
-    dGroundResistance_dTCanopy = 0._rkind ! derivative in ground resistance w.r.t. canopy temperature (s m-1 K-1)
-    ! ***** compute derivatives w.r.t. ground temperature (s m-1 K-1)
-    dGroundResistance_dTGround = -(groundResistanceNeutral*dGroundStabilityCorrection_dSfcTemp)/(groundStabilityCorrection**2_i4b)
-    ! ***** compute derivatives w.r.t. temperature of the canopy air space (s m-1 K-1)
-    ! derivative in canopy resistance w.r.t. canopy air temperature (s m-1 K-1)
-    dCanopyResistance_dTCanair = -dCanopyStabilityCorrection_dCasTemp/(windspd*canopyExNeut*canopyStabilityCorrection**2_i4b)
-    ! derivative in ground resistance w.r.t. canopy air temperature (s m-1 K-1)
-    ! compute derivative in NEUTRAL ground resistance w.r.t. canopy air temperature (s m-1 K-1)
-    dFV_dT = windspd*canopyExNeut*dCanopyStabilityCorrection_dCasTemp/(sqrt(sfc2AtmExchangeCoeff_canopy)*2._rkind)                      ! d(frictionVelocity)/d(canopy air temperature)
-    dED_dT = dFV_dT*vkc*(heightCanopyTopAboveSnow - zeroPlaneDisplacement)                                                              ! d(eddyDiffusCanopyTop)d(canopy air temperature)
-    dGR_dT = -dED_dT*(tmp1 - tmp2)*heightCanopyTopAboveSnow*exp(windReductionFactor) / (windReductionFactor*eddyDiffusCanopyTop**2_i4b) ! d(groundResistanceNeutral)/d(canopy air temperature)
-    ! stitch everything together -- product rule
-    dGroundResistance_dTCanair = dGR_dT/groundStabilityCorrection - groundResistanceNeutral*dGroundStabilityCorrection_dCasTemp/(groundStabilityCorrection**2_i4b)
-    ! ***** compute resistances for non-vegetated surfaces (e.g., snow)
-  else
-    ! set canopy derivatives to zero (non-vegetated, remember)
-    dCanopyResistance_dTCanopy = 0._rkind
-    dGroundResistance_dTCanopy = 0._rkind
-    ! compute derivatives for ground resistance
-    dGroundResistance_dTGround = -dGroundStabilityCorrection_dSfcTemp/(windspd*groundExNeut*groundStabilityCorrection**2_i4b)
-  end if  ! end switch between vegetated and non-vegetated surfaces
+  if (J_energy) then ! if computing energy Jacobian terms
+    if (computeVegFlux) then ! if vegetation is exposed
+      ! ***** compute derivatives w.r.t. canopy temperature
+      ! NOTE: derivatives are zero because using canopy air space temperature
+      dCanopyResistance_dTCanopy = 0._rkind ! derivative in canopy resistance w.r.t. canopy temperature (s m-1 K-1)
+      dGroundResistance_dTCanopy = 0._rkind ! derivative in ground resistance w.r.t. canopy temperature (s m-1 K-1)
+      ! ***** compute derivatives w.r.t. ground temperature (s m-1 K-1)
+      dGroundResistance_dTGround = -(groundResistanceNeutral*dGroundStabilityCorrection_dSfcTemp)/(groundStabilityCorrection**2_i4b)
+      ! ***** compute derivatives w.r.t. temperature of the canopy air space (s m-1 K-1)
+      ! derivative in canopy resistance w.r.t. canopy air temperature (s m-1 K-1)
+      dCanopyResistance_dTCanair = -dCanopyStabilityCorrection_dCasTemp/(windspd*canopyExNeut*canopyStabilityCorrection**2_i4b)
+      ! derivative in ground resistance w.r.t. canopy air temperature (s m-1 K-1)
+      ! compute derivative in NEUTRAL ground resistance w.r.t. canopy air temperature (s m-1 K-1)
+      dFV_dT = windspd*canopyExNeut*dCanopyStabilityCorrection_dCasTemp/(sqrt(sfc2AtmExchangeCoeff_canopy)*2._rkind)                      ! d(frictionVelocity)/d(canopy air temperature)
+      dED_dT = dFV_dT*vkc*(heightCanopyTopAboveSnow - zeroPlaneDisplacement)                                                              ! d(eddyDiffusCanopyTop)d(canopy air temperature)
+      dGR_dT = -dED_dT*(tmp1 - tmp2)*heightCanopyTopAboveSnow*exp(windReductionFactor) / (windReductionFactor*eddyDiffusCanopyTop**2_i4b) ! d(groundResistanceNeutral)/d(canopy air temperature)
+      ! stitch everything together -- product rule
+      dGroundResistance_dTCanair = dGR_dT/groundStabilityCorrection - groundResistanceNeutral*dGroundStabilityCorrection_dCasTemp/(groundStabilityCorrection**2_i4b)
+      ! ***** compute resistances for non-vegetated surfaces (e.g., snow)
+    else
+      ! set canopy derivatives to zero (non-vegetated, remember)
+      dCanopyResistance_dTCanopy = 0._rkind
+      dGroundResistance_dTCanopy = 0._rkind
+      ! compute derivatives for ground resistance
+      dGroundResistance_dTGround = -dGroundStabilityCorrection_dSfcTemp/(windspd*groundExNeut*groundStabilityCorrection**2_i4b)
+    end if  ! end switch between vegetated and non-vegetated surfaces
+  end if
 
 end subroutine aeroResist
 
@@ -2457,6 +2465,7 @@ end subroutine turbFluxes
 ! *******************************************************************************************************
 subroutine aStability(&
                       ! input: control
+                      J_energy,                       & ! input:  logical flag to compute energy Jacobian terms
                       ixStability,                    & ! input:  choice of stability function
                       ! input: forcing data, diagnostic and state variables
                       hgt_diff,                       & ! input:  height difference from air to surface (m)
@@ -2476,6 +2485,7 @@ subroutine aStability(&
                       err, message                    ) ! output: error control
   implicit none
   ! input: control
+  logical(lgt),intent(in)          :: J_energy                      ! logical flag to compute energy Jacobian terms
   integer(i4b),intent(in)          :: ixStability                   ! choice of stability function
   ! input: forcing data, diagnostic and state variables
   real(rkind),intent(in)           :: hgt_diff                      ! height difference from air to surface (m)
@@ -2506,6 +2516,7 @@ subroutine aStability(&
   ! compute the bulk Richardson number (-)
   call bulkRichardson(&
                       ! input
+                      J_energy,                       & ! input:  logical flag to compute energy Jacobian terms
                       airTemp,                        & ! input: air temperature (K)
                       sfcTemp,                        & ! input: surface temperature (K)
                       windspd_diff,                   & ! input: wind speed difference air to surface (m s-1)
@@ -2520,9 +2531,11 @@ subroutine aStability(&
   ! ***** process unstable cases, Anderson 1976 and Oke 1978
   if (RiBulk<0._rkind) then
     stabilityCorrection = (1._rkind - 16._rkind*RiBulk)**(0.75_rkind)
-    dStabilityCorrection_dRich    = -12._rkind*(1._rkind - 16._rkind*RiBulk)**(-0.25_rkind)
-    dStabilityCorrection_dAirTemp = dRiBulk_dAirTemp * dStabilityCorrection_dRich
-    dStabilityCorrection_dSfcTemp = dRiBulk_dSfcTemp * dStabilityCorrection_dRich
+    if (J_energy) then ! if computing energy Jacobian terms
+      dStabilityCorrection_dRich    = -12._rkind*(1._rkind - 16._rkind*RiBulk)**(-0.25_rkind)
+      dStabilityCorrection_dAirTemp = dRiBulk_dAirTemp * dStabilityCorrection_dRich
+      dStabilityCorrection_dSfcTemp = dRiBulk_dSfcTemp * dStabilityCorrection_dRich
+    end if
     return
   end if
 
@@ -2532,7 +2545,7 @@ subroutine aStability(&
     case(standard)
       if(RiBulk < critRichNumber)then 
         stabilityCorrection = (1._rkind - 5._rkind*RiBulk)**2_i4b
-        dStabilityCorrection_dRich = -10._rkind*(1._rkind - 5._rkind*RiBulk)
+        if (J_energy) dStabilityCorrection_dRich = -10._rkind*(1._rkind - 5._rkind*RiBulk)
       else
         stabilityCorrection = stabilityTol
         dStabilityCorrection_dRich = 0._rkind
@@ -2543,7 +2556,7 @@ subroutine aStability(&
       bprime = Louis79_bparam/2._rkind ! scale the "b" parameter for stable conditions
       stabilityCorrection = (1._rkind + bprime*RiBulk)**(-2_i4b)
       if(stabilityCorrection >= epsilon(stabilityCorrection))then
-        dStabilityCorrection_dRich = -2._rkind*bprime*(1._rkind + bprime*RiBulk)**(-3_i4b)
+        if (J_energy) dStabilityCorrection_dRich = -2._rkind*bprime*(1._rkind + bprime*RiBulk)**(-3_i4b)
       else
         stabilityCorrection = epsilon(stabilityCorrection)
         dStabilityCorrection_dRich = 0._rkind
@@ -2553,7 +2566,7 @@ subroutine aStability(&
     case(mahrtExponential)
       stabilityCorrection = exp(-Mahrt87_eScale*RiBulk)
       if(stabilityCorrection >= epsilon(stabilityCorrection))then
-        dStabilityCorrection_dRich = -Mahrt87_eScale * exp(-Mahrt87_eScale*RiBulk)
+        if (J_energy) dStabilityCorrection_dRich = -Mahrt87_eScale * exp(-Mahrt87_eScale*RiBulk)
       else
         stabilityCorrection = epsilon(stabilityCorrection)
         dStabilityCorrection_dRich = 0._rkind
@@ -2562,8 +2575,10 @@ subroutine aStability(&
     case default
       err=10; message=trim(message)//"optionNotFound[stability correction]"; return
   end select
-  dStabilityCorrection_dAirTemp = dRiBulk_dAirTemp * dStabilityCorrection_dRich
-  dStabilityCorrection_dSfcTemp = dRiBulk_dSfcTemp * dStabilityCorrection_dRich
+  if (J_energy) then ! if computing energy Jacobian terms
+    dStabilityCorrection_dAirTemp = dRiBulk_dAirTemp * dStabilityCorrection_dRich
+    dStabilityCorrection_dSfcTemp = dRiBulk_dSfcTemp * dStabilityCorrection_dRich
+  end if
 
 end subroutine aStability
 
@@ -2572,6 +2587,7 @@ end subroutine aStability
 ! *******************************************************************************************************
 subroutine bulkRichardson(&
                           ! input
+                          J_energy,                   & ! input:  logical flag to compute energy Jacobian terms
                           airTemp,                    & ! input:  air temperature (K)
                           sfcTemp,                    & ! input:  surface temperature (K)
                           windspd_diff,               & ! input:  wind speed difference air to surface (m s-1)
@@ -2583,6 +2599,7 @@ subroutine bulkRichardson(&
                           err,message)                  ! output: error control
 implicit none
 ! input
+logical(lgt),intent(in)       :: J_energy               ! logical flag to compute energy Jacobian terms
 real(rkind),intent(in)        :: airtemp                ! air temperature (K)
 real(rkind),intent(in)        :: sfcTemp                ! surface temperature (K)
 real(rkind),intent(in)        :: windspd_diff           ! wind speed difference air to surface (m s-1)
@@ -2609,14 +2626,17 @@ real(rkind)                   :: RiMult                 ! dimensionless scaling 
   RiMult = gravity*hgt_diff / windspd_diff**2_i4b
   ! compute the Richardson number
   RiBulk = (T_grad/T_mean) * RiMult
-  ! compute the derivative in the Richardson number
-  dRiBulk_dAirTemp =  RiMult/T_mean - RiMult*T_grad / (0.5_rkind*((airtemp + sfcTemp)**2_i4b))
-  dRiBulk_dSfcTemp = -RiMult/T_mean - RiMult*T_grad / (0.5_rkind*((airtemp + sfcTemp)**2_i4b))
-  ! cap function to prevent blowing up
-  if (sfcTemp < 0._rkind) then
-    dRiBulk_dAirTemp = 0._rkind
-    dRiBulk_dSfcTemp = 0._rkind
-  endif
+
+  if (J_energy) then ! if computing energy Jacobian terms
+    ! compute the derivative in the Richardson number
+    dRiBulk_dAirTemp =  RiMult/T_mean - RiMult*T_grad / (0.5_rkind*((airtemp + sfcTemp)**2_i4b))
+    dRiBulk_dSfcTemp = -RiMult/T_mean - RiMult*T_grad / (0.5_rkind*((airtemp + sfcTemp)**2_i4b))
+    ! cap function to prevent blowing up
+    if (sfcTemp < 0._rkind) then
+      dRiBulk_dAirTemp = 0._rkind
+      dRiBulk_dSfcTemp = 0._rkind
+    endif
+  end if
 
 end subroutine bulkRichardson
 
