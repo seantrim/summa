@@ -600,6 +600,7 @@ subroutine vegNrgFlux(&
           ! get wetted fraction and derivatives
           call wettedFrac(&
                           ! input
+                          J_energy,                                       & ! flag to compute energy Jacobian terms
                           .true.,                                         & ! flag to denote if derivative is desired
                           (scalarLatHeatSubVapCanopy > LH_vap+verySmall), & ! flag to denote if the canopy is frozen
                           dCanLiq_dTcanopy,                               & ! derivative in canopy liquid w.r.t. canopy temperature (kg m-2 K-1)
@@ -1039,6 +1040,7 @@ end subroutine vegNrgFlux
 ! *******************************************************************************************************
 subroutine wettedFrac(&
                       ! input
+                      J_energy,               & ! flag to compute energy Jacobian terms
                       deriv,                  & ! flag to denote if derivative is desired
                       frozen,                 & ! flag to denote if the canopy is frozen
                       dLiq_dT,                & ! derivative in canopy liquid w.r.t. canopy temperature (kg m-2 K-1)
@@ -1056,6 +1058,7 @@ subroutine wettedFrac(&
                       err,message)              ! error control
   implicit none
   ! input
+  logical(lgt),intent(in)       :: J_energy                ! flag to compute energy Jacobian terms
   logical(lgt),intent(in)       :: deriv                   ! flag to denote if derivative is desired
   logical(lgt),intent(in)       :: frozen                  ! flag to denote if the canopy is frozen
   real(rkind),intent(in)        :: dLiq_dT                 ! derivative in canopy liquid w.r.t. canopy temperature (kg m-2 K-1)
@@ -1075,31 +1078,40 @@ subroutine wettedFrac(&
   character(*),intent(out)      :: message                 ! error message
   ! local variables
   logical(lgt),parameter        :: smoothing=.true.        ! flag to denote that smoothing is required
+  logical(lgt)                  :: deriv_wf                ! flag to denote that derivatives are needed in wetFraction procedure
   real(rkind)                   :: canopyWetFractionDeriv  ! derivative in wetted fraction w.r.t. canopy liquid water (kg-1 m2)
   ! -----------------------------------------------------------------------------------------------------------------------------------------------
   ! initialize error control
   err=0; message='wettedFrac/'
 
+  ! are derivatives needed in wetFraction?
+  ! note: derivatives not needed if energy Jacobian terms are not computed (e.g., in certain parts of the nested Newton solver)
+  deriv_wf = J_energy .and. deriv
+
   ! compute case where the canopy is frozen
   if (frozen) then
     ! compute fraction of liquid water on the canopy
-    call wetFraction(deriv,smoothing,canopyIce,canopyIceMax,canopyWettingFactor,canopyWettingExp,canopyWetFraction,canopyWetFractionDeriv)
+    call wetFraction(deriv_wf,smoothing,canopyIce,canopyIceMax,canopyWettingFactor,canopyWettingExp,canopyWetFraction,canopyWetFractionDeriv)
  
     ! scale derivative by the fraction of water
-    ! NOTE: dIce/dWat = (1._rkind - fracLiq), hence dWet/dWat = dIce/dWat . dWet/dLiq
-    dCanopyWetFraction_dWat = canopyWetFractionDeriv*(1._rkind - fracLiq)
-    dCanopyWetFraction_dT   = -canopyWetFractionDeriv*dLiq_dT  ! NOTE: dIce/dT = -dLiq/dT
+    if (J_energy) then ! if computing energy Jacobian terms
+      ! NOTE: dIce/dWat = (1._rkind - fracLiq), hence dWet/dWat = dIce/dWat . dWet/dLiq
+      dCanopyWetFraction_dWat = canopyWetFractionDeriv*(1._rkind - fracLiq)
+      dCanopyWetFraction_dT   = -canopyWetFractionDeriv*dLiq_dT  ! NOTE: dIce/dT = -dLiq/dT
+    end if
     return
   end if
 
   ! compute fraction of liquid water on the canopy
   ! NOTE: if(.not.deriv) canopyWetFractionDeriv = 0._rkind
-  call wetFraction(deriv,smoothing,canopyLiq,canopyLiqMax,canopyWettingFactor,canopyWettingExp,canopyWetFraction,canopyWetFractionDeriv)
+  call wetFraction(deriv_wf,smoothing,canopyLiq,canopyLiqMax,canopyWettingFactor,canopyWettingExp,canopyWetFraction,canopyWetFractionDeriv)
 
   ! scale derivative by the fraction of water
-  ! NOTE: dLiq/dWat = fracLiq, hence dWet/dWat = dLiq/dWat . dWet/dLiq
-  dCanopyWetFraction_dWat = canopyWetFractionDeriv*fracLiq
-  dCanopyWetFraction_dT   = canopyWetFractionDeriv*dLiq_dT
+  if (J_energy) then ! if computing energy Jacobian terms
+    ! NOTE: dLiq/dWat = fracLiq, hence dWet/dWat = dLiq/dWat . dWet/dLiq
+    dCanopyWetFraction_dWat = canopyWetFractionDeriv*fracLiq
+    dCanopyWetFraction_dT   = canopyWetFractionDeriv*dLiq_dT
+  end if
 
 end subroutine wettedFrac
 

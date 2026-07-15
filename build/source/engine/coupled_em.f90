@@ -524,6 +524,7 @@ subroutine coupled_em(&
       ! compute wetted fraction of the canopy
       call wettedFrac(&
                       ! input
+                      .false.,                                                      & ! flag to compute energy derivatives
                       .false.,                                                      & ! flag to denote if derivatives are required
                       (prog_data%var(iLookPROG%scalarCanopyTemp)%dat(1) < Tfreeze), & ! flag to denote if the canopy is frozen
                       varNotUsed1,                                                  & ! derivative in canopy liquid w.r.t. canopy temperature (kg m-2 K-1)
