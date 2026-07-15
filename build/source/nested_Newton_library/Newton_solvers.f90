@@ -1,6 +1,6 @@
 module Newton_solvers
  ! ****** Classical and Nested Newton Solvers ******
- ! Note: objective functions and derivatives are specified via classes in the Newton_functions module
+ ! Note: functions and Jacobians are specified via type-bound proceduresin the Newton_functions module
  use kind_params, only: r8b,i4b
  use Newton_functions, only: f_obj_type
  implicit none

@@ -23,7 +23,7 @@ module Newton_functions
  implicit none
  private
 
- public :: f_obj_base,f_obj_inputs,f_obj_type
+ public :: f_obj_type
 
  ! option parameters
  integer(i4b),parameter,public :: LAPACK_expert = 0_i4b,LAPACK_standard = 1_i4b ! linear_system_solver options
@@ -33,7 +33,8 @@ module Newton_functions
                                 & custom_predictive = 3_i4b, predictive = 4_i4b ! convergence criterion options
  
  ! ***** Parent Type ***** !
- type :: f_obj_base
+ type :: f_obj_type
+
    ! ** Default data components used by the Newton solvers ** !
    logical      :: banded            ! flag for banded Jacobians
    logical      :: nested            ! flag for nested algorithm
@@ -77,7 +78,6 @@ module Newton_functions
    real(r8b),allocatable    :: J(:,:)        ! total Jacobian
    real(r8b),allocatable    :: J1(:,:)       ! Jacobian 1
    real(r8b),allocatable    :: J2(:,:)       ! Jacobian 2
-   !real(r8b),allocatable    :: Jdiff(:,:)    ! difference Jacobian
    real(r8b),allocatable    :: f_vec(:)      ! total non-linear function evaluation
    real(r8b),allocatable    :: f1_vec(:)     ! non-linear function evaluation 1
    real(r8b),allocatable    :: f2_vec(:)     ! non-linear function evaluation 2
@@ -88,6 +88,7 @@ module Newton_functions
    real(r8b),allocatable    :: f_temp(:)           ! temporary storage of f1 for 'L' scheme for line search
    real(r8b),allocatable    :: vector(:)           ! array for temporary vector output 
    logical,allocatable      :: accept(:)     ! logical mask for accepting guess vector entries for switch to nested iterations in dynamic mode
+   real(r8b)                :: L0            ! initial line search objective function value
    real(r8b)                :: tol,tol_inner ! tolerance for classical/outer and inner iterations
    real(r8b)                :: order_min     ! min convergence order for classical iterations in dynamic mode
    real(r8b)                :: R_work(-1:1)  ! work array for max residual computations 
@@ -106,22 +107,11 @@ module Newton_functions
    logical      :: out_basic   ! output flag for basic information
    logical      :: out_warning ! output flag for warnings
    logical      :: out_error   ! output flag for errors
-  contains
-   ! procedures used prior to calling the solver
-   procedure :: set_defaults    => f_set_defaults    ! set default options 
-   procedure :: allocate_memory => f_allocate_memory ! allocate array data components 
-   procedure :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
-   procedure :: solver_output   => f_solver_output   ! set solver output options
-   procedure :: matrix_vector_product                ! compute matrix-vector product using matmul or BLAS
- end type f_obj_base
 
- type,extends(f_obj_base) :: f_obj_inputs
-   ! * SUMMA data *
-   !type(model_options),allocatable :: model_decisions(:) ! model decisions
+   ! ******** SUMMA data ******** !
    type(model_options),pointer :: model_decisions(:) => null() ! model decisions
 
    type(zLookup)    ,pointer :: lookup_data => null() ! lookup tables
-   !type(var_dlength) :: flux_init                    ! model fluxes at the start of the time step
    type(var_i)      ,pointer :: type_data => null()   ! type of vegetation and soil
    type(var_d)      ,pointer :: attr_data => null()   ! spatial attributes
    type(var_d)      ,pointer :: forc_data => null()   ! model forcing data
@@ -134,7 +124,6 @@ module Newton_functions
    type(var_dlength),pointer :: diag_data => null()    ! diagnostic variables for a local HRU
    type(var_dlength),pointer :: flux_data => null()    ! temporary flux variables for a local HRU
    type(var_dlength),pointer :: deriv_data => null()   ! derivatives in model fluxes w.r.t. relevant state variables
-   !real(rkind),allocatable   :: dBaseflow_dMatric(:,:) ! derivative in baseflow w.r.t. matric head (s-1)
    real(rkind),allocatable   :: dBaseflow_dWat(:,:)    ! derivative in baseflow w.r.t. water content (s-1)
    real(rkind),allocatable   :: dBaseflow_dTk(:,:)     ! derivative in baseflow w.r.t. temperature (s-1)
    real(rkind),pointer       :: dMat(:) => null()      ! diagonal matrix (excludes flux derivatives) 
@@ -164,17 +153,19 @@ module Newton_functions
    integer(i4b)             :: nLeadDim ! lead dimension of SUMMA LAPACK arrays
 
    ! variables to handle state type non-linear function decompositions
-   integer(i4b)             :: nSubset1,nSubset2
-   logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
+   !integer(i4b)             :: nSubset1,nSubset2
+   !logical(lgt),allocatable :: stateMask1(:),stateMask2(:)  
    logical :: f1_mass_flag,f1_energy_flag
    logical :: f2_mass_flag,f2_energy_flag
 
- end type f_obj_inputs
-
- type,extends(f_obj_inputs) :: f_obj_type
-   real(r8b) :: L0 ! initial line search objective function value
   contains
-   ! *** these procedures take the procedures from f_obj_inputs type as input *** !
+   ! procedures used prior to calling the solver
+   procedure, non_overridable :: set_defaults    => f_set_defaults    ! set default options 
+   procedure, non_overridable :: allocate_memory => f_allocate_memory ! allocate array data components 
+   procedure, non_overridable :: set_tolerance   => f_set_tolerance   ! set tolerances and iteration count maximums
+   procedure, non_overridable :: solver_output   => f_solver_output   ! set solver output options
+   procedure, non_overridable :: matrix_vector_product                ! compute matrix-vector product using matmul or BLAS
+
    ! vector routines
    procedure, non_overridable :: f_vec_eval  => f_SUMMA_vec  ! solver -- f
    procedure, non_overridable :: f1_vec_eval => f_f1_SUMMA_vec_full   ! solver -- f and f1
@@ -194,7 +185,6 @@ module Newton_functions
    procedure, non_overridable :: custom_descaling   => SUMMA_descaling  
    !procedure :: get_mass_energy_masks => get_SUMMA_mass_energy_masks
    procedure, non_overridable :: get_f1_f2_flags => get_SUMMA_f1_f2_flags
-   procedure, non_overridable :: f_state_SUMMA_vec_full
 
  end type f_obj_type
 
@@ -205,8 +195,8 @@ contains
  ! **** Utilities **** !
 
  subroutine f_set_defaults(f_obj)
-  ! ** set default values for options in f_obj_base class **
-  class(f_obj_base),intent(inout) :: f_obj
+  ! ** set default values for options **
+  class(f_obj_type),intent(inout) :: f_obj
 
    f_obj % banded            = .false. ! flag for banded Jacobians
    f_obj % nested            = .false. ! flag for nested algorithm
@@ -240,8 +230,8 @@ contains
  end subroutine f_set_defaults
  
  subroutine f_allocate_memory(f_obj)
-  ! ** allocate array data components for f_obj_base class **
-  class(f_obj_base),intent(inout) :: f_obj
+  ! ** allocate array data components for nested Newton library solvers **
+  class(f_obj_type),intent(inout) :: f_obj
 
   ! allocate solution and function arrays
   associate(n => f_obj % n)
@@ -308,8 +298,6 @@ contains
   
   allocate(f_obj % J(1:f_obj % nrow,1:f_obj % n),source=0._r8b) ! SJT: available for classical and nested iterations (for testing -- not needed for nested)
   if (f_obj % nested) then
-   !allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),&
-   !        &f_obj % Jdiff(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
    allocate(f_obj % J1(1:f_obj % nrow,1:f_obj % n),f_obj % J2(1:f_obj % nrow,1:f_obj % n),source=0._r8b)
   end if
 
@@ -317,7 +305,7 @@ contains
 
  subroutine f_solver_output(f_obj,method)
   ! ** set output control for solver **
-  class(f_obj_base),intent(inout)  :: f_obj
+  class(f_obj_type),intent(inout)  :: f_obj
   integer(i4b),intent(in)          :: method
  
   if (method.eq.silent) then
@@ -362,7 +350,7 @@ contains
 
  subroutine f_set_tolerance(f_obj,method,tol,kmax) ! ***** note: not currently in use (needs updates, including change to integer method options) *****
   ! ** set tolerance for f_obj_base class **
-  class(f_obj_base),intent(inout) :: f_obj
+  class(f_obj_type),intent(inout) :: f_obj
   character(*),intent(in)         :: method
   real(r8b),intent(in)            :: tol  ! relative tolerance for the classical/outer solution 
   integer(i4b),intent(in)         :: kmax ! max # of classical/outer iterations
@@ -417,7 +405,7 @@ contains
  subroutine matrix_vector_product(f_obj,A,x,y)
   ! *** Compute matrix vector product y=A*x ***
   ! input
-  class(f_obj_base),intent(inout) :: f_obj              ! class object containing solver options (intent(inout) so that y may be a component of f_obj)
+  class(f_obj_type),intent(inout) :: f_obj              ! class object containing solver options (intent(inout) so that y may be a component of f_obj)
   real(r8b),intent(in),contiguous :: A(:,:)             ! input matrix 
   real(r8b),intent(in),contiguous :: x(:)               ! input vector
     
@@ -1163,151 +1151,151 @@ contains
 
  end subroutine get_SUMMA_f1_f2_flags
 
- subroutine get_SUMMA_mass_energy_masks(f_obj)
-  ! *** Compute masks for mass and energy state variables for SUMMA ***
-  ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
-  use stateFilter_module,only: fullyCoupled,stateTypeSplit
-  use stateFilter_module,only: massSplit,nrgSplit
-  use stateFilter_module,only: fullDomain,subDomain
-  use stateFilter_module,only: vector,scalar
+ !subroutine get_SUMMA_mass_energy_masks(f_obj) ! no longer used
+ ! ! *** Compute masks for mass and energy state variables for SUMMA ***
+ ! ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
+ ! use stateFilter_module,only: fullyCoupled,stateTypeSplit
+ ! use stateFilter_module,only: massSplit,nrgSplit
+ ! use stateFilter_module,only: fullDomain,subDomain
+ ! use stateFilter_module,only: vector,scalar
 
-  ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
+ ! ! arguments
+ ! class(f_obj_type),intent(inout) :: f_obj
 
-  ! local variables
-  type(split_select_type)         :: split_select      ! split select object
-  character(LEN=256)              :: message           ! total error message
-  character(LEN=256)              :: cmessage          ! error message of downwind routine
-  integer(i4b)                    :: err               ! error code of downwind routine
-  logical(lgt)                    :: return_flag
-  !logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
+ ! ! local variables
+ ! type(split_select_type)         :: split_select      ! split select object
+ ! character(LEN=256)              :: message           ! total error message
+ ! character(LEN=256)              :: cmessage          ! error message of downwind routine
+ ! integer(i4b)                    :: err               ! error code of downwind routine
+ ! logical(lgt)                    :: return_flag
+ ! !logical(lgt),parameter          :: dual = .true. !.false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
 
-  ! * initialize operations for split_select object *
+ ! ! * initialize operations for split_select object *
 
-  !associate(nstate => f_obj % in_SS4HG % nState)
-  associate(nstate => f_obj % n)
-   ! initialize total # of state variables
-   split_select % nState = nState 
+ ! !associate(nstate => f_obj % in_SS4HG % nState)
+ ! associate(nstate => f_obj % n)
+ !  ! initialize total # of state variables
+ !  split_select % nState = nState 
 
-   ! allocate data components
-   allocate(split_select % stateMask(1:nState)) ! allocate split_select components
-  end associate
+ !  ! allocate data components
+ !  allocate(split_select % stateMask(1:nState)) ! allocate split_select components
+ ! end associate
 
-  ! use split_select_type object to specify the desired split
-  ! NOTE: we are computing the energy state mask and negating to find the mass state mask (to include pressure head state variables)
-  !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
-  split_select % ixCoupling = stateTypeSplit    ! splitting is used
-  split_select % iStateTypeSplit = nrgSplit     ! state variable type
-  split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
-  !split_select % iDomainSplit =                ! only used for sub-domain splitting
-  split_select % ixSolution = vector            ! vector split (not scalar)
-  !split_select % iStateSplit =                 ! only used for scalar splits
+ ! ! use split_select_type object to specify the desired split
+ ! ! NOTE: we are computing the energy state mask and negating to find the mass state mask (to include pressure head state variables)
+ ! !split_select % iSplit =                      ! iteration counter for split_select_loop (not used)
+ ! split_select % ixCoupling = stateTypeSplit    ! splitting is used
+ ! split_select % iStateTypeSplit = nrgSplit     ! state variable type
+ ! split_select % ixStateThenDomain = fullDomain ! do not split the domain into sub-domains 
+ ! !split_select % iDomainSplit =                ! only used for sub-domain splitting
+ ! split_select % ixSolution = vector            ! vector split (not scalar)
+ ! !split_select % iStateSplit =                 ! only used for scalar splits
 
-  ! apply steps similar to initialize_split from opSplitting to generate logical masks
-  ! note: from update_stateMask in opSplittin
+ ! ! apply steps similar to initialize_split from opSplitting to generate logical masks
+ ! ! note: from update_stateMask in opSplittin
 
-  ! compute stateMask and nSubset (in split_select object) for the selected split
-  call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
-  if (return_flag) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in f_state_SUMMA_vec: stateFilter message="//trim(cmessage); stop
-    end if
-  end if
+ ! ! compute stateMask and nSubset (in split_select object) for the selected split
+ ! call split_select % get_stateMask(f_obj % indx_data,err,cmessage,message,return_flag)
+ ! if (return_flag) then
+ !   if (f_obj % out_error) then
+ !    write(f_obj % unit,*) "Error in f_state_SUMMA_vec: stateFilter message="//trim(cmessage); stop
+ !   end if
+ ! end if
 
-  ! assign masks
-  if (f_obj % dual) then ! assign masks for f1 (energy) and f2 (mass)
-   f_obj % stateMask2 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
-   f_obj % stateMask1 = split_select % stateMask           ! no transformation --- allocate on assignment
-  else ! assign masks for f1 (mass) and f2 (energy)
-   f_obj % stateMask1 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
-   f_obj % stateMask2 = split_select % stateMask           ! no transformation --- allocate on assignment
-  end if
+ ! ! assign masks
+ ! if (f_obj % dual) then ! assign masks for f1 (energy) and f2 (mass)
+ !  f_obj % stateMask2 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
+ !  f_obj % stateMask1 = split_select % stateMask           ! no transformation --- allocate on assignment
+ ! else ! assign masks for f1 (mass) and f2 (energy)
+ !  f_obj % stateMask1 = .not.(split_select % stateMask(:)) ! negate energy mask to find mass mask --- allocate on assignment
+ !  f_obj % stateMask2 = split_select % stateMask           ! no transformation --- allocate on assignment
+ ! end if
 
-  ! get counts for mass and energy splits
-  if (f_obj % dual) then
-   f_obj % nSubset2 = split_select % nState - split_select % nSubset ! transform to get count for mass split
-   f_obj % nSubset1 = split_select % nSubset                         ! no transformation for energy split
-  else
-   f_obj % nSubset1 = split_select % nState - split_select % nSubset ! transform to get count for mass split
-   f_obj % nSubset2 = split_select % nSubset                         ! no transformation for energy split
-  end if
+ ! ! get counts for mass and energy splits
+ ! if (f_obj % dual) then
+ !  f_obj % nSubset2 = split_select % nState - split_select % nSubset ! transform to get count for mass split
+ !  f_obj % nSubset1 = split_select % nSubset                         ! no transformation for energy split
+ ! else
+ !  f_obj % nSubset1 = split_select % nState - split_select % nSubset ! transform to get count for mass split
+ !  f_obj % nSubset2 = split_select % nSubset                         ! no transformation for energy split
+ ! end if
 
-  if ((f_obj % nSubset1 == 0_i4b).or.(f_obj % nSubset2 == 0_i4b)) then
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in get_SUMMA_mass_energy_masks: empty stateMask detected"
-     stop
-    end if
-  end if
- end subroutine get_SUMMA_mass_energy_masks
+ ! if ((f_obj % nSubset1 == 0_i4b).or.(f_obj % nSubset2 == 0_i4b)) then
+ !   if (f_obj % out_error) then
+ !    write(f_obj % unit,*) "Error in get_SUMMA_mass_energy_masks: empty stateMask detected"
+ !    stop
+ !   end if
+ ! end if
+ !end subroutine get_SUMMA_mass_energy_masks
 
- subroutine filter_SUMMA_f(negative,stateMask,f_total,f_filter)
-  ! filter total f from SUMMA into f1 or f2 for use in nested Newton solver (use appropriate stateMask)
-  ! arguments
-  logical         ,intent(in)    :: negative      ! apply a negative sign to f_filter?
-  logical(lgt)    ,intent(in)    :: stateMask(:)  ! logical mask for filtering
-  real(r8b)       ,intent(in) ,contiguous :: f_total(:)  ! total f in nested Newton solver
-  real(r8b)       ,intent(out),contiguous :: f_filter(:) ! filtered f in nested Newton solver 
+ !subroutine filter_SUMMA_f(negative,stateMask,f_total,f_filter) ! no longer used
+ ! ! filter total f from SUMMA into f1 or f2 for use in nested Newton solver (use appropriate stateMask)
+ ! ! arguments
+ ! logical         ,intent(in)    :: negative      ! apply a negative sign to f_filter?
+ ! logical(lgt)    ,intent(in)    :: stateMask(:)  ! logical mask for filtering
+ ! real(r8b)       ,intent(in) ,contiguous :: f_total(:)  ! total f in nested Newton solver
+ ! real(r8b)       ,intent(out),contiguous :: f_filter(:) ! filtered f in nested Newton solver 
 
-  ! assign non-zero function values based on logical mask
-  f_filter(:)=0._r8b
-  if (negative) then
-   f_filter(:)=merge(-f_total,f_filter,stateMask)
-  else
-   f_filter(:)=merge(f_total,f_filter,stateMask)
-  end if
- end subroutine filter_SUMMA_f
+ ! ! assign non-zero function values based on logical mask
+ ! f_filter(:)=0._r8b
+ ! if (negative) then
+ !  f_filter(:)=merge(-f_total,f_filter,stateMask)
+ ! else
+ !  f_filter(:)=merge(f_total,f_filter,stateMask)
+ ! end if
+ !end subroutine filter_SUMMA_f
 
- subroutine filter_SUMMA_Jacobian(f_obj,negative,stateMask,aJac,J_total,J_filter)
-  ! filter total Jacobian from SUMMA into J1 or J2 for use in nested Newton solver (use appropriate stateMask)
-  ! arguments
-  type(f_obj_type),intent(inout) :: f_obj         ! nested Newton object
-  logical         ,intent(in)    :: negative      ! apply a negative sign to J_filter?
-  logical(lgt)    ,intent(in)   ,contiguous :: stateMask(:)  ! logical mask for filtering
-  real(rkind)     ,intent(inout),contiguous :: aJac(:,:)     ! total Jacobian from SUMMA
-  real(r8b)       ,intent(out)  ,contiguous :: J_total(:,:)  ! total Jacobian in nested Newton solver storage scheme
-  real(r8b)       ,intent(out)  ,contiguous :: J_filter(:,:) ! filtered Jacobian in nested Newton solver storage scheme 
+ !subroutine filter_SUMMA_Jacobian(f_obj,negative,stateMask,aJac,J_total,J_filter) ! no longer used
+ ! ! filter total Jacobian from SUMMA into J1 or J2 for use in nested Newton solver (use appropriate stateMask)
+ ! ! arguments
+ ! type(f_obj_type),intent(inout) :: f_obj         ! nested Newton object
+ ! logical         ,intent(in)    :: negative      ! apply a negative sign to J_filter?
+ ! logical(lgt)    ,intent(in)   ,contiguous :: stateMask(:)  ! logical mask for filtering
+ ! real(rkind)     ,intent(inout),contiguous :: aJac(:,:)     ! total Jacobian from SUMMA
+ ! real(r8b)       ,intent(out)  ,contiguous :: J_total(:,:)  ! total Jacobian in nested Newton solver storage scheme
+ ! real(r8b)       ,intent(out)  ,contiguous :: J_filter(:,:) ! filtered Jacobian in nested Newton solver storage scheme 
 
-  ! local variables
-  integer(i4b) :: i,j,k  ! loop indices
-  integer(i4b) :: nBands ! # of bands for banded storage
+ ! ! local variables
+ ! integer(i4b) :: i,j,k  ! loop indices
+ ! integer(i4b) :: nBands ! # of bands for banded storage
 
-  ! store Jacobian used in solver
-  if (f_obj % banded) then ! banded storage
-   associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
-    nBands=nrow_banded+subdiag ! number of non-zero bands
-    J_total(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (store total Jacobian)
-    J_filter(1:nrow_banded,1:n) = 0._r8b ! initialize -- may not be needed
-    if (negative) then
-     do j=1,n ! column index for dense and banded storage
-      do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
-       k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-       aJac(k,j) = merge(-aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J2
-      end do
-     end do
-    else
-     do j=1,n ! column index for dense and banded storage
-      do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
-       k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
-       aJac(k,j) = merge(aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J1
-      end do
-     end do
-    end if
-    J_filter(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
-   end associate
-  else ! full matrix storage
-   J_total(:,:) = aJac(:,:) ! store total Jacobian (for Newton step refinement)
-   J_filter(:,:) = 0._r8b   ! initialize
-   if (negative) then
-    do i=1,f_obj % n
-     J_filter(:,i) = merge(-aJac(:,i),J_filter(:,i),stateMask(:)) ! negative sign
-    end do
-   else
-    do i=1,f_obj % n
-     J_filter(:,i) = merge(aJac(:,i),J_filter(:,i),stateMask(:))
-    end do
-   end if
-  end if
- end subroutine filter_SUMMA_Jacobian
+ ! ! store Jacobian used in solver
+ ! if (f_obj % banded) then ! banded storage
+ !  associate(nrow_banded => f_obj % nrow_banded, n => f_obj % n, subdiag => f_obj % subdiag, superdiag => f_obj % superdiag)
+ !   nBands=nrow_banded+subdiag ! number of non-zero bands
+ !   J_total(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows (store total Jacobian)
+ !   J_filter(1:nrow_banded,1:n) = 0._r8b ! initialize -- may not be needed
+ !   if (negative) then
+ !    do j=1,n ! column index for dense and banded storage
+ !     do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+ !      k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+ !      aJac(k,j) = merge(-aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J2
+ !     end do
+ !    end do
+ !   else
+ !    do j=1,n ! column index for dense and banded storage
+ !     do i=max(1,j-superdiag),min(n,j+subdiag) ! row index for dense storage
+ !      k = nrow_banded+i-j ! row index for LAPACK banded storage (nrow_banded = subdiag+superdiag+1)
+ !      aJac(k,j) = merge(aJac(k,j),0._rkind,stateMask(i)) ! zero the elements that are not included in J1
+ !     end do
+ !    end do
+ !   end if
+ !   J_filter(1:nrow_banded,1:n) = aJac(subdiag+1:nBands,1:n) ! aJac has extra storage rows
+ !  end associate
+ ! else ! full matrix storage
+ !  J_total(:,:) = aJac(:,:) ! store total Jacobian (for Newton step refinement)
+ !  J_filter(:,:) = 0._r8b   ! initialize
+ !  if (negative) then
+ !   do i=1,f_obj % n
+ !    J_filter(:,i) = merge(-aJac(:,i),J_filter(:,i),stateMask(:)) ! negative sign
+ !   end do
+ !  else
+ !   do i=1,f_obj % n
+ !    J_filter(:,i) = merge(aJac(:,i),J_filter(:,i),stateMask(:))
+ !   end do
+ !  end if
+ ! end if
+ !end subroutine filter_SUMMA_Jacobian
 
  subroutine f_f1_SUMMA_vec_full(f_obj,xvec) ! actually evaluates f1 depending on stateMask1 (not necessarily mass)
   ! *** Compute mass non-linear function --- use fully-coupled eval8summa call and filter results ***
@@ -1321,11 +1309,15 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  call f_obj % f_state_SUMMA_vec_full(&
-               &mass_flag,energy_flag,.true.,.false.,xvec,&
+  !call f_obj % f_state_SUMMA_vec_full(&
+  !             &mass_flag,energy_flag,.true.,.false.,xvec,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+  !             &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
+
+  call f_state_SUMMA_vec_full(&
+               &f_obj,mass_flag,energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
  end subroutine f_f1_SUMMA_vec_full
 
  subroutine J1_SUMMA_vec_full(f_obj,xvec)
@@ -1359,11 +1351,15 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  call f_obj % f_state_SUMMA_vec_full(&
-               &mass_flag,energy_flag,.false.,.true.,xvec,&
+  !call f_obj % f_state_SUMMA_vec_full(&
+  !             &mass_flag,energy_flag,.false.,.true.,xvec,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+  !             &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
+
+  call f_state_SUMMA_vec_full(&
+               &f_obj,mass_flag,energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
  end subroutine f_f2_SUMMA_vec_full
 
  subroutine f1_SUMMA_vec_full(f_obj,xvec)
@@ -1373,11 +1369,15 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
-  call f_obj % f_state_SUMMA_vec_full(&
-               &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
+  !call f_obj % f_state_SUMMA_vec_full(&
+  !             &f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+  !             &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
+
+  call f_state_SUMMA_vec_full(&
+               &f_obj,f_obj % f1_mass_flag,f_obj % f1_energy_flag,.true.,.false.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
  end subroutine f1_SUMMA_vec_full
 
  subroutine f2_SUMMA_vec_full(f_obj,xvec)
@@ -1387,11 +1387,15 @@ contains
   class(f_obj_type),intent(inout) :: f_obj
   real(r8b),intent(in),contiguous :: xvec(:) ! current guess -- contiguous attribute avoids a temporary array copy
 
-  call f_obj % f_state_SUMMA_vec_full(&
-               &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
+  !call f_obj % f_state_SUMMA_vec_full(&
+  !             &f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+  !             &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
+
+  call f_state_SUMMA_vec_full(&
+               &f_obj,f_obj % f2_mass_flag,f_obj % f2_energy_flag,.false.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
-
  end subroutine f2_SUMMA_vec_full
 
  subroutine f_f1_f2_SUMMA_vec_full(f_obj,xvec)
@@ -1405,8 +1409,13 @@ contains
 
   ! note: data structures and variables for f1 are initialized in systemSolv
 
-  call f_obj % f_state_SUMMA_vec_full(&
-               &mass_flag,energy_flag,.true.,.true.,xvec,&
+  !call f_obj % f_state_SUMMA_vec_full(&
+  !             &mass_flag,energy_flag,.true.,.true.,xvec,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
+  !             &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
+
+  call f_state_SUMMA_vec_full(&
+               &f_obj,mass_flag,energy_flag,.true.,.true.,xvec,&
                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,f_obj % sMul,&
                &f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,f_obj % resVec)
 
@@ -1488,7 +1497,8 @@ contains
   ! ** NOTE: the fully-coupled solution method in SUMMA's opSplittin is assumed **
 
   ! arguments
-  class(f_obj_type),intent(inout) :: f_obj
+  !class(f_obj_type),intent(inout) :: f_obj
+  type(f_obj_type),intent(inout) :: f_obj
   logical,intent(in)              :: mass_flag,energy_flag ! flags to compute mass and energy terms 
   logical,intent(in)              :: f1_flag,f2_flag ! flags to f1 and f2 
   real(r8b),intent(in),contiguous :: xvec(:) ! current guess
