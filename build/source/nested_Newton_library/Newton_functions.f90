@@ -169,15 +169,6 @@ module Newton_functions
    logical :: f1_mass_flag,f1_energy_flag
    logical :: f2_mass_flag,f2_energy_flag
 
-  contains
-   ! ** routines that point to external sources ** !
-   ! note: - these procedures are not directly called in the solver
-   !       - however, these procedures may be called within procedures that are called in the solver
-
-   ! * Interfaces for SUMMA procedures  *
-   procedure :: SUMMA_eval8summa
-   procedure :: SUMMA_computJacob
-
  end type f_obj_inputs
 
  type,extends(f_obj_inputs) :: f_obj_type
@@ -1010,7 +1001,8 @@ contains
   ! compute SUMMA derivative values and residual vector
   ! note: - eval8summa was not refactored to use object arguments
   !       - objects for summaSolve4homegrown were reused where possible
-  class(f_obj_inputs),intent(inout) :: f_obj
+  !class(f_obj_inputs),intent(inout) :: f_obj
+  type(f_obj_type),intent(inout) :: f_obj
   !real(r8b),intent(in),contiguous   :: xvec(:) ! current guess
   real(r8b),intent(in)   :: xvec(:) ! current guess
   logical,parameter :: mass_flag=.true.,energy_flag=.true.
@@ -1092,7 +1084,8 @@ contains
                              &aJac)
   ! ** Interface for SUMMA's computJacob subroutine **
   ! arguments
-  class(f_obj_inputs),intent(inout) :: f_obj
+  !class(f_obj_inputs),intent(inout) :: f_obj
+  type(f_obj_type),intent(inout)    :: f_obj
   logical          ,intent(in)      :: mass_flag,energy_flag  ! flags for evaluating mass and energy Jacobians
   type(var_ilength),intent(in)      :: indx_data              ! indices defining model states and layers for selected split 
   type(var_dlength),intent(in)      :: diag_data              ! diagnostic variables for a local HRU
@@ -1343,11 +1336,15 @@ contains
   !real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
   real(r8b),intent(in) :: xvec(:) ! current guess (needed for interface)
 
-  call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
-               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-               &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
-               &f_obj % J1)
+  !call f_obj % SUMMA_computJacob(f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+  !             &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
+  !             &f_obj % J1)
 
+  call SUMMA_computJacob(f_obj,f_obj % f1_mass_flag,f_obj % f1_energy_flag,&
+                        &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+                        &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
+                        &f_obj % J1)
  end subroutine J1_SUMMA_vec_full
 
  subroutine f_f2_SUMMA_vec_full(f_obj,xvec)
@@ -1424,11 +1421,16 @@ contains
   !real(r8b),intent(in),contiguous :: xvec(:) ! current guess (needed for interface)
   real(r8b),intent(in) :: xvec(:) ! current guess (needed for interface)
 
-  call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
-               &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-               &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
-               &f_obj % J2)
+  !call f_obj % SUMMA_computJacob(f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
+  !             &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+  !             &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
+  !             &f_obj % J2)
 
+  call SUMMA_computJacob(f_obj,f_obj % f2_mass_flag,f_obj % f2_energy_flag,&
+                        &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+                        &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
+                        &f_obj % J2)
+  
   call flip_sign(f_obj % nrow, f_obj % n,f_obj % J2) ! apply negative sign to J2 entries (so that J = J1 - J2)
 
  contains
@@ -1591,9 +1593,8 @@ contains
   ! compute SUMMA residual (taken to be the non-linear function) based on current guess
   ! note: - eval8summa may contain extraneous computations not needed for the residual
   !       - perhaps introducing logical flags in eval8summa to isolate the required operations would boost efficiency 
-  call f_obj % SUMMA_eval8summa(xvec)
-
-  !f_obj % f_vec(:) = real(f_obj % resVec(:),r8b) ! now directly obtained from computResid
+  !call f_obj % SUMMA_eval8summa(xvec)
+  call SUMMA_eval8summa(f_obj,xvec)
   
  end subroutine f_SUMMA_vec
 
@@ -1610,10 +1611,15 @@ contains
   !call f_obj % SUMMA_eval8summa(xvec) ! not required if f_SUMMA_vec(f_obj,xvec) has already been called
 
   ! assemble Jacobian using the computed derivatives
-  call f_obj % SUMMA_computJacob(mass_flag,energy_flag,&
-                                &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
-                                &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
-                                &f_obj % J)
+  !call f_obj % SUMMA_computJacob(mass_flag,energy_flag,&
+  !                              &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+  !                              &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
+  !                              &f_obj % J)
+
+  call SUMMA_computJacob(f_obj,mass_flag,energy_flag,&
+                        &f_obj % indx_data,f_obj % diag_data,f_obj % flux_data,f_obj % deriv_data,&
+                        &f_obj % dMat,f_obj % dBaseflow_dWat,f_obj % dBaseflow_dTk,&
+                        &f_obj % J)
 
  end subroutine J_SUMMA_vec
 
