@@ -230,6 +230,7 @@ target_compile_options(SUMMA_COMM PRIVATE ${FLAGS_ALL})
 target_link_libraries(SUMMA_COMM PUBLIC SUMMA_NOAHMP ${EXT_TARGETS} ${LIBRARY_LINKS})
 
 # For NextGen, build SUMMA Shared Library and add the outside BMI libraries
+# For non-NextGen, flags added to compile and link stages for efficient optimization of non-extendable type-bound procedures
 if(USE_NEXTGEN)
 	if(WIN32)
 		add_library(summabmi ${SUMMA_ALL})
@@ -249,8 +250,8 @@ if(USE_NEXTGEN)
 	install(FILES ${CMAKE_BINARY_DIR}/summabmi.pc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/pkgconfig)
 else()
 	add_library(summa SHARED ${SUMMA_ALL})
-	target_compile_options(summa PRIVATE ${FLAGS_ALL})
-	target_link_libraries(summa PUBLIC ${EXT_TARGETS} SUMMA_NOAHMP SUMMA_COMM ${LIBRARY_LINKS})
+	target_compile_options(summa PRIVATE ${FLAGS_ALL} "-fno-semantic-interposition")
+	target_link_libraries(summa PUBLIC ${EXT_TARGETS} SUMMA_NOAHMP SUMMA_COMM ${LIBRARY_LINKS} "-Wl,-Bsymbolic-functions")
 	add_executable(${EXEC_NAME} ${MAIN_SUMMA})
 	target_compile_options(${EXEC_NAME} PRIVATE ${FLAGS_ALL})
 	set_property(TARGET ${EXEC_NAME} PROPERTY LINKER_LANGUAGE Fortran)
