@@ -723,7 +723,7 @@ subroutine vegNrgFlux(&
           endif          
           ! compute the saturation vapor pressure for vegetation temperature
           TV_celcius = canopyTempTrial - Tfreeze
-          call satVapPress(TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
+          call satVapPress(J_energy,TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
           ! compute stomatal resistance
           call stomResist(&
                           ! input (state and diagnostic variables)
@@ -787,12 +787,12 @@ subroutine vegNrgFlux(&
         ! compute the saturation vapor pressure for vegetation temperature
         ! NOTE: saturated vapor pressure derivatives don't seem that accurate....
         TV_celcius = canopyTempTrial - Tfreeze
-        call satVapPress(TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
+        call satVapPress(J_energy,TV_celcius, scalarSatVP_CanopyTemp, dSVPCanopy_dCanopyTemp)
 
         ! compute the saturation vapor pressure for ground temperature
         ! NOTE: saturated vapor pressure derivatives don't seem that accurate....
         TG_celcius = groundTempTrial - Tfreeze
-        call satVapPress(TG_celcius, scalarSatVP_GroundTemp, dSVPGround_dGroundTemp)
+        call satVapPress(J_energy,TG_celcius, scalarSatVP_GroundTemp, dSVPGround_dGroundTemp)
 
         ! compute the relative humidity in the top soil layer and the resistance at the ground surface
         ! NOTE: computations are based on start-of-step values, so only compute for the first flux call

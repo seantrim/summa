@@ -65,8 +65,9 @@ end function vapPress
 ! ***************************************************************************************************************
 ! NOTE: temperature units are degC !!!!
 ! ***************************************************************************************************************
-subroutine satVapPress(TC, SVP, dSVP_dT)
+subroutine satVapPress(deriv,TC, SVP, dSVP_dT)
 implicit none
+logical(lgt),intent(in)            :: deriv    ! flag for computing derivative
 real(rkind), intent(in)            :: TC       ! temperature (C)
 real(rkind), intent(out)           :: SVP      ! saturation vapor pressure (Pa)
 real(rkind), intent(out)           :: dSVP_dT  ! d(SVP)/dT
@@ -77,10 +78,10 @@ real(rkind), parameter             :: X2 = 237.30_rkind
 ! SATVPFRZ=     610.8       ! Saturation water vapour pressure at 273.16K (Pa)
 if(X2 + TC <= 0.0_rkind)then ! will fail if divide by 0, but will blow up if negative top and bottom of fraction
  SVP     = tiny(1.0_rkind)
- dSVP_dT = tiny(1.0_rkind)
+ if (deriv) dSVP_dT = tiny(1.0_rkind)
 else
  SVP     = SATVPFRZ * EXP( (X1*TC)/(X2 + TC) ) ! Saturated Vapour Press (Pa)
- dSVP_dT = SVP * (X1/(X2 + TC) - X1*TC/(X2 + TC)**2_i4b)
+ if (deriv) dSVP_dT = SVP * (X1/(X2 + TC) - X1*TC/(X2 + TC)**2_i4b)
 end if
 end subroutine satVapPress
 
