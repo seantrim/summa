@@ -240,14 +240,13 @@ contains
     allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
     if (f_obj % dynamic) then
-     !allocate(f_obj % xk1(1:n),f_obj % xk2(1:n)) ! solutions used to compute convergence order
      allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
+     allocate(f_obj % xk_0(1:n),f_obj % xk_1(1:n)) ! solutions used to compute convergence order
      allocate(f_obj % accept(1:n)) ! logical mask for acceptance of guess vector entries for switch to nested iterations
     end if
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
    end if
-   allocate(f_obj % xk_0(1:n),f_obj % xk_1(1:n)) ! solutions used to compute convergence order
    allocate(f_obj % R_vec(1:n)) ! residual vector
    if (f_obj % refinement) then ! arrays for line search
     allocate(f_obj % initial_solution(1:n),f_obj % updated_solution(1:n),f_obj % p_scaled(1:n),f_obj % grad_L(1:n),&

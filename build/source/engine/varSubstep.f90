@@ -695,7 +695,7 @@ contains
     !call nested_Newton % solver_output(verbose) ! standard output used by default 
 
     ! Newton iteration type
-    nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
+    nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
 
     ! set method for computing relative convergence error (classical and outer iterations)
      ! 'strict' uses two consecutive iterations and is extremely conservative
@@ -709,7 +709,7 @@ contains
     !call nested_Newton % set_tolerance('strict',1.e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
     ! set max # of classical iterations (for classical and dynamic modes)
-    nested_Newton % kmax_classical = 49_i4b ! for classical iterations in dynamic mode
+    nested_Newton % kmax_classical = 39_i4b ! for classical iterations in dynamic mode
 
     ! Linear system solver choice
     !nested_Newton % linear_system_solver = "LAPACK_standard"

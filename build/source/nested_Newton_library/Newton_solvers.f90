@@ -379,7 +379,7 @@ contains
     end if
    end if
 
-   ! SJT: new dynamic lmax option for switching between classical and nested regimes
+   ! check for switching between classical and nested regimes
    if (f_obj % nested) then
     if (f_obj % dynamic) then
      if (f_obj % dynamic_classical) then
