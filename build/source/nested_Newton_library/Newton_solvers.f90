@@ -39,6 +39,7 @@ contains
      call nested_Newton_vector(f_obj,f_obj % kmax,f_obj % lmax)   
     end if
    else ! classical iterations only
+    f_obj % dynamic_classical = .false.
     call Newton_vector(f_obj)
    end if
   else
@@ -59,6 +60,7 @@ contains
   integer(i4b) :: i                              ! loop index
   logical      :: exit_flag                      ! exit flag
   logical      :: return_flag                    ! return flag for early return from Newton solver call
+  integer(i4b),parameter  :: k_check=20_i4b ! k_check=2_i4b is the minimum
 
   ! initialize error flag
   f_obj % f_error = .false. ! error flag for the computation of f, f1, or f2
@@ -113,11 +115,21 @@ contains
    end if
 
    call check_residual_vector(f_obj,f_obj % convergence,k,f_obj % xkp1,f_obj % xk,&
-                             &R_est,exit_flag,return_flag); if (return_flag) return
+                             &R_est,exit_flag)
    if (f_obj % out_detail) write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk)/f_obj % n,f_obj % R(0),R_est
    if (exit_flag) then ! exit loop if convergence criterion is met
     f_obj % converged = .true.
     exit
+   end if
+   if (f_obj % dynamic_classical) then
+    if (f_obj % k <= k_check) then
+     if (f_obj % k == k_check - 2_i4b) then
+      f_obj % xk_0(:) = f_obj % xk(:)   ! x0
+      f_obj % xk_1(:) = f_obj % xkp1(:) ! x1
+     else if (f_obj % k == k_check) then ! check convergence order for third classical iteration
+      call check_dynamic_mode(f_obj,f_obj % xkp1,f_obj % xk,return_flag); if (return_flag) return
+     end if
+    end if
    end if
 
    if (f_obj % constraints) call f_obj % apply_constraints(f_obj % xk,f_obj % xkp1) ! apply constraints without interfering with the convergence criterion
@@ -249,9 +261,6 @@ contains
       do concurrent (i = 1:f_obj % n) ! compute search direction for outer line search scheme
        f_obj % B(i,1) = f_obj % xkp1l(i) + f_obj % B(i,1) - f_obj % xk0(i)
       end do
-      !call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % xkp1l(:) + f_obj % B(:,1) - f_obj % xk0(:)); if (f_obj % f_error) return
-     !else
-     ! call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % B(:,1)); if (f_obj % f_error) return
      end if
      call f_obj % apply_nested_line_search(f_obj % line_search_option,.true.,f_obj % B(:,1)); if (f_obj % f_error) return
     else
@@ -260,8 +269,8 @@ contains
      end do
     end if
 
-    call check_residual_vector(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&
-                              &R_est,exit_inner,return_flag); if (return_flag) return
+    call check_residual_vector_inner(f_obj,f_obj % convergence_inner,f_obj % l,f_obj % xkp1lp1,f_obj % xkp1l,&
+                                    &R_est,exit_inner)
     ! print exact convergence error for iteration l
     if (f_obj % out_detail) write(f_obj % unit,'(a2,i4,3(g23.15))') "  ",f_obj % l,sum(f_obj % xkp1l)/f_obj % n,f_obj % R_inner(0),R_est
     if (exit_inner) exit inner
@@ -291,8 +300,8 @@ contains
 
    f_obj % inner=.false.
 
-   call check_residual_vector(f_obj,f_obj % convergence,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,&
-                             &R_est,exit_outer,return_flag); if (return_flag) return
+   call check_residual_vector_outer(f_obj,f_obj % convergence,f_obj % k,f_obj % xkp1lp1,f_obj % xk0,&
+                                   &R_est,exit_outer)
    if (f_obj % out_detail) then ! convergence error info for iteration k
     write(f_obj % unit,'(i4,3(g23.15))') f_obj % k,sum(f_obj % xk0)/f_obj % n,f_obj % R(0),R_est 
    end if
@@ -330,7 +339,6 @@ contains
    end if
   end if
 
-  !f_obj % x1(:) = f_obj % xkp1lp1(:)
   f_obj % x0(:) = f_obj % xkp1lp1(:)
   if ((f_obj % out_basic).and.(f_obj % convergence .ne. custom)) write(f_obj % unit,*) "Convergence Error=",f_obj % R(1)
   f_obj % lcount = l_total
@@ -340,180 +348,32 @@ contains
   end if
  end subroutine nested_Newton_vector
 
- subroutine check_residual_vector(f_obj,convergence,iteration,xkp1,xk,R_est,exit_flag,return_flag)
-  ! *** Check residual vector for potential loop exit ***
+ subroutine check_dynamic_mode(f_obj,xkp1,xk,return_flag)
+  ! *** Check whether to switch to nested iterations in dynamic mode ***
   use,intrinsic :: ieee_arithmetic,only: ieee_is_finite
-  use Newton_functions,only: custom,custom_strict,strict,custom_predictive,predictive ! convergence options 
+  ! arguments
   type(f_obj_type),intent(inout)  :: f_obj 
-  integer(i4b),intent(in)         :: convergence ! convergence option string that adapts to inner and outer/classical iterations
-  integer(i4b),intent(in)         :: iteration   ! interation count
   real(r8b),intent(in),contiguous :: xkp1(:)     ! current root estimate
   real(r8b),intent(in),contiguous :: xk(:)       ! previous root estimate
-  logical,intent(inout)           :: exit_flag   ! exit flag
   logical,intent(out)             :: return_flag ! return flag for early return from Newton solver call
-  real(r8b),intent(out)           :: R_est       ! estimated R for current iteration (computed in the previous call)
-  ! local variables
-  real(r8b)                :: tol                ! tolerance
-  integer(i4b)             :: i                  ! index for residual vector
-  real(r8b)                :: b                  ! exponent used for convergence error estimation 
-  real(r8b),parameter      :: tol_inner_LS = 1.e-4_r8b ! 10._r8b*epsilon(1._r8b) ! tolerance threshold for switching to outer line search scheme during inner iterations 
+  ! local
+  integer(i4b)                    :: i ! loop index
 
-  return_flag = .false. ! initialize return flag
+   return_flag = .false. ! initialize return flag
 
-  if (convergence.eq.custom) then ! use custom convergence criterion
+    call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
+                                &f_obj % accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
 
-   exit_flag = f_obj % custom_convergence()
-   if (exit_flag) return  ! set exit flag if criterion is satisfied
-
-   ! if doing line search for inner iterations and inner iterate has not changed much, ensure that one more inner iteration is performed using the outer line search scheme
-   ! note: this eliminates unproductive inner iterations
-   if (f_obj % refinement) then
-    if (f_obj % inner) then
-     if (f_obj % l < f_obj % lmax_loop) then
-      ! look for precise agreement within a tight tolerance
-      call compute_relative_residual
-      if (all(f_obj % R_vec < tol_inner_LS)) then
-       f_obj % lmax_loop = f_obj % l + 1_i4b; return
-      end if
+    ! go to nested iterations if needed 
+    if (.not.f_obj % dynamic_classical) then
+     if (.not.f_obj % dynamic_revert) then
+      f_obj % x0(:) = merge(xkp1,f_obj % x0,f_obj % accept) ! use accepted classical guess vector components for nested initial guess
      end if
+     return_flag = .true.
+     return 
     end if
-   end if
-
-   ! check for switching between classical and nested regimes
-   if (f_obj % nested) then
-    if (f_obj % dynamic) then
-     if (f_obj % dynamic_classical) then
-      if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals
-       call check_dynamic_mode ! classical algorithm used
-       if (return_flag) return ! return if switching from classical to nested iterations
-      end if
-     end if
-    end if
-   end if
-
-  else
-
-   ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
-   if ((convergence.eq.custom_strict).or.(convergence.eq.custom_predictive)) then
-    exit_flag = f_obj % custom_convergence()
-    if (exit_flag)  return  ! set exit flag if criterion is satisfied
-   end if
-
-   ! compute current residual
-   call compute_relative_residual
-
-   ! store previous residuals
-   if (iteration.gt.0) then
-    if (f_obj % inner) then
-     R_est=f_obj % R_inner(1) ! store previous estimate for reference
-     f_obj % R_inner(-1)=f_obj % R_inner(0)
-     f_obj % R_work(-1)=f_obj % R_inner(-1) ! exact residual for iteration-1
-    else
-     R_est=f_obj % R(1) ! store previous estimate for reference
-     f_obj % R(-1)=f_obj % R(0)
-     f_obj % R_work(-1)=f_obj % R(-1)       ! exact residual for iteration-1
-    end if
-   end if
-
-   f_obj % R_work(0)=maxval(f_obj % R_vec) ! actual worst case residual for input iteration
-   if ((convergence.eq.strict).or.(convergence.eq.custom_strict)) then ! strict estimate
-    f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1
-   else if ((convergence.eq.predictive).or.(convergence.eq.custom_predictive)) then
-    if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
-     f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1 
-    else ! compute prediction based on power function
-     b=log10(f_obj % R_work(0)/f_obj % R_work(-1)) ! exponent
-     f_obj % R_work(1)=f_obj % R_work(0)*10**b     ! power function -- estimated residual for iteration+1
-    end if
-   else ! method not valid
-    if (f_obj % out_error) then
-     write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
-    end if
-    stop
-   end if
-
-   if (f_obj % inner) then ! inner iterations
-    tol = f_obj % tol_inner   ! set tolerance
-    f_obj % R_inner(0) = f_obj % R_work(0) ! store exact residual for current iteration
-    f_obj % R_inner(1) = f_obj % R_work(1) ! store estimated residual for iteration+1
-   else                    ! outer/classical iterations
-    tol = f_obj % tol         ! set tolerance
-    f_obj % R(0) = f_obj % R_work(0)       ! store exact residual for current iteration
-    f_obj % R(1) = f_obj % R_work(1)       ! store estimated residual for iteration+1
-   end if
-   if (iteration.eq.0) R_est=f_obj % R_work(1) ! initialize R_est for iteration zero
-
-   ! check exact error from current iteration and estimated error for next iteration
-   if ((f_obj % R_work(0).lt.tol).or.(f_obj % R_work(1).lt.tol)) then
-    ! if doing line search for inner iterations, ensure that one more inner iteration is performed using the outer line search scheme
-    if ((f_obj % inner).and.(f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
-     f_obj % lmax_loop = f_obj % l + 1_i4b; return
-    else
-     exit_flag=.true.; return  ! set exit flag if criterion is satisfied
-    end if
-   end if
-
-  end if
 
   contains
-
-   subroutine compute_relative_residual
-    ! ** compute current residual **
-    do concurrent (i=1:f_obj % n)
-     if (xk(i).ne.0._r8b) then
-      f_obj % R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
-     else if (xkp1(i).ne.0._r8b) then
-      f_obj % R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
-     else
-      f_obj % R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
-     end if
-    end do
-   end subroutine compute_relative_residual
-
-   subroutine check_dynamic_mode
-    ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    integer(i4b),parameter :: k_check=20_i4b ! k_check=2_i4b is the minimum
-    
-    if (f_obj % k == k_check - 2_i4b) then
-     f_obj % xk_0(:) = xk(:)   ! x0
-     f_obj % xk_1(:) = xkp1(:) ! x1
-    else if (f_obj % k == k_check) then ! check convergence order for third classical iteration
-
-     call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
-                                 &f_obj % accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
-
-     ! go to nested iterations if needed 
-     if (.not.f_obj % dynamic_classical) then
-      if (.not.f_obj % dynamic_revert) then
-       f_obj % x0(:) = merge(xkp1,f_obj % x0,f_obj % accept) ! use accepted classical guess vector components for nested initial guess
-      end if
-      return_flag = .true.
-      return 
-     end if
-
-    end if
-   end subroutine check_dynamic_mode
-
-   subroutine convergence_order_cutoff
-    ! ** Dynamic Newton iteration type selection mode: check convergence order of classical iterations and swith to nested if needed **
-    logical              :: revert    ! does solution vector need to be completely reverted to original guess before starting nested iterations?
-    logical              :: success   ! is the convergence order threshold successfully met for all solution vector elements?
-    real(r8b),parameter       :: order_min=0._r8b    
-    integer(i4b),parameter    :: k_cutoff=20_i4b
-
-    if (.not.f_obj % inner) then ! check classical residuals using outer iteration residuals ------------ may not need this check
-     if (f_obj % k == k_cutoff-2_i4b) then
-      f_obj % xk_0(:) = xk(:)   ! x0
-      f_obj % xk_1(:) = xkp1(:) ! x1
-     else if (f_obj % k == k_cutoff) then ! check convergence order for third classical iteration
-
-      call check_convergence_order(order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,f_obj % accept,revert,success)
-
-      if (.not.success) return_flag = .true.
-
-     end if
-    end if
-   end subroutine convergence_order_cutoff
 
    subroutine check_convergence_order(order_min,x0,x1,x2,x3,accept,revert,success)
     real(r8b),intent(in) :: order_min
@@ -568,7 +428,274 @@ contains
 
    end subroutine check_convergence_order
 
+ end subroutine check_dynamic_mode
+
+ subroutine check_residual_vector(f_obj,convergence,iteration,xkp1,xk,R_est,exit_flag)
+  ! *** Check residual vector for potential loop exit ***
+  use Newton_functions,only: custom,custom_strict,strict,custom_predictive,predictive ! convergence options 
+  type(f_obj_type),intent(inout)  :: f_obj 
+  integer(i4b),intent(in)         :: convergence ! convergence option string that adapts to inner and outer/classical iterations
+  integer(i4b),intent(in)         :: iteration   ! interation count
+  real(r8b),intent(in),contiguous :: xkp1(:)     ! current root estimate
+  real(r8b),intent(in),contiguous :: xk(:)       ! previous root estimate
+  logical,intent(inout)           :: exit_flag   ! exit flag
+  real(r8b),intent(out)           :: R_est       ! estimated R for current iteration (computed in the previous call)
+  ! local variables
+  integer(i4b)             :: i                  ! index for residual vector
+  real(r8b)                :: b                  ! exponent used for convergence error estimation 
+
+  if (convergence.eq.custom) then ! use custom convergence criterion
+
+   exit_flag = f_obj % custom_convergence()
+   if (exit_flag) return  ! set exit flag if criterion is satisfied
+
+  else
+
+   ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
+   if ((convergence.eq.custom_strict).or.(convergence.eq.custom_predictive)) then
+    exit_flag = f_obj % custom_convergence()
+    if (exit_flag)  return  ! set exit flag if criterion is satisfied
+   end if
+
+   ! compute current residual
+   call compute_relative_residual
+
+   ! store previous residuals
+   if (iteration.gt.0) then
+    R_est=f_obj % R(1) ! store previous estimate for reference
+    f_obj % R(-1)=f_obj % R(0)
+    f_obj % R_work(-1)=f_obj % R(-1)       ! exact residual for iteration-1
+   end if
+
+   f_obj % R_work(0)=maxval(f_obj % R_vec) ! actual worst case residual for input iteration
+   if ((convergence.eq.strict).or.(convergence.eq.custom_strict)) then ! strict estimate
+    f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1
+   else if ((convergence.eq.predictive).or.(convergence.eq.custom_predictive)) then
+    if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
+     f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1 
+    else ! compute prediction based on power function
+     b=log10(f_obj % R_work(0)/f_obj % R_work(-1)) ! exponent
+     f_obj % R_work(1)=f_obj % R_work(0)*10**b     ! power function -- estimated residual for iteration+1
+    end if
+   else ! method not valid
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
+    end if
+    stop
+   end if
+
+   f_obj % R(0) = f_obj % R_work(0)       ! store exact residual for current iteration
+   f_obj % R(1) = f_obj % R_work(1)       ! store estimated residual for iteration+1
+   if (iteration.eq.0) R_est=f_obj % R_work(1) ! initialize R_est for iteration zero
+
+   ! check exact error from current iteration and estimated error for next iteration
+   if ((f_obj % R_work(0).lt.f_obj % tol).or.(f_obj % R_work(1).lt.f_obj % tol)) then
+    exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+   end if
+
+  end if
+
+  contains
+
+   subroutine compute_relative_residual
+    ! ** compute current residual **
+    do concurrent (i=1:f_obj % n)
+     if (xk(i).ne.0._r8b) then
+      f_obj % R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+     else if (xkp1(i).ne.0._r8b) then
+      f_obj % R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+     else
+      f_obj % R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+     end if
+    end do
+   end subroutine compute_relative_residual
+
  end subroutine check_residual_vector
+
+ subroutine check_residual_vector_outer(f_obj,convergence,iteration,xkp1,xk,R_est,exit_flag)
+  ! *** Check residual vector for potential loop exit ***
+  use Newton_functions,only: custom,custom_strict,strict,custom_predictive,predictive ! convergence options 
+  type(f_obj_type),intent(inout)  :: f_obj 
+  integer(i4b),intent(in)         :: convergence ! convergence option string that adapts to inner and outer/classical iterations
+  integer(i4b),intent(in)         :: iteration   ! interation count
+  real(r8b),intent(in),contiguous :: xkp1(:)     ! current root estimate
+  real(r8b),intent(in),contiguous :: xk(:)       ! previous root estimate
+  logical,intent(inout)           :: exit_flag   ! exit flag
+  real(r8b),intent(out)           :: R_est       ! estimated R for current iteration (computed in the previous call)
+  ! local variables
+  integer(i4b)             :: i                  ! index for residual vector
+  real(r8b)                :: b                  ! exponent used for convergence error estimation 
+
+  if (convergence.eq.custom) then ! use custom convergence criterion
+
+   exit_flag = f_obj % custom_convergence()
+   if (exit_flag) return  ! set exit flag if criterion is satisfied
+
+  else
+
+   ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
+   if ((convergence.eq.custom_strict).or.(convergence.eq.custom_predictive)) then
+    exit_flag = f_obj % custom_convergence()
+    if (exit_flag)  return  ! set exit flag if criterion is satisfied
+   end if
+
+   ! compute current residual
+   call compute_relative_residual
+
+   ! store previous residuals
+   if (iteration.gt.0) then
+    R_est=f_obj % R(1) ! store previous estimate for reference
+    f_obj % R(-1)=f_obj % R(0)
+    f_obj % R_work(-1)=f_obj % R(-1)       ! exact residual for iteration-1
+   end if
+
+   f_obj % R_work(0)=maxval(f_obj % R_vec) ! actual worst case residual for input iteration
+   if ((convergence.eq.strict).or.(convergence.eq.custom_strict)) then ! strict estimate
+    f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1
+   else if ((convergence.eq.predictive).or.(convergence.eq.custom_predictive)) then
+    if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
+     f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1 
+    else ! compute prediction based on power function
+     b=log10(f_obj % R_work(0)/f_obj % R_work(-1)) ! exponent
+     f_obj % R_work(1)=f_obj % R_work(0)*10**b     ! power function -- estimated residual for iteration+1
+    end if
+   else ! method not valid
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
+    end if
+    stop
+   end if
+
+   f_obj % R(0) = f_obj % R_work(0)       ! store exact residual for current iteration
+   f_obj % R(1) = f_obj % R_work(1)       ! store estimated residual for iteration+1
+   if (iteration.eq.0) R_est=f_obj % R_work(1) ! initialize R_est for iteration zero
+
+   ! check exact error from current iteration and estimated error for next iteration
+   if ((f_obj % R_work(0).lt.f_obj % tol).or.(f_obj % R_work(1).lt.f_obj % tol)) then
+    exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+   end if
+
+  end if
+
+  contains
+
+   subroutine compute_relative_residual
+    ! ** compute current residual **
+    do concurrent (i=1:f_obj % n)
+     if (xk(i).ne.0._r8b) then
+      f_obj % R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+     else if (xkp1(i).ne.0._r8b) then
+      f_obj % R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+     else
+      f_obj % R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+     end if
+    end do
+   end subroutine compute_relative_residual
+
+ end subroutine check_residual_vector_outer
+
+ subroutine check_residual_vector_inner(f_obj,convergence,iteration,xkp1,xk,R_est,exit_flag)
+  ! *** Check residual vector for potential loop exit ***
+  use Newton_functions,only: custom,custom_strict,strict,custom_predictive,predictive ! convergence options 
+  type(f_obj_type),intent(inout)  :: f_obj 
+  integer(i4b),intent(in)         :: convergence ! convergence option string that adapts to inner and outer/classical iterations
+  integer(i4b),intent(in)         :: iteration   ! interation count
+  real(r8b),intent(in),contiguous :: xkp1(:)     ! current root estimate
+  real(r8b),intent(in),contiguous :: xk(:)       ! previous root estimate
+  logical,intent(inout)           :: exit_flag   ! exit flag
+  real(r8b),intent(out)           :: R_est       ! estimated R for current iteration (computed in the previous call)
+  ! local variables
+  integer(i4b)             :: i                  ! index for residual vector
+  real(r8b)                :: b                  ! exponent used for convergence error estimation 
+  real(r8b),parameter      :: tol_inner_LS = 1.e-4_r8b ! tolerance threshold for switching to outer line search scheme during inner iterations 
+
+  if (convergence.eq.custom) then ! use custom convergence criterion
+
+   exit_flag = f_obj % custom_convergence()
+   if (exit_flag) return  ! set exit flag if criterion is satisfied
+
+   ! if doing line search for inner iterations and inner iterate has not changed much, ensure that one more inner iteration is performed using the outer line search scheme
+   ! note: this eliminates unproductive inner iterations
+   if (f_obj % refinement) then
+    if (f_obj % l < f_obj % lmax_loop) then
+     ! look for precise agreement within a tight tolerance
+     call compute_relative_residual
+     do concurrent (i = 1:f_obj % n)
+      f_obj % accept(i) = f_obj % R_vec(i) < tol_inner_LS
+     end do
+     if (all(f_obj % accept)) then
+      f_obj % lmax_loop = f_obj % l + 1_i4b; return
+     end if
+    end if
+   end if
+
+  else
+
+   ! for hybrid of custom and built-in methods: check custom flag for possible early exit (else proceed with built-in methods)
+   if ((convergence.eq.custom_strict).or.(convergence.eq.custom_predictive)) then
+    exit_flag = f_obj % custom_convergence()
+    if (exit_flag)  return  ! set exit flag if criterion is satisfied
+   end if
+
+   ! compute current residual
+   call compute_relative_residual
+
+   ! store previous residuals
+   if (iteration.gt.0) then
+    R_est=f_obj % R_inner(1) ! store previous estimate for reference
+    f_obj % R_inner(-1)=f_obj % R_inner(0)
+    f_obj % R_work(-1)=f_obj % R_inner(-1) ! exact residual for iteration-1
+   end if
+
+   f_obj % R_work(0)=maxval(f_obj % R_vec) ! actual worst case residual for input iteration
+   if ((convergence.eq.strict).or.(convergence.eq.custom_strict)) then ! strict estimate
+    f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1
+   else if ((convergence.eq.predictive).or.(convergence.eq.custom_predictive)) then
+    if ((iteration.eq.0)) then ! initial prediction is conservative due to lack of information
+     f_obj % R_work(1)=f_obj % R_work(0) ! estimated residual for iteration+1 
+    else ! compute prediction based on power function
+     b=log10(f_obj % R_work(0)/f_obj % R_work(-1)) ! exponent
+     f_obj % R_work(1)=f_obj % R_work(0)*10**b     ! power function -- estimated residual for iteration+1
+    end if
+   else ! method not valid
+    if (f_obj % out_error) then
+     write(f_obj % unit,*) "Error in check_residual_vector: method argument not currently supported."
+    end if
+    stop
+   end if
+
+   f_obj % R_inner(0) = f_obj % R_work(0) ! store exact residual for current iteration
+   f_obj % R_inner(1) = f_obj % R_work(1) ! store estimated residual for iteration+1
+   if (iteration.eq.0) R_est=f_obj % R_work(1) ! initialize R_est for iteration zero
+
+   ! check exact error from current iteration and estimated error for next iteration
+   if ((f_obj % R_work(0).lt.f_obj % tol_inner).or.(f_obj % R_work(1).lt.f_obj % tol_inner)) then
+    ! if doing line search for inner iterations, ensure that one more inner iteration is performed using the outer line search scheme
+    if ((f_obj % refinement).and.(f_obj % l < f_obj % lmax_loop)) then
+     f_obj % lmax_loop = f_obj % l + 1_i4b; return
+    else
+     exit_flag=.true.; return  ! set exit flag if criterion is satisfied
+    end if
+   end if
+
+  end if
+
+  contains
+
+   subroutine compute_relative_residual
+    ! ** compute current residual **
+    do concurrent (i=1:f_obj % n)
+     if (xk(i).ne.0._r8b) then
+      f_obj % R_vec(i)=abs((xkp1(i)-xk(i))/xk(i))
+     else if (xkp1(i).ne.0._r8b) then
+      f_obj % R_vec(i)=abs(xkp1(i)-xk(i)) ! avoid residuals of unity (since xk(i) equals zero)
+     else
+      f_obj % R_vec(i)=0._r8b ! both xk and xkp1 are zero -- set the residual to zero
+     end if
+    end do
+   end subroutine compute_relative_residual
+
+ end subroutine check_residual_vector_inner
 
  subroutine linear_solve(f_obj,B,tol)
   use Newton_functions,only: LAPACK_standard,LAPACK_expert

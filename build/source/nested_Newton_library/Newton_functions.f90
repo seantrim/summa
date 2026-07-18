@@ -2,7 +2,6 @@ module Newton_functions
  use, intrinsic :: iso_fortran_env, only: stdout=>output_unit ! for default output
  ! nested Newton solver modules
  use kind_params,only: i4b,r8b ! kind parameters
- use Richards,only : Richards_obj ! Richards test problem
  ! SUMMA modules (for access to constant data and procedures)
  use nr_type,only: rkind,qp,lgt ! SUMMA's kind parameters (i4b is already used in kind_params module)
  use eval8summa_module, only: eval8summa,imposeConstraints           ! SUMMA's eval8summa and imposeConstraints routines
@@ -19,7 +18,7 @@ module Newton_functions
  use var_lookup,only: iLookDECISIONS          ! named variables for elements of the SUMMA decision structure
  use var_lookup,only: iLookINDEX              ! named variables for SUMMA structure elements
  use mDecisions_module,only:qbaseTopmodel     ! SUMMA groundwater parameterization model decision
- use stateFilter_module,only: split_select_type
+ !use stateFilter_module,only: split_select_type
  implicit none
  private
 
@@ -239,10 +238,10 @@ contains
    if (f_obj % nested) then
     allocate(f_obj % xk0(1:n),f_obj % xkp1l(1:n),f_obj % xkp1lp1(1:n)) ! intermediate root estimates for nested iterations
     allocate(f_obj % f1_vec(1:n),f_obj % f2_vec(1:n))                  ! non-linear functions vectors 1 and 2 
+    allocate(f_obj % accept(1:n)) ! logical mask for acceptance of vector entries
     if (f_obj % dynamic) then
      allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations
      allocate(f_obj % xk_0(1:n),f_obj % xk_1(1:n)) ! solutions used to compute convergence order
-     allocate(f_obj % accept(1:n)) ! logical mask for acceptance of guess vector entries for switch to nested iterations
     end if
    else
     allocate(f_obj % xk(1:n),f_obj % xkp1(1:n))    ! intermediate root estimates for classical iterations

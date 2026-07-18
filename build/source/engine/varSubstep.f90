@@ -132,7 +132,7 @@ subroutine varSubstep(&
   USE systemSolv_module,only:systemSolv                 ! solve the system of equations for one time step
   ! identify name of variable type (for error message)
   USE get_ixName_module,only:get_varTypeName           ! to access type strings for error messages
-  ! nested Newton --------- testing SJT
+  ! nested Newton
   USE Newton_functions,only: f_obj_type                ! type for nested Newton solver objects 
   implicit none
   ! ---------------------------------------------------------------------------------------
@@ -195,6 +195,7 @@ subroutine varSubstep(&
   logical(lgt)                       :: firstSplitOper                         ! flag to indicate if we are processing the first flux call in a splitting operation
   logical(lgt)                       :: waterBalanceError                      ! flag to denote that there is a water balance error
   logical(lgt)                       :: nrgFluxModified                        ! flag to denote that the energy fluxes were modified
+  logical(lgt)                       :: return_flag                            ! flag to control return statements from internal procedures
   ! energy fluxes
   real(rkind)                        :: sumCanopyEvaporation                   ! sum of canopy evaporation/condensation (kg m-2 s-1)
   real(rkind)                        :: sumLatHeatCanopyEvap                   ! sum of latent heat flux for evaporation from the canopy to the canopy air space (W m-2)
@@ -213,13 +214,15 @@ subroutine varSubstep(&
   logical(lgt)                       :: enthalpyStateVec                       ! flag if enthalpy is a state variable (ida)
   logical(lgt)                       :: use_lookup                             ! flag to use the lookup table for soil enthalpy, otherwise use analytical solution
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
+  integer(i4b)           :: local_ixGroundwater       ! local index for groundwater representation
+  logical(lgt),parameter :: forceFullMatrix=.false.   ! flag to force the use of the full Jacobian matrix (should match value in systemSolv)
   logical(lgt),parameter :: nested_Newton_flag=.true. ! flag indicating if nested Newton solver is used for fully coupled (to be replaced with model decision)
   logical(lgt)           :: use_nested_Newton         ! flag indicating if nested Newton solver is used (false for operator splitting)
   type(f_obj_type)       :: nested_Newton             ! nested Newton solver object
 
   ! ---------------------------------------------------------------------------------------
   ! initialize error control
-  out_varSubstep % err=0; out_varSubstep % cmessage='varSubstep/'
+  out_varSubstep % err=0; out_varSubstep % cmessage='varSubstep/'; return_flag = .false.
   ! ---------------------------------------------------------------------------------------
   ! point to variables in the data structures
   ! ---------------------------------------------------------------------------------------
@@ -305,12 +308,11 @@ subroutine varSubstep(&
     dtSum     = 0._rkind  ! keep track of the portion of the time step that is completed
     nSubsteps = 0
 
-    ! initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
+    ! initialize nested Newton solver (if needed)
     use_nested_Newton = (nested_Newton_flag).and.(split_select % ixCoupling == fullyCoupled)
     if (use_nested_Newton) then ! replace with model decision in future update -- fully-coupled split only
-      call initialize_nested_Newton
+      call initialize_nested_Newton; if (return_flag) return
     end if
-    ! end initialize nested Newton solver (if needed) ************************* SJT: testing *****************************
 
     ! loop through substeps
     ! NOTE: continuous do statement with exit clause
@@ -686,7 +688,10 @@ contains
     use Newton_functions,only: LAPACK_standard ! linear system solver options
     use Newton_functions,only: silent,verbose  ! output options
     use Newton_functions,only: custom          ! convergence options 
-    use mDecisions_module,only: qbaseTopmodel  ! TOPMODEL-ish baseflow parameterization
+    use mDecisions_module,only: qbaseTopmodel, & ! TOPMODEL-ish baseflow parameterization
+                                noExplicit,    & ! no explicit groundwater parameterization
+                                localColumn,   & ! separate groundwater representation in each local soil column
+                                singleBasin      ! single groundwater store over the entire basin
  
     ! * Solver Options *
 
@@ -695,7 +700,7 @@ contains
     !call nested_Newton % solver_output(verbose) ! standard output used by default 
 
     ! Newton iteration type
-    nested_Newton % nested = .false. ! nested Newton=true, classical Newton=false
+    nested_Newton % nested = .true. ! nested Newton=true, classical Newton=false
 
     ! set method for computing relative convergence error (classical and outer iterations)
      ! 'strict' uses two consecutive iterations and is extremely conservative
@@ -709,7 +714,7 @@ contains
     !call nested_Newton % set_tolerance('strict',1.e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
     ! set max # of classical iterations (for classical and dynamic modes)
-    nested_Newton % kmax_classical = 39_i4b ! for classical iterations in dynamic mode
+    nested_Newton % kmax_classical = 49_i4b ! for classical iterations in dynamic mode
 
     ! Linear system solver choice
     !nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -755,11 +760,24 @@ contains
     end if
 
     ! * interface Jacobian array structure info *
-    associate(nState         => in_varSubstep % nSubset, &      ! intent(in): total number of state variables
-              computeVegFlux => in_varSubstep % computeVegFlux) ! intent(in): flag to indicate if computing fluxes over vegetation (.false. means veg is buried with snow)
+    associate(ixSpatialGroundwater => model_decisions(iLookDECISIONS%spatial_gw)%iDecision,& ! intent(in): spatial representation of groundwater (local-column or single-basin)
+              ixGroundwater        => model_decisions(iLookDECISIONS%groundwatr)%iDecision,& ! intent(in): groundwater parameterization
+              nState         => in_varSubstep % nSubset,&        ! intent(in): total number of state variables
+              scalarSolution => in_varSubstep % scalarSolution,& ! intent(in): flag to denote implementing the scalar solution
+              computeVegFlux => in_varSubstep % computeVegFlux,& ! intent(in): flag to indicate if computing fluxes over vegetation (.false. means veg is buried with snow)
+              err            => out_varSubstep % err,&           ! intent(out): error code
+              message        => out_varSubstep % cmessage)       ! intent(out): error message
+
+      ! modify the groundwater representation for this single-column implementation
+      select case(ixSpatialGroundwater)
+       case(singleBasin); local_ixGroundwater = noExplicit    ! force no explicit representation of groundwater at the local scale
+       case(localColumn); local_ixGroundwater = ixGroundwater ! go with the specified decision
+       case default; err=20; message=trim(message)//'unable to identify spatial representation of groundwater'; 
+        return_flag=.true.; return
+      end select
+ 
       ! matrix structure
-      !if (local_ixGroundwater==qbaseTopmodel .or. scalarSolution .or. forceFullMatrix .or. computeVegFlux) then
-      if (computeVegFlux) then  ! ************* MAY NEED TO TAKE GROUNDWATER DECISIONS INTO ACCOUNT (AS ABOVE LINE) FOR GENERAL CASE ***************
+      if (local_ixGroundwater==qbaseTopmodel .or. scalarSolution .or. forceFullMatrix .or. computeVegFlux) then
         nested_Newton % banded    = .false.
         nested_Newton % nLeadDim  = nState ! SUMMA LAPACK lead dimension
       else

@@ -241,7 +241,7 @@ subroutine systemSolv(&
   ! ------------------------------------------------------------------------------------------------------
   ! * model solver
   ! ------------------------------------------------------------------------------------------------------
-  logical(lgt),parameter          :: forceFullMatrix=.false.       ! flag to force the use of the full Jacobian matrix
+  logical(lgt),parameter          :: forceFullMatrix=.false.       ! flag to force the use of the full Jacobian matrix (should match value in varSubstep)
   integer(i4b)                    :: ixMatrix                      ! form of matrix (band diagonal or full matrix)
   type(var_dlength)               :: flux_init                     ! model fluxes at the start of the time step
   real(rkind),allocatable         :: dBaseflow_dWat(:,:)           ! derivative in baseflow w.r.t. soil water characteristic
