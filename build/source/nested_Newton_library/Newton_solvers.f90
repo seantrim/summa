@@ -18,7 +18,10 @@ contains
      ! note: start with classical regime and switch to nested regime if needed 
      f_obj % dynamic_classical = .true.
      call Newton_vector(f_obj) ! classical iterations using classical algorithm
-     if (.not.f_obj % dynamic_classical) then ! go to nested iterations if classical iterations do not converge well
+     !if (.not.f_obj % dynamic_classical) then ! go to nested iterations if classical iterations do not converge well
+     if (f_obj % dynamic_classical) then ! classical iterations were used
+      return
+     else ! go to nested iterations if classical iterations do not converge well
 
       ! need to intialize f1,f2,J1,J2 for intial condition from classical iterations
       ! note: guess vector elements from classical iterations are reused where possible
@@ -359,19 +362,33 @@ contains
   ! local
   integer(i4b)                    :: i ! loop index
 
-   return_flag = .false. ! initialize return flag
+   !return_flag = .false. ! initialize return flag
 
-    call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
-                                &f_obj % accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
+   call check_convergence_order(f_obj % order_min,f_obj % xk_0,f_obj % xk_1,xk,xkp1,&
+                               &f_obj % accept,f_obj % dynamic_revert,f_obj % dynamic_classical)
 
-    ! go to nested iterations if needed 
-    if (.not.f_obj % dynamic_classical) then
-     if (.not.f_obj % dynamic_revert) then
-      f_obj % x0(:) = merge(xkp1,f_obj % x0,f_obj % accept) ! use accepted classical guess vector components for nested initial guess
-     end if
+   ! go to nested iterations if needed
+   if (f_obj % dynamic_classical) then ! continue to use classical iterations
+    return_flag = .false. ! initialize return flag
+    return
+   else ! switch to nested iterations
+    if (.not.f_obj % dynamic_revert) then ! use new x0 guess vectpr 
+     f_obj % x0(:) = merge(xkp1,f_obj % x0,f_obj % accept) ! use accepted classical guess vector components for nested initial guess
+     return_flag = .true.
+     return 
+    else ! revert to original x0 guess vector
      return_flag = .true.
      return 
     end if
+   end if
+
+   !if (.not.f_obj % dynamic_classical) then
+   ! if (.not.f_obj % dynamic_revert) then
+   !  f_obj % x0(:) = merge(xkp1,f_obj % x0,f_obj % accept) ! use accepted classical guess vector components for nested initial guess
+   ! end if
+   ! return_flag = .true.
+   ! return 
+   !end if
 
   contains
 
@@ -415,6 +432,7 @@ contains
        if ((num_arg == 1._r8b).or.(den_arg == 1._r8b)) then ! if errors did not improve over classical iterations, used nested
         accept(i) = .false. ! do not accept solution for nested initial guess
         success = .false.
+        cycle ! no further calculations are needed to advance the loop
        end if
 
        ! compute estimate of convergence order
