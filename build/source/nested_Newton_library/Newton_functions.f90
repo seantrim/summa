@@ -1540,8 +1540,12 @@ contains
                    f_obj % in_SS4HG % scalarSolution, & ! intent(in):    flag to indicate the scalar solution
                    mass_flag,                         & ! intent(in):    flag to compute mass terms
                    energy_flag,                       & ! intent(in):    flag to compute energy terms
+                   !.true.,                         & ! intent(in):    flag to compute mass terms ------------- SJT: used to create reference output
+                   !.true.,                         & ! intent(in):    flag to compute energy terms ----------- SJT: used to create reference output
                    .true.,f1_mass,f1_energy,f2_mass,f2_energy, & ! intent(in): flag to compute f, f1, and f2 for nested Newton
                    f1_mass.or.f2_mass,f1_energy.or.f2_energy,  & ! intent(in): flags to compute mass and energy Jacobian terms
+                   !f1_mass.or.f2_mass,.true.,  & ! intent(in): flags to compute mass and energy Jacobian terms -- SJT: testing J_mass flag
+                   !.true.,f1_energy.or.f2_energy,  & ! intent(in): flags to compute mass and energy Jacobian terms -- SJT: testing J_energy flag
                    !.true.,.true.,  & ! intent(in): flags to compute mass and energy Jacobian terms -- SJT: used to create reference output
                    ! input: state vectors
                    xvec,                            & ! intent(in):    model state vector

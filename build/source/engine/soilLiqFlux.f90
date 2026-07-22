@@ -600,11 +600,9 @@ contains
  subroutine update_diagv_node
   ! **** Update operations for diagv_node ****
 
-   if (in_diagv_node % J_mass) then ! if computing mass Jacobian terms
-    call update_diagv_node_characteristic_derivatives; if (return_flag) return
-   end if
+  call update_diagv_node_characteristic_derivatives; if (return_flag) return
 
-   call update_diagv_node_hydraulic_conductivity;     if (return_flag) return
+  call update_diagv_node_hydraulic_conductivity;     if (return_flag) return
 
  end subroutine update_diagv_node
 
