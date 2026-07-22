@@ -100,7 +100,7 @@ contains
 
 
  ! *********************************************************************************************************
- ! * private subroutine computGradient: compute gradient for the line search objective function
+ ! * public subroutine computGradient: compute gradient for the line search objective function
  ! *********************************************************************************************************
  subroutine computGradient(ixMatrix,nState,aJac,rVec,grad,err,message)
  implicit none

@@ -527,7 +527,7 @@ contains
    if(err/=0)then; message=trim(message)//trim(cmessage); return_flag=.true.; return; end if
   end associate
 
-  ! no dependence on the aquifer for drainage
+  ! no dependence on the aquifer for drainage currently, but keep this here in case we want to couple some day
   associate(&
    ! derivatives in flux w.r.t. ...
    dq_dHydStateBelow => io_soilLiqFlux % dq_dHydStateBelow,& ! ... hydrology state variables in the layer below
@@ -711,7 +711,8 @@ contains
    ! output: transmittance derivatives in ...
    dHydCond_dVolLiq => out_diagv_node % dHydCond_dVolLiq, & ! ... hydraulic conductivity w.r.t volumetric liquid water content (m s-1)
    dDiffuse_dVolLiq => out_diagv_node % dDiffuse_dVolLiq, & ! ... hydraulic diffusivity w.r.t volumetric liquid water content (m2 s-1)
-   dHydCond_dMatric => out_diagv_node % dHydCond_dMatric  & ! ... hydraulic conductivity w.r.t matric head (s-1)
+   dHydCond_dMatric => out_diagv_node % dHydCond_dMatric, & ! ... hydraulic conductivity w.r.t matric head (s-1)
+   dHydCond_dTemp   => out_diagv_node % dHydCond_dTemp    & ! ... hydraulic conductivity w.r.t temperature (m s-1 K-1)
   &)
 
    ! compute the hydraulic conductivity (m s-1) and diffusivity (m2 s-1) for a given layer
@@ -728,6 +729,7 @@ contains
    dPsi_dTheta2a    = dPsi_dTheta2(scalarVolFracLiqTrial,vGn_alpha,theta_res,theta_sat,vGn_n,vGn_m)
    dDiffuse_dVolLiq = dHydCond_dVolLiq*scalardPsi_dTheta + scalarHydCond*dPsi_dTheta2a
    dHydCond_dMatric = realMissing ! not used, so cause problems
+   dHydCond_dTemp   = realMissing ! not used, so cause problems
 
   end associate
  end subroutine update_diagv_node_hydraulic_conductivity_moisture_form
@@ -947,8 +949,8 @@ contains
   ! initialize derivatives
   associate(&
    ! output: derivatives in surface infiltration w.r.t. ...
-   dq_dHydStateVec => out_surfaceFlux % dq_dHydStateVec , & ! ... hydrology state in above soil snow or canopy and every soil layer (m s-1 or s-1)
-   dq_dNrgStateVec => out_surfaceFlux % dq_dNrgStateVec   & ! ... energy state in above soil snow or canopy and every soil layer  (m s-1 K-1)
+   dq_dHydStateVec => out_surfaceFlux % dq_dHydStateVec , & ! ... hydrology state in every soil layer (m s-1 or s-1)
+   dq_dNrgStateVec => out_surfaceFlux % dq_dNrgStateVec   & ! ... energy state in every soil layer (m s-1 K-1)
   &)
    dVolFracLiq_dWat(:)    = 0._rkind
    dVolFracIce_dWat(:)    = 0._rkind
@@ -1422,8 +1424,8 @@ subroutine update_volFracLiq_derivatives
    scalarSurfaceInfiltration => io_surfaceFlux % scalarSurfaceInfiltration  , & ! surface infiltration (m s-1)
    ! output: derivatives in surface infiltration w.r.t. ...
    scalarSoilControl  => io_surfaceFlux % scalarSoilControl    , & ! soil control on infiltration for derivative
-   dq_dHydStateVec    => out_surfaceFlux % dq_dHydStateVec     , & ! ... hydrology state in above soil snow or canopy and every soil layer (m s-1 or s-1)
-   dq_dNrgStateVec    => out_surfaceFlux % dq_dNrgStateVec     , & ! ... energy state in above soil snow or canopy and every soil layer  (m s-1 K-1)
+   dq_dHydStateVec    => out_surfaceFlux % dq_dHydStateVec     , & ! ... hydrology state in every soil layer (m s-1 or s-1)
+   dq_dNrgStateVec    => out_surfaceFlux % dq_dNrgStateVec     , & ! ... energy state in every soil layer (m s-1 K-1)
    ! output: error control
    err     => out_surfaceFlux % err    , & ! error code
    message => out_surfaceFlux % message  & ! error message
@@ -1737,41 +1739,31 @@ subroutine update_volFracLiq_derivatives
    scalarSaturatedArea => io_surfaceFlux % scalarSaturatedArea, & ! saturated area fraction (-)
    scalarSurfaceInfiltration => io_surfaceFlux % scalarSurfaceInfiltration, & ! surface infiltration (m s-1)
    ! output: derivatives in surface infiltration w.r.t. ...
-   dq_dHydStateVec => out_surfaceFlux % dq_dHydStateVec, & ! ... hydrology state in above soil snow or canopy and every soil layer (m s-1 or s-1)
-   dq_dNrgStateVec => out_surfaceFlux % dq_dNrgStateVec, & ! ... energy state in above soil snow or canopy and every soil layer  (m s-1 K-1)
+   dq_dHydStateVec => out_surfaceFlux % dq_dHydStateVec, & ! ... hydrology state in every soil layer (m s-1 or s-1)
+   dq_dNrgStateVec => out_surfaceFlux % dq_dNrgStateVec, & ! ... energy state in every soil layer (m s-1 K-1)
    ! output: error control
-   err     => out_surfaceFlux % err    , & ! error code
-   message => out_surfaceFlux % message  & ! error message
+   err     => out_surfaceFlux % err,    & ! error code
+   message => out_surfaceFlux % message & ! error message
   &)
 
-  ! check infiltration area and define saturated area
+   ! check infiltration area and define saturated area
    if (scalarInfilArea < 0._rkind) then; err=20; message=trim(message)//'infiltration area less than zero'; return_flag=.true.; return; end if
    scalarSaturatedArea = 1._rkind - scalarInfilArea
 
-   ! unfrozen infiltration area
+   ! unfrozen infiltration area and infiltration (m s-1)
    scalarInfilArea_unfrozen=(1._rkind - scalarFrozenArea)*scalarInfilArea
-   ! soil control on infiltration for derivative if dependent on scalarRainPlusMelt (needed to compute scalarRainPlusMelt derivative inside computJacob*)
    scalarSoilControl = 0._rkind
-   if (updateInfil .and. xMaxInfilRate > scalarRainPlusMelt) then
-     scalarSoilControl = scalarInfilArea_unfrozen
-   end if
-
-   ! infiltration rate derivatives, will stay at zero if no infiltration excess or if infiltration not being updated
-   if (in_surfaceFlux % J_mass) then ! if computing mass Jacobian terms
-     if(updateInfil)then
-       if (xMaxInfilRate < scalarRainPlusMelt) then ! = dxMaxInfilRate_d, dependent on layers not at surface
-         dInfilRate_dWat(:) = dxMaxInfilRate_dWat(:)
-         dInfilRate_dTk(:)  = dxMaxInfilRate_dTk(:)
-       end if
-     end if
-   end if
-
-   ! compute infiltration (m s-1)
    scalarSurfaceInfiltration = scalarInfilArea_unfrozen * min(scalarRainPlusMelt,xMaxInfilRate)
 
    if (in_surfaceFlux % J_mass) then ! if computing mass Jacobian terms
-     if (updateInfil)then
-       ! Compute total runoff derivatives, do w.r.t. infiltration only, scalarRainPlusMelt accounted for in computJacob* module
+     ! Compute total runoff derivatives, do w.r.t. infiltration only, scalarRainPlusMelt accounted for in computJacob* module
+     if(updateInfil)then
+       if (xMaxInfilRate > scalarRainPlusMelt) then
+         scalarSoilControl = scalarInfilArea_unfrozen  ! derivative dependent on scalarRainPlusMelt (needed to compute scalarRainPlusMelt derivative inside computJacob*)
+       elseif (xMaxInfilRate < scalarRainPlusMelt) then !dInfilRate_d dependent on layers not at surface
+         dInfilRate_dWat(:) = dxMaxInfilRate_dWat(:)
+         dInfilRate_dTk(:)  = dxMaxInfilRate_dTk(:)
+       end if
        ! Do not need to break into IE and SE components since they are never used separately in the Jacobian assembly
        dq_dHydStateVec(:) = (1._rkind - scalarFrozenArea)&
                            * ( dInfilArea_dWat(:)*min(scalarRainPlusMelt,xMaxInfilRate) + scalarInfilArea*dInfilRate_dWat(:) )&
@@ -1780,9 +1772,6 @@ subroutine update_volFracLiq_derivatives
        dq_dNrgStateVec(:) = (1._rkind - scalarFrozenArea)&
                            * ( dInfilArea_dTk(:) *min(scalarRainPlusMelt,xMaxInfilRate) + scalarInfilArea*dInfilRate_dTk(:)  )&
                            + (-dFrozenArea_dTk(:)) *scalarInfilArea*min(scalarRainPlusMelt,xMaxInfilRate)
-     else
-       dq_dHydStateVec(:) = realMissing ! not used, so cause problems
-       dq_dNrgStateVec(:) = realMissing ! not used, so cause problems
      end if
    end if
   end associate
@@ -2103,7 +2092,7 @@ contains
    theta_res       => in_qDrainFlux % theta_res      , &      ! soil residual volumetric water content (-)
    ! output: hydraulic conductivity at the bottom of the unsaturated zone
    bottomHydCond => out_qDrainFlux % bottomHydCond, &         ! hydraulic conductivity at the bottom of the unsaturated zone (m s-1)
-   bottomDiffuse => out_qDrainFlux % bottomDiffuse, &         ! hydraulic diffusivity at the bottom of the unsatuarted zone (m2 s-1)
+   bottomDiffuse => out_qDrainFlux % bottomDiffuse, &         ! hydraulic diffusivity at the bottom of the unsaturated zone (m2 s-1)
    ! output: drainage flux from the bottom of the soil profile
    scalarDrainage => out_qDrainFlux % scalarDrainage, &       ! drainage flux from the bottom of the soil profile (m s-1)
    ! output: derivatives in drainage flux w.r.t. ...

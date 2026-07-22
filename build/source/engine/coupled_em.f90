@@ -1505,7 +1505,6 @@ subroutine coupled_em(&
         end if
       else
         delCanWat = 0._rkind
-        scalarCanopyWatBalError = 0._rkind
       endif  ! if computing the vegetation flux
 
       ! -----
@@ -1550,7 +1549,7 @@ subroutine coupled_em(&
           err=20; return
         endif  ! if failed mass balance check
       else
-        delSWE = 0._rkind
+        delSWE = scalarSWE - (oldSWE - sfcMeltPond)
       endif  ! if snow layers exist
 
       ! -----

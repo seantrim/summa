@@ -881,6 +881,13 @@ contains
                            fluxVecNew,resSinkNew,resVecNew,fNew,feasible,err,cmessage)                          ! output
    if (err/=0) then; message=trim(message)//trim(cmessage); return; end if  ! check for errors
 
+   ! check root brackets
+   if (globalPrintFlag) then
+    write(*,'(a,1x,10(e17.10,1x))') 'fNew                           = ', fNew
+    write(*,'(a,1x,10(e17.10,1x))') 'resVecNew                      = ', resVecNew(min(iJac1,nState):min(iJac2,nState))
+    write(*,'(a,1x,10(e17.10,1x))') 'xInc                           = ', xInc(min(iJac1,nState):min(iJac2,nState))
+   end if
+
    ! check feasibility (should be feasible because of the call to imposeConstraints, except if canopyTemp>canopyTempMax (500._rkind)) 
    if (.not.feasible) then; err=20; message=trim(message)//'state vector not feasible'; return; end if
 
@@ -1149,7 +1156,7 @@ contains
   real(rkind),dimension(mSoil) :: psiScale                    ! scaling factor for matric head
   real(rkind),parameter        :: xSmall=1.e-0_rkind          ! a small offset
   real(rkind),parameter        :: scalarTighten=0.1_rkind     ! scaling factor for the scalar solution
-  real(rkind)                  :: soilWatbalErr               ! error in the soil water balance
+  real(rkind)                  :: soilWatBalErr               ! error in the soil water balance
   real(rkind)                  :: canopy_max                  ! absolute value of the residual in canopy water (kg m-2)
   real(rkind),dimension(1)     :: energy_max                  ! maximum absolute value of the energy residual (J m-3)
   real(rkind),dimension(1)     :: liquid_max                  ! maximum absolute value of the volumetric liquid water content residual (-)
@@ -1218,7 +1225,7 @@ contains
    end if
 
    ! check convergence based on the iteration increment for matric head
-   ! NOTE: scale by matric head to avoid unnecessairly tight convergence when there is no water
+   ! NOTE: scale by matric head to avoid unnecessarily tight convergence when there is no water or there is saturated flow (matric head is very large)
    if (size(ixMatOnly)>0) then
     psiScale   = abs( xVec(ixMatOnly) ) + xSmall ! avoid divide by zero
     matric_max = maxval(abs( xInc(ixMatOnly)/psiScale ) )
@@ -1231,9 +1238,9 @@ contains
    ! check convergence based on the soil water balance error (m)
    if (size(ixMatOnly)>0) then
     soilWatBalErr = sum( real(rVec(ixMatOnly), rkind)*mLayerDepth(nSnow+ixMatricHead) )
-    watbalConv    = (abs(soilWatbalErr) < absConvTol_liquid)  ! absolute error in total soil water balance (m)
+    watbalConv    = (abs(soilWatBalErr) < absConvTol_liquid)  ! absolute error in total soil water balance (m)
    else
-    soilWatbalErr = realMissing
+    soilWatBalErr = realMissing
     watbalConv    = .true.
    end if
 
