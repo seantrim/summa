@@ -149,8 +149,6 @@ set(NNSOLV
     ${NNSOLV_DIR}/kind_params.f90
     ${NNSOLV_DIR}/Newton_solvers.f90
     ${NNSOLV_DIR}/Newton_functions.f90
-    ${NNSOLV_DIR}/Richards.f90
-    ${NNSOLV_DIR}/Richards_exact.f90
     CACHE INTERNAL "NNSOLV")
 
 # Driver support modules
