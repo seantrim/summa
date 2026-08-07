@@ -169,7 +169,6 @@ contains
       convergence_stats%gru(iGRU)%hru(iHRU)%low_level_step_reductions_coupled = 0_i4b
       convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures                = 0_i4b
       convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled        = 0_i4b
-      convergence_stats%gru(iGRU)%hru(iHRU)%splitting_failures_coupled        = 0_i4b
       convergence_stats%gru(iGRU)%hru(iHRU)%classical_steps_coupled           = 0_i4b
       convergence_stats%gru(iGRU)%hru(iHRU)%nested_steps_coupled              = 0_i4b
      end do
