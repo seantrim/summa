@@ -20,6 +20,7 @@
 
 MODULE data_types
  ! used to define model data structures
+ USE, intrinsic :: iso_c_binding, only: c_int
  USE nr_type, integerMissing=>nr_integerMissing
  USE var_lookup,only:maxvarFreq
  USE var_lookup,only:maxvarStat
@@ -300,14 +301,15 @@ MODULE data_types
  ! ***********************************************************************************************************
  ! Define classes used to gather convergence statistics for Newton iterations
  ! ***********************************************************************************************************
- type, public :: convergence_stats_data
-  integer(i4b) :: high_level_step_reductions 
-  integer(i4b) :: low_level_step_reductions 
-  integer(i4b) :: low_level_step_reductions_coupled 
-  integer(i4b) :: splitting_failures 
-  integer(i4b) :: splitting_failures_coupled
-  integer(i4b) :: classical_steps_coupled  
-  integer(i4b) :: nested_steps_coupled  
+ ! note: C bindings used here for interoperability with SUMMA-Actors
+ type, bind(c), public :: convergence_stats_data
+  integer(c_int) :: high_level_step_reductions 
+  integer(c_int) :: low_level_step_reductions 
+  integer(c_int) :: low_level_step_reductions_coupled 
+  integer(c_int) :: splitting_failures 
+  integer(c_int) :: splitting_failures_coupled
+  integer(c_int) :: classical_steps_coupled  
+  integer(c_int) :: nested_steps_coupled  
  end type convergence_stats_data
 
  type, public :: convergence_stats_hru
