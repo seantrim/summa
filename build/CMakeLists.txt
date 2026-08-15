@@ -104,7 +104,11 @@ if(SPECIFY_LAPACK_LINKS)
 	endif()
 else()
 	message("Automatically detect LAPACK links")
-	set(LIBRARY_LINKS "")
+	if(DEFINED ENV{LIBRARY_LINKS})
+		set(LIBRARY_LINKS $ENV{LIBRARY_LINKS})
+	else()
+		set(LIBRARY_LINKS "")
+	endif()
 
 	# OpenBLAS
 	set(BLA_VENDOR OpenBLAS)
