@@ -1220,7 +1220,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  !localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 

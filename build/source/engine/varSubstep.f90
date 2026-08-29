@@ -714,7 +714,7 @@ contains
     !call nested_Newton % set_tolerance('strict',1.e-12_r8b,localMaxIter) ! set_tolerance(method,outer iteration relative error,max # of outer iterations)
 
     ! set max # of classical iterations (for classical and dynamic modes)
-    nested_Newton % kmax_classical = 49_i4b ! for classical iterations in dynamic mode
+    nested_Newton % kmax_classical = 99_i4b ! for classical iterations in dynamic mode
 
     ! Linear system solver choice
     !nested_Newton % linear_system_solver = "LAPACK_standard"
@@ -746,7 +746,7 @@ contains
       nested_Newton % convergence_inner = custom ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 49_i4b; nested_Newton % lmax = 2_i4b 
+      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 6_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
