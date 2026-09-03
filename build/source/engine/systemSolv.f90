@@ -1220,7 +1220,13 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  localMaxIter = 100_i4b ! SJT: testing --------------- take out ---------------------
+  ! SJT: testing block --------------- take out ---------------------
+  if (split_select % ixCoupling == fullyCoupled) then
+    localMaxIter = 100_i4b ! SJT: ********** change this for nested Newton experiments **********
+  else 
+    ! do not change
+    localMaxIter = 100_i4b ! SJT: do not change for nested Newton paper experiments
+  end if
 
   !---------------------------
   ! * solving F(y) = 0 from Backward Euler using concepts from numerical recipes, y is the state vector 
