@@ -736,7 +736,7 @@ contains
     if (nested_Newton % nested) then ! nested iteration options
 
       ! dynamic switching between classical and nested regimes?
-      nested_Newton % dynamic   = .true.
+      nested_Newton % dynamic   = .false.
       nested_Newton % order_min = 0.01_r8b ! min convergence order to use classical iterations in dynamic mode
 
       ! use dual method?
@@ -746,7 +746,7 @@ contains
       nested_Newton % convergence_inner = custom ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 6_i4b 
+      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 19_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations
