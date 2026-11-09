@@ -21,6 +21,24 @@ The important modeling features are:
 ## Documentation
 SUMMA documentation is available [online](http://summa.readthedocs.io/) and remains a work in progress. Additional SUMMA information including publications, test data sets, and sample applications can be found on the [SUMMA web site](http://www.ral.ucar.edu/projects/summa) at NCAR.
 
+## Nested Newton Development Features
+In this development branch, Newton iteration features are controlled using hard-coded parameters. In future work, these parameters will be migrated to SUMMA's model decision and parameter input files. For consistency with other SUMMA branches, the source code is set up to use the default standard Newton solver. However, nested Newton (and hybrid Newton) features may be controlled by setting the following parameters in `build/source/engine/varSubstep.f90`.
+
+`nested_Newton_flag` (Line 219): `.false.` for SUMMA's default standard solver (all parameters below are ignored), `.true.` for nested Newton or hybrid Newton iterations
+
+`nested_Newton % dynamic` (Line 739): `.false.` for nested Newton, `.true.` for hybrid Newton
+
+`nested_Newton % kmax_classical` (Line 717, $\mathcal{K}_{\text{SN}}-1$): max number of standard Newton iterations minus one for hybrid Newton
+
+`nested_Newton % kmax` (Line 749, $\mathcal{K}-1$): max number of outer iterations minus one for nested or hybrid Newton
+
+`nested_Newton % lmax` (Line 749, $\mathcal{L}-1$): max number of inner iterations minus one for nested or hybrid Newton
+
+`nested_Newton % order_min` (Line 740, $o_{\text{min}}$): computational convergence order threshold for hybrid Newton
+
+Additionally, within `build/source/nested_Newton_library/Newton_solvers.f90` we have the following parameter.
+
+`k_check` (Line 66, $k^{*}$): number of standard Newton iterations minus one prior to computational convergence order check for hybrid Newton
 
 ## Credits
 SUMMA's initial implementation is described in two papers published in [Water Resources Research](http://onlinelibrary.wiley.com/journal/10.1002/(ISSN)1944-7973). If you use SUMMA, please credit these two publications.
