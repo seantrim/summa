@@ -216,7 +216,7 @@ subroutine varSubstep(&
   ! test variables for nested Newton -- SJT: to be removed or retained (if needed) in a future update
   integer(i4b)           :: local_ixGroundwater       ! local index for groundwater representation
   logical(lgt),parameter :: forceFullMatrix=.false.   ! flag to force the use of the full Jacobian matrix (should match value in systemSolv)
-  logical(lgt),parameter :: nested_Newton_flag=.true. ! flag indicating if nested Newton solver is used for fully coupled (to be replaced with model decision)
+  logical(lgt),parameter :: nested_Newton_flag=.false. ! flag indicating if nested Newton solver is used for fully coupled (to be replaced with model decision)
   logical(lgt)           :: use_nested_Newton         ! flag indicating if nested Newton solver is used (false for operator splitting)
   type(f_obj_type)       :: nested_Newton             ! nested Newton solver object
 
@@ -736,8 +736,8 @@ contains
     if (nested_Newton % nested) then ! nested iteration options
 
       ! dynamic switching between classical and nested regimes?
-      nested_Newton % dynamic   = .false.
-      nested_Newton % order_min = 0.01_r8b ! min convergence order to use classical iterations in dynamic mode
+      nested_Newton % dynamic   = .true.
+      nested_Newton % order_min = 1._r8b ! min convergence order to use classical iterations in dynamic mode
 
       ! use dual method?
       nested_Newton % dual = .true. ! .false. = f1->mass, f2->energy, .true. = f1->energy, f2->mass
@@ -746,7 +746,7 @@ contains
       nested_Newton % convergence_inner = custom ! 'strict', 'predictive', 'custom' (to use checkConv from homegrown), or 'custom-strict' 
 
       ! max # of iterations for outer and inner iteration loops
-      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 19_i4b 
+      nested_Newton % kmax = 99_i4b; nested_Newton % lmax = 1_i4b 
 
       ! constraints for inner iterations 
       nested_Newton % constraints_inner = .false. ! apply imposeConstraints between inner iterations

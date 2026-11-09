@@ -1220,7 +1220,7 @@ contains
 
   ! correct the number of iterations
   localMaxIter = merge(scalarMaxIter, maxIter, scalarSolution)
-  ! SJT: testing block --------------- take out ---------------------
+  ! SJT: testing block
   if (split_select % ixCoupling == fullyCoupled) then
     localMaxIter = 100_i4b ! SJT: ********** change this for nested Newton experiments **********
   else 
